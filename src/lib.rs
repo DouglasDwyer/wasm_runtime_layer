@@ -5,7 +5,7 @@
 
 //! `wasm_runtime_layer` creates a thin abstraction over WebAssembly runtimes, allowing for backend-agnostic host code. The interface is based upon the `wasmtime` and `wasmi` crates, but may be implemented for any runtime.
 //! 
-//! ### Usage
+//! ## Usage
 //! 
 //! To use this crate, first instantiate a backend runtime. The runtime may be any
 //! value that implements `backend::WasmEngine`. Some runtimes are already implemented as optional features.
@@ -47,7 +47,7 @@
 //! assert_eq!(result[0], Value::I32(43));
 //! ```
 //! 
-//! ### Optional features and backends
+//! ## Optional features and backends
 //! 
 //! **backend_wasmi** - Implements the `WasmEngine` trait for `wasmi::Engine` instances.
 //! 
