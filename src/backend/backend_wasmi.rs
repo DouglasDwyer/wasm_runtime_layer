@@ -367,6 +367,22 @@ impl WasmTable<wasmi::Engine> for wasmi::Table {
     }
 }
 
+impl<T> AsContext<wasmi::Engine> for wasmi::Store<T> {
+    type UserState = T;
+
+    fn as_context(&self) -> <wasmi::Engine as WasmEngine>::StoreContext<'_, Self::UserState> {
+        wasmi::AsContext::as_context(self)
+    }
+}
+
+impl<T> AsContextMut<wasmi::Engine> for wasmi::Store<T> {
+    fn as_context_mut(
+        &mut self,
+    ) -> <wasmi::Engine as WasmEngine>::StoreContextMut<'_, Self::UserState> {
+        wasmi::AsContextMut::as_context_mut(self)
+    }
+}
+
 impl From<wasmi::core::ValueType> for ValueType {
     fn from(value: wasmi::core::ValueType) -> Self {
         match value {

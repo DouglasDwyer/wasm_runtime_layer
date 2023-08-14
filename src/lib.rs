@@ -3,7 +3,55 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
-//! Craate
+//! `wasm_runtime_layer` creates a thin abstraction over WebAssembly runtimes, allowing for backend-agnostic host code. The interface is based upon the `wasmtime` and `wasmi` crates, but may be implemented for any runtime.
+//! 
+//! ### Usage
+//! 
+//! To use this crate, first instantiate a backend runtime. The runtime may be any
+//! value that implements `backend::WasmEngine`. Some runtimes are already implemented as optional features.
+//! Then, one can create an `Engine` from the backend runtime, and use it to initialize modules and instances:
+//! 
+//! ```rust
+//! # use wasm_runtime_layer::*;
+//! // 1. Instantiate a runtime
+//! let engine = Engine::new(wasmi::Engine::default());
+//! let mut store = Store::new(&engine, ());
+//! 
+//! // 2. Create modules and instances, similar to other runtimes
+//! let module_bin = wabt::wat2wasm(
+//!     r#"
+//! (module
+//! (type $t0 (func (param i32) (result i32)))
+//! (func $add_one (export "add_one") (type $t0) (param $p0 i32) (result i32)
+//!     get_local $p0
+//!     i32.const 1
+//!     i32.add))
+//! "#,
+//! )
+//! .unwrap();
+//! 
+//! let module = Module::new(&engine, std::io::Cursor::new(&module_bin)).unwrap();
+//! let instance = Instance::new(&mut store, &module, &Imports::default()).unwrap();
+//! 
+//! let add_one = instance
+//!     .get_export(&store, "add_one")
+//!     .unwrap()
+//!     .into_func()
+//!     .unwrap();
+//!         
+//! let mut result = [Value::I32(0)];
+//! add_one
+//!     .call(&mut store, &[Value::I32(42)], &mut result)
+//!     .unwrap();
+//! 
+//! assert_eq!(result[0], Value::I32(43));
+//! ```
+//! 
+//! ### Optional features and backends
+//! 
+//! **backend_wasmi** - Implements the `WasmEngine` trait for `wasmi::Engine` instances.
+//! 
+//! Contributions for additional backend implementations are welcome!
 
 /// Provides traits for implementing runtime backends.
 pub mod backend;
@@ -51,7 +99,7 @@ pub struct GlobalType {
 }
 
 impl GlobalType {
-    /// Creates a new [`GlobalType`] from the given [`ValueType`] and [`Mutability`].
+    /// Creates a new [`GlobalType`] from the given [`ValueType`] and mutability.
     pub fn new(content: ValueType, mutable: bool) -> Self {
         Self { content, mutable }
     }
@@ -315,6 +363,58 @@ pub enum Extern {
     Memory(Memory),
     /// A WebAssembly function which can be called.
     Func(Func),
+}
+
+impl Extern {
+    /// Returns the underlying global variable if `self` is a global variable.
+    ///
+    /// Returns `None` otherwise.
+    pub fn into_global(self) -> Option<Global> {
+        if let Self::Global(global) = self {
+            return Some(global);
+        }
+        None
+    }
+
+    /// Returns the underlying table if `self` is a table.
+    ///
+    /// Returns `None` otherwise.
+    pub fn into_table(self) -> Option<Table> {
+        if let Self::Table(table) = self {
+            return Some(table);
+        }
+        None
+    }
+
+    /// Returns the underlying linear memory if `self` is a linear memory.
+    ///
+    /// Returns `None` otherwise.
+    pub fn into_memory(self) -> Option<Memory> {
+        if let Self::Memory(memory) = self {
+            return Some(memory);
+        }
+        None
+    }
+
+    /// Returns the underlying function if `self` is a function.
+    ///
+    /// Returns `None` otherwise.
+    pub fn into_func(self) -> Option<Func> {
+        if let Self::Func(func) = self {
+            return Some(func);
+        }
+        None
+    }
+
+    /// Returns the type associated with this [`Extern`].
+    pub fn ty(&self, ctx: impl AsContext) -> ExternType {
+        match self {
+            Extern::Global(global) => global.ty(ctx).into(),
+            Extern::Table(table) => table.ty(ctx).into(),
+            Extern::Memory(memory) => memory.ty(ctx).into(),
+            Extern::Func(func) => func.ty(ctx).into(),
+        }
+    }
 }
 
 impl<E: WasmEngine> From<&crate::backend::Extern<E>> for Extern {
@@ -609,6 +709,18 @@ pub enum Value {
     FuncRef(Option<Func>),
     /// An optional external reference.
     ExternRef(Option<ExternRef>),
+}
+
+impl PartialEq for Value {
+    fn eq(&self, o: &Self) -> bool {
+        match (self, o) {
+            (Self::I32(a), Self::I32(b)) => a == b,
+            (Self::I64(a), Self::I64(b)) => a == b,
+            (Self::F32(a), Self::F32(b)) => a == b,
+            (Self::F64(a), Self::F64(b)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 impl<E: WasmEngine> From<&Value> for crate::backend::Value<E> {
@@ -1092,6 +1204,52 @@ pub trait AsContextMut: AsContext {
     fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine>;
 }
 
+impl<T, E: WasmEngine> AsContext for Store<T, E> {
+    type Engine = E;
+
+    type UserState = T;
+
+    fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine> {
+        StoreContext {
+            inner: crate::backend::AsContext::as_context(&self.inner),
+        }
+    }
+}
+
+impl<T, E: WasmEngine> AsContextMut for Store<T, E> {
+    fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine> {
+        StoreContextMut {
+            inner: crate::backend::AsContextMut::as_context_mut(&mut self.inner),
+        }
+    }
+}
+
+impl<T: AsContext> AsContext for &T {
+    type Engine = T::Engine;
+
+    type UserState = T::UserState;
+
+    fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine> {
+        (**self).as_context()
+    }
+}
+
+impl<T: AsContext> AsContext for &mut T {
+    type Engine = T::Engine;
+
+    type UserState = T::UserState;
+
+    fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine> {
+        (**self).as_context()
+    }
+}
+
+impl<T: AsContextMut> AsContextMut for &mut T {
+    fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine> {
+        (**self).as_context_mut()
+    }
+}
+
 impl<'a, T: 'a, E: WasmEngine> AsContext for StoreContext<'a, T, E> {
     type Engine = E;
 
@@ -1121,5 +1279,46 @@ impl<'a, T: 'a, E: WasmEngine> AsContextMut for StoreContextMut<'a, T, E> {
         StoreContextMut {
             inner: crate::backend::AsContextMut::as_context_mut(&mut self.inner),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+
+    #[test]
+    fn add_one() {
+        // 1. Instantiate a runtime
+        let engine = Engine::new(wasmi::Engine::default());
+        let mut store = Store::new(&engine, ());
+
+        // 2. Create modules and instances, similar to other runtimes
+        let module_bin = wabt::wat2wasm(
+            r#"
+        (module
+        (type $t0 (func (param i32) (result i32)))
+        (func $add_one (export "add_one") (type $t0) (param $p0 i32) (result i32)
+            get_local $p0
+            i32.const 1
+            i32.add))
+        "#,
+        )
+        .unwrap();
+
+        let module = Module::new(&engine, std::io::Cursor::new(&module_bin)).unwrap();
+        let instance = Instance::new(&mut store, &module, &crate::Imports::default()).unwrap();
+
+        let add_one = instance
+            .get_export(&store, "add_one")
+            .unwrap()
+            .into_func()
+            .unwrap();
+
+        let mut result = [crate::Value::I32(0)];
+        add_one
+            .call(&mut store, &[crate::Value::I32(42)], &mut result)
+            .unwrap();
+
+        assert_eq!(result[0], crate::Value::I32(43));
     }
 }

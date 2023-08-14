@@ -416,7 +416,9 @@ pub trait WasmModule<E: WasmEngine>: Clone + Sized + Send + Sync {
 }
 
 /// Provides all of the global state that can be manipulated by WASM programs.
-pub trait WasmStore<T, E: WasmEngine> {
+pub trait WasmStore<T, E: WasmEngine>:
+    AsContext<E, UserState = T> + AsContextMut<E, UserState = T>
+{
     /// Creates a new store atop the given engine.
     fn new(engine: &E, data: T) -> Self;
     /// Gets the engine associated with this store.
