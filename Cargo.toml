@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.71"
+ref-cast = "1.0.19"
 smallvec = "1.11.0"
 
 wasmi = { version = "0.31.0", optional = true }

@@ -5,75 +5,8 @@ use std::marker::*;
 use std::ops::*;
 use std::sync::*;
 
-#[cfg(feature = "backend_wasmi")]
-mod backend_wasmi;
-
-pub(crate) struct Backend(Box<dyn BackendHolder>);
-
-impl Backend {
-    pub fn new<E: WasmEngine>() -> Self {
-        Self(Box::new(BackendImpl::<E>::default()))
-    }
-}
-
-impl Clone for Backend {
-    fn clone(&self) -> Self {
-        Self(self.clone_boxed())
-    }
-}
-
-impl Deref for Backend {
-    type Target = dyn BackendHolder;
-
-    fn deref(&self) -> &Self::Target {
-        &*self.0
-    }
-}
-
-pub(crate) trait BackendHolder: 'static + Send + Sync {
-    fn clone_boxed(&self) -> Box<dyn BackendHolder>;
-
-    fn module_new(&self, engine: &AnySendSync, stream: &mut dyn std::io::Read) -> Result<Arc<AnySendSync>>;
-    fn module_exports<'a>(&self, module: &'a AnySendSync) -> Box<dyn 'a + Iterator<Item = ExportType<'a>>>;
-    fn module_get_export(&self, module: &AnySendSync, name: &str) -> Option<ExternType>;
-    fn module_imports<'a>(&self, module: &'a AnySendSync) -> Box<dyn 'a + Iterator<Item = ImportType<'a>>>;
-}
-
-struct BackendImpl<E: WasmEngine>(PhantomData<fn(E)>);
-
-impl<E: WasmEngine> BackendImpl<E> {
-    fn cast<T: 'static>(value: &AnySendSync) -> &T {
-        value.downcast_ref::<T>().expect("Backend value was of incorrect type.")
-    }
-}
-
-impl<E: WasmEngine> Default for BackendImpl<E> {
-    fn default() -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<E: WasmEngine> BackendHolder for BackendImpl<E> {
-    fn clone_boxed(&self) -> Box<dyn BackendHolder> {
-        Box::new(Self::default())
-    }
-
-    fn module_new(&self, engine: &AnySendSync, stream: &mut dyn std::io::Read) -> Result<Arc<AnySendSync>> {
-        Ok(Arc::new(<E::Module as WasmModule<E>>::new(Self::cast(engine), stream)?))
-    }
-
-    fn module_exports<'a>(&self, module: &'a AnySendSync) -> Box<dyn 'a + Iterator<Item = ExportType<'a>>> {
-        Self::cast::<E::Module>(module).exports()
-    }
-
-    fn module_get_export(&self, module: &AnySendSync, name: &str) -> Option<ExternType> {
-        Self::cast::<E::Module>(module).get_export(name)
-    }
-
-    fn module_imports<'a>(&self, module: &'a AnySendSync) -> Box<dyn 'a + Iterator<Item = ImportType<'a>>> {
-        Self::cast::<E::Module>(module).imports()
-    }
-}
+//#[cfg(feature = "backend_wasmi")]
+//mod backend_wasmi;
 
 #[derive(Clone)]
 pub enum Value<E: WasmEngine> {
@@ -83,252 +16,6 @@ pub enum Value<E: WasmEngine> {
     F64(f64),
     FuncRef(Option<E::Func>),
     ExternRef(Option<E::ExternRef>),
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ValueType {
-    I32,
-    I64,
-    F32,
-    F64,
-    FuncRef,
-    ExternRef,
-}
-
-/// The type of a global variable.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct GlobalType {
-    /// The value type of the global variable.
-    content: ValueType,
-    /// The mutability of the global variable.
-    mutable: bool,
-}
-
-impl GlobalType {
-    /// Creates a new [`GlobalType`] from the given [`ValueType`] and [`Mutability`].
-    pub fn new(content: ValueType, mutable: bool) -> Self {
-        Self {
-            content,
-            mutable,
-        }
-    }
-
-    /// Returns the [`ValueType`] of the global variable.
-    pub fn content(&self) -> ValueType {
-        self.content
-    }
-
-    /// Returns whether the global variable is mutable.
-    pub fn mutable(&self) -> bool {
-        self.mutable
-    }
-}
-
-
-/// A descriptor for a [`Table`] instance.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct TableType {
-    /// The type of values stored in the [`Table`].
-    element: ValueType,
-    /// The minimum number of elements the [`Table`] must have.
-    min: u32,
-    /// The optional maximum number of elements the [`Table`] can have.
-    ///
-    /// If this is `None` then the [`Table`] is not limited in size.
-    max: Option<u32>,
-}
-
-impl TableType {
-    /// Creates a new [`TableType`].
-    ///
-    /// # Panics
-    ///
-    /// If `min` is greater than `max`.
-    pub fn new(element: ValueType, min: u32, max: Option<u32>) -> Self {
-        if let Some(max) = max {
-            assert!(min <= max);
-        }
-        Self { element, min, max }
-    }
-
-    /// Returns the [`ValueType`] of elements stored in the [`Table`].
-    pub fn element(&self) -> ValueType {
-        self.element
-    }
-
-    /// Returns minimum number of elements the [`Table`] must have.
-    pub fn minimum(&self) -> u32 {
-        self.min
-    }
-
-    /// The optional maximum number of elements the [`Table`] can have.
-    ///
-    /// If this returns `None` then the [`Table`] is not limited in size.
-    pub fn maximum(&self) -> Option<u32> {
-        self.max
-    }
-}
-
-/// The memory type of a linear memory.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct MemoryType {
-    initial: u32,
-    maximum: Option<u32>,
-}
-
-impl MemoryType {
-    /// Creates a new memory type with initial and optional maximum pages.
-    pub fn new(initial: u32, maximum: Option<u32>) -> Self {
-        Self {
-            initial,
-            maximum,
-        }
-    }
-
-    /// Returns the initial pages of the memory type.
-    pub fn initial_pages(self) -> u32 {
-        self.initial
-    }
-
-    /// Returns the maximum pages of the memory type.
-    ///
-    /// # Note
-    ///
-    /// - Returns `None` if there is no limit set.
-    /// - Maximum memory size cannot exceed `65536` pages or 4GiB.
-    pub fn maximum_pages(self) -> Option<u32> {
-        self.maximum
-    }
-}
-
-/// A function type representing a function's parameter and result types.
-///
-/// # Note
-///
-/// Can be cloned cheaply.
-#[derive(Clone, PartialEq, Eq)]
-pub struct FuncType {
-    /// The number of function parameters.
-    len_params: usize,
-    /// The ordered and merged parameter and result types of the function type.
-    ///
-    /// # Note
-    ///
-    /// The parameters and results are ordered and merged in a single
-    /// vector starting with parameters in their order and followed
-    /// by results in their order.
-    /// The `len_params` field denotes how many parameters there are in
-    /// the head of the vector before the results.
-    params_results: Arc<[ValueType]>,
-}
-
-impl std::fmt::Debug for FuncType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("FuncType")
-            .field("params", &self.params())
-            .field("results", &self.results())
-            .finish()
-    }
-}
-
-impl FuncType {
-    /// Creates a new [`FuncType`].
-    pub fn new<P, R>(params: P, results: R) -> Self
-    where
-        P: IntoIterator<Item = ValueType>,
-        R: IntoIterator<Item = ValueType>,
-    {
-        let mut params_results = params.into_iter().collect::<Vec<_>>();
-        let len_params = params_results.len();
-        params_results.extend(results);
-        Self {
-            params_results: params_results.into(),
-            len_params,
-        }
-    }
-
-    /// Returns the parameter types of the function type.
-    pub fn params(&self) -> &[ValueType] {
-        &self.params_results[..self.len_params]
-    }
-
-    /// Returns the result types of the function type.
-    pub fn results(&self) -> &[ValueType] {
-        &self.params_results[self.len_params..]
-    }
-}
-
-/// The type of an [`Extern`] item.
-///
-/// A list of all possible types which can be externally referenced from a WebAssembly module.
-#[derive(Debug, Clone)]
-pub enum ExternType {
-    /// The type of an [`Extern::Global`].
-    Global(GlobalType),
-    /// The type of an [`Extern::Table`].
-    Table(TableType),
-    /// The type of an [`Extern::Memory`].
-    Memory(MemoryType),
-    /// The type of an [`Extern::Func`].
-    Func(FuncType),
-}
-
-impl From<GlobalType> for ExternType {
-    fn from(global: GlobalType) -> Self {
-        Self::Global(global)
-    }
-}
-
-impl From<TableType> for ExternType {
-    fn from(table: TableType) -> Self {
-        Self::Table(table)
-    }
-}
-
-impl From<MemoryType> for ExternType {
-    fn from(memory: MemoryType) -> Self {
-        Self::Memory(memory)
-    }
-}
-
-impl From<FuncType> for ExternType {
-    fn from(func: FuncType) -> Self {
-        Self::Func(func)
-    }
-}
-
-impl ExternType {
-    /// Returns the underlying [`GlobalType`] or `None` if it is of a different type.
-    pub fn global(&self) -> Option<&GlobalType> {
-        match self {
-            Self::Global(ty) => Some(ty),
-            _ => None,
-        }
-    }
-
-    /// Returns the underlying [`TableType`] or `None` if it is of a different type.
-    pub fn table(&self) -> Option<&TableType> {
-        match self {
-            Self::Table(ty) => Some(ty),
-            _ => None,
-        }
-    }
-
-    /// Returns the underlying [`MemoryType`] or `None` if it is of a different type.
-    pub fn memory(&self) -> Option<&MemoryType> {
-        match self {
-            Self::Memory(ty) => Some(ty),
-            _ => None,
-        }
-    }
-
-    /// Returns the underlying [`FuncType`] or `None` if it is of a different type.
-    pub fn func(&self) -> Option<&FuncType> {
-        match self {
-            Self::Func(ty) => Some(ty),
-            _ => None,
-        }
-    }
 }
 
 /// An external item to a WebAssembly module.
@@ -432,18 +119,6 @@ where
     }
 }
 
-/// A descriptor for an exported WebAssembly value of a [`Module`].
-///
-/// This type is primarily accessed from the [`Module::exports`] method and describes
-/// what names are exported from a Wasm [`Module`] and the type of the item that is exported.
-#[derive(Debug)]
-pub struct ExportType<'module> {
-    /// The name by which the export is known.
-    pub name: &'module str,
-    /// The type of the exported item.
-    pub ty: ExternType,
-}
-
 /// A descriptor for an exported WebAssembly value of an [`Instance`].
 ///
 /// This type is primarily accessed from the [`Instance::exports`] method and describes
@@ -460,21 +135,6 @@ impl<E: WasmEngine> std::fmt::Debug for Export<E> where Extern<E>: std::fmt::Deb
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Export").field("name", &self.name).field("value", &self.value).finish()
     }
-}
-
-/// A descriptor for an imported value into a Wasm [`Module`].
-///
-/// This type is primarily accessed from the [`Module::imports`] method.
-/// Each [`ImportType`] describes an import into the Wasm module with the `module/name`
-/// that it is imported from as well as the type of item that is being imported.
-#[derive(Debug)]
-pub struct ImportType<'module> {
-    /// The module import name.
-    pub module: &'module str,
-    /// The name of the imported item.
-    pub name: &'module str,
-    /// The external item type.
-    pub ty: ExternType,
 }
 
 /// All of the import data used when instantiating.
@@ -627,6 +287,7 @@ pub trait WasmExternRef<E: WasmEngine>: Sized + Send + Sync {
 
 pub trait WasmFunc<E: WasmEngine>: Clone + Sized + Send + Sync {
     fn new<'a, T: 'a>(ctx: impl AsContextMut<E, UserState = T>, ty: FuncType, func: impl HostFunction<'a, T, E>) -> Self;
+    fn new2<'a, T: 'a>(ctx: impl AsContextMut<E, UserState = T>, ty: FuncType, func: impl for<'b> private::HostFunctionSealed<'a, 'b, T, E>) -> Self;
     fn ty(&self, ctx: impl AsContext<E>) -> FuncType;
     fn call<T>(&self, ctx: impl AsContextMut<E>, args: &[Value<E>], results: &mut [Value<E>]) -> Result<()>;
 }
@@ -680,12 +341,12 @@ pub trait WasmStore<T, E: WasmEngine> {
     fn into_data(self) -> T;
 }
 
-pub trait WasmStoreContext<'a, T, E: WasmEngine> {
+pub trait WasmStoreContext<'a, T, E: WasmEngine>: AsContext<E, UserState = T> {
     fn engine(&self) -> &E;
     fn data(&self) -> &T;
 }
 
-pub trait WasmStoreContextMut<'a, T, E: WasmEngine> {
+pub trait WasmStoreContextMut<'a, T, E: WasmEngine>: WasmStoreContext<'a, T, E> + AsContextMut<E, UserState = T> {
     fn data_mut(&mut self) -> &mut T;
 }
 
@@ -724,7 +385,7 @@ impl<T: AsContextMut<E>, E: WasmEngine> AsContextMut<E> for &mut T {
 pub trait HostFunction<'a, T: 'a, E: WasmEngine>: for<'b> private::HostFunctionSealed<'a, 'b, T, E> {}
 impl<'a, T: 'a, E: WasmEngine, U: for<'b> private::HostFunctionSealed<'a, 'b, T, E>> HostFunction<'a, T, E> for U {}
 
-mod private {
+pub mod private {
     use super::*;
 
     pub trait HostFunctionSealed<'a: 'b, 'b, T: 'a, E: WasmEngine>: 'static + Send + Sync + Fn(<E::Store<T> as WasmStore<T, E>>::ContextMut<'b>, &[Value<E>], &mut [Value<E>]) -> Result<()> {}

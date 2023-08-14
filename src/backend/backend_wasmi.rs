@@ -193,6 +193,38 @@ impl<'a, T> WasmStoreContext<'a, T, wasmi::Engine> for wasmi::StoreContext<'a, T
     }
 }
 
+impl<'a, T> AsContext<wasmi::Engine> for wasmi::StoreContext<'a, T> {
+    type UserState = T;
+
+    fn as_context(&self) -> wasmi::StoreContext<T> {
+        wasmi::AsContext::as_context(self)
+    }
+}
+
+impl<'a, T> AsContext<wasmi::Engine> for wasmi::StoreContextMut<'a, T> {
+    type UserState = T;
+
+    fn as_context(&self) -> wasmi::StoreContext<T> {
+        wasmi::AsContext::as_context(self)
+    }
+}
+
+impl<'a, T> AsContextMut<wasmi::Engine> for wasmi::StoreContextMut<'a, T> {
+    fn as_context_mut(&mut self) -> wasmi::StoreContextMut<T> {
+        wasmi::AsContextMut::as_context_mut(self)
+    }
+}
+
+impl<'a, T> WasmStoreContext<'a, T, wasmi::Engine> for wasmi::StoreContextMut<'a, T> {
+    fn engine(&self) -> &wasmi::Engine {
+        self.engine()
+    }
+
+    fn data(&self) -> &T {
+        self.data()
+    }
+}
+
 impl<'a, T> WasmStoreContextMut<'a, T, wasmi::Engine> for wasmi::StoreContextMut<'a, T> {
     fn data_mut(&mut self) -> &mut T {
         self.data_mut()
