@@ -5,8 +5,8 @@ use std::marker::*;
 use std::ops::*;
 use std::sync::*;
 
-//#[cfg(feature = "backend_wasmi")]
-//mod backend_wasmi;
+#[cfg(feature = "backend_wasmi")]
+mod backend_wasmi;
 
 #[derive(Clone)]
 pub enum Value<E: WasmEngine> {
@@ -138,7 +138,6 @@ impl<E: WasmEngine> std::fmt::Debug for Export<E> where Extern<E>: std::fmt::Deb
 }
 
 /// All of the import data used when instantiating.
-/// ```
 #[derive(Clone)]
 pub struct Imports<E: WasmEngine> {
     pub(crate) map: HashMap<(String, String), Extern<E>>,
@@ -277,17 +276,18 @@ pub trait WasmEngine: 'static + Clone + Sized + Send + Sync {
     type Memory: WasmMemory<Self>;
     type Module: WasmModule<Self>;
     type Store<T>: WasmStore<T, Self>;
+    type StoreContext<'a, T: 'a>: WasmStoreContext<'a, T, Self>;
+    type StoreContextMut<'a, T: 'a>: WasmStoreContextMut<'a, T, Self>;
     type Table: WasmTable<Self>;
 }
 
-pub trait WasmExternRef<E: WasmEngine>: Sized + Send + Sync {
-    fn new<T: 'static + Send + Sync>(ctx: impl AsContextMut<E>, object: T) -> Self;
-    fn downcast<'a, T: 'static>(&self, store: <E::Store<T> as WasmStore<T, E>>::Context<'a>) -> Option<&'a T>;
+pub trait WasmExternRef<E: WasmEngine>: Clone + Sized + Send + Sync {
+    fn new<T: 'static + Send + Sync>(ctx: impl AsContextMut<E>, object: Option<T>) -> Self;
+    fn downcast<'a, T: 'static, S: 'a>(&self, store: E::StoreContext<'a, S>) -> Result<Option<&'a T>>;
 }
 
 pub trait WasmFunc<E: WasmEngine>: Clone + Sized + Send + Sync {
-    fn new<'a, T: 'a>(ctx: impl AsContextMut<E, UserState = T>, ty: FuncType, func: impl HostFunction<'a, T, E>) -> Self;
-    fn new2<'a, T: 'a>(ctx: impl AsContextMut<E, UserState = T>, ty: FuncType, func: impl for<'b> private::HostFunctionSealed<'a, 'b, T, E>) -> Self;
+    fn new<T>(ctx: impl AsContextMut<E, UserState = T>, ty: FuncType, func: impl 'static + Send + Sync + Fn(E::StoreContextMut<'_, T>, &[Value<E>], &mut [Value<E>]) -> Result<()>) -> Self;
     fn ty(&self, ctx: impl AsContext<E>) -> FuncType;
     fn call<T>(&self, ctx: impl AsContextMut<E>, args: &[Value<E>], results: &mut [Value<E>]) -> Result<()>;
 }
@@ -317,13 +317,13 @@ pub trait WasmTable<E: WasmEngine>: Clone + Sized + Send + Sync {
     fn set(&self, ctx: impl AsContextMut<E>, index: u32, value: Value<E>) -> Result<()>;
 }
 
-pub trait WasmInstance<E: WasmEngine>: Sized + Send + Sync {
+pub trait WasmInstance<E: WasmEngine>: Clone + Sized + Send + Sync {
     fn new(store: impl AsContextMut<E>, module: &E::Module, imports: &Imports<E>) -> Result<Self>;
     fn exports(&self, store: impl AsContext<E>) -> Box<dyn Iterator<Item = Export<E>>>;
     fn get_export(&self, store: impl AsContext<E>, name: &str) -> Option<Extern<E>>;
 }
 
-pub trait WasmModule<E: WasmEngine>: Sized + Send + Sync {
+pub trait WasmModule<E: WasmEngine>: Clone + Sized + Send + Sync {
     fn new(engine: &E, stream: impl std::io::Read) -> Result<Self>;
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>>;
     fn get_export(&self, name: &str) -> Option<ExternType>;
@@ -331,9 +331,6 @@ pub trait WasmModule<E: WasmEngine>: Sized + Send + Sync {
 }
 
 pub trait WasmStore<T, E: WasmEngine> {
-    type Context<'a>: WasmStoreContext<'a, T, E> where T: 'a;
-    type ContextMut<'a>: WasmStoreContextMut<'a, T, E> where T: 'a;
-
     fn new(engine: &E, data: T) -> Self;
     fn engine(&self) -> &E;
     fn data(&self) -> &T;
@@ -353,17 +350,17 @@ pub trait WasmStoreContextMut<'a, T, E: WasmEngine>: WasmStoreContext<'a, T, E> 
 pub trait AsContext<E: WasmEngine> {
     type UserState;
 
-    fn as_context(&self) -> <E::Store<Self::UserState> as WasmStore<Self::UserState, E>>::Context<'_>;
+    fn as_context(&self) -> E::StoreContext<'_, Self::UserState>;
 }
 
 pub trait AsContextMut<E: WasmEngine>: AsContext<E> {
-    fn as_context_mut(&mut self) -> <E::Store<Self::UserState> as WasmStore<Self::UserState, E>>::ContextMut<'_>;
+    fn as_context_mut(&mut self) -> E::StoreContextMut<'_, Self::UserState>;
 }
 
 impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &T {
     type UserState = T::UserState;
 
-    fn as_context(&self) -> <E::Store<Self::UserState> as WasmStore<Self::UserState, E>>::Context<'_> {
+    fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
         (*self).as_context()
     }
 }
@@ -371,23 +368,13 @@ impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &T {
 impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &mut T {
     type UserState = T::UserState;
 
-    fn as_context(&self) -> <E::Store<Self::UserState> as WasmStore<Self::UserState, E>>::Context<'_> {
+    fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
         (**self).as_context()
     }
 }
 
 impl<T: AsContextMut<E>, E: WasmEngine> AsContextMut<E> for &mut T {
-    fn as_context_mut(&mut self) -> <E::Store<Self::UserState> as WasmStore<Self::UserState, E>>::ContextMut<'_> {
+    fn as_context_mut(&mut self) -> E::StoreContextMut<'_, Self::UserState> {
         (*self).as_context_mut()
     }
-}
-
-pub trait HostFunction<'a, T: 'a, E: WasmEngine>: for<'b> private::HostFunctionSealed<'a, 'b, T, E> {}
-impl<'a, T: 'a, E: WasmEngine, U: for<'b> private::HostFunctionSealed<'a, 'b, T, E>> HostFunction<'a, T, E> for U {}
-
-pub mod private {
-    use super::*;
-
-    pub trait HostFunctionSealed<'a: 'b, 'b, T: 'a, E: WasmEngine>: 'static + Send + Sync + Fn(<E::Store<T> as WasmStore<T, E>>::ContextMut<'b>, &[Value<E>], &mut [Value<E>]) -> Result<()> {}
-    impl<'a: 'b, 'b, T: 'a, E: WasmEngine, U: 'static + Send + Sync + Fn(<E::Store<T> as WasmStore<T, E>>::ContextMut<'b>, &[Value<E>], &mut [Value<E>]) -> Result<()>> HostFunctionSealed<'a, 'b, T, E> for U {}
 }

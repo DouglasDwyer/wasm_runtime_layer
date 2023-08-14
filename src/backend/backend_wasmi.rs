@@ -1,4 +1,5 @@
 use smallvec::*;
+use std::sync::*;
 use super::*;
 
 const DEFAULT_ARGUMENT_SIZE: usize = 4;
@@ -15,25 +16,34 @@ impl WasmEngine for wasmi::Engine {
 
     type Memory = wasmi::Memory;
 
-    type Module = wasmi::Module;
+    type Module = Arc<wasmi::Module>;
 
     type Store<T> = wasmi::Store<T>;
+
+    type StoreContext<'a, T: 'a> = wasmi::StoreContext<'a, T>;
+
+    type StoreContextMut<'a, T: 'a> = wasmi::StoreContextMut<'a, T>;
 
     type Table = wasmi::Table;
 }
 
 impl WasmExternRef<wasmi::Engine> for wasmi::ExternRef {
-    fn new<T: 'static + Send + Sync>(mut ctx: impl AsContextMut<wasmi::Engine>, object: T) -> Self {
-        Self::new::<T>(ctx.as_context_mut(), Some(object))
+    fn new<T: 'static + Send + Sync>(mut ctx: impl AsContextMut<wasmi::Engine>, object: Option<T>) -> Self {
+        Self::new::<T>(ctx.as_context_mut(), object)
     }
 
-    fn downcast<'a, T: 'static>(&self, store: <wasmi::Store<T> as WasmStore<T, wasmi::Engine>>::Context<'a>) -> Option<&'a T> {
-        self.data(store).and_then(|x| x.downcast_ref())
+    fn downcast<'a, T: 'static, S: 'a>(&self, store: <wasmi::Engine as WasmEngine>::StoreContext<'a, S>) -> Result<Option<&'a T>> {
+        if let Some(data) = self.data(store) {
+            data.downcast_ref().ok_or_else(|| Error::msg("Incorrect extern ref type.")).map(|x| Some(x))
+        }
+        else {
+            Ok(None)
+        }
     }
 }
 
 impl WasmFunc<wasmi::Engine> for wasmi::Func {
-    fn new<'a, T: 'a>(mut ctx: impl AsContextMut<wasmi::Engine, UserState = T>, ty: FuncType, func: impl HostFunction<'a, T, wasmi::Engine>) -> Self {
+    fn new<T>(mut ctx: impl AsContextMut<wasmi::Engine, UserState = T>, ty: FuncType, func: impl 'static + Send + Sync + Fn(wasmi::StoreContextMut<T>, &[Value<wasmi::Engine>], &mut [Value<wasmi::Engine>]) -> Result<()>) -> Self {
        wasmi::Func::new(ctx.as_context_mut(), ty.into(), move |mut caller, args, results| {
             let mut input = ArgumentVec::with_capacity(args.len());
             input.extend(args.iter().map(|x| Value::from(x)));
@@ -139,13 +149,13 @@ impl WasmMemory<wasmi::Engine> for wasmi::Memory {
     }
 }
 
-impl WasmModule<wasmi::Engine> for wasmi::Module {
+impl WasmModule<wasmi::Engine> for Arc<wasmi::Module> {
     fn new(engine: &wasmi::Engine, stream: impl std::io::Read) -> Result<Self> {
-        Ok(Self::new(engine, stream)?)
+        Ok(Self::new(wasmi::Module::new(engine, stream)?))
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
-        Box::new(self.exports().map(|x| ExportType { name: x.name(), ty: x.ty().clone().into() }))
+        Box::new((**self).exports().map(|x| ExportType { name: x.name(), ty: x.ty().clone().into() }))
     }
 
     fn get_export(&self, name: &str) -> Option<ExternType> {
@@ -153,15 +163,11 @@ impl WasmModule<wasmi::Engine> for wasmi::Module {
     }
 
     fn imports(&self) -> Box<dyn '_ + Iterator<Item = ImportType<'_>>> {
-        Box::new(self.imports().map(|x| ImportType { module: x.module(), name: x.name(), ty: x.ty().clone().into() }))
+        Box::new((**self).imports().map(|x| ImportType { module: x.module(), name: x.name(), ty: x.ty().clone().into() }))
     }
 }
 
 impl<T> WasmStore<T, wasmi::Engine> for wasmi::Store<T> {
-    type Context<'a> = wasmi::StoreContext<'a, T> where T: 'a;
-
-    type ContextMut<'a> = wasmi::StoreContextMut<'a, T> where T: 'a;
-
     fn new(engine: &wasmi::Engine, data: T) -> Self {
         Self::new(engine, data)
     }

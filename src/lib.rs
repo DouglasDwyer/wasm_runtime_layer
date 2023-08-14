@@ -5,8 +5,14 @@ pub mod backend;
 use anyhow::*;
 use crate::backend::*;
 use ref_cast::*;
+use smallvec::*;
 use std::any::*;
+use std::collections::*;
+use std::marker::*;
 use std::sync::*;
+
+const DEFAULT_ARGUMENT_SIZE: usize = 4;
+type ArgumentVec<T> = SmallVec<[T; 4]>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ValueType {
@@ -280,6 +286,197 @@ pub struct ImportType<'module> {
     pub ty: ExternType,
 }
 
+/// An external item to a WebAssembly module.
+///
+/// This is returned from [`Instance::exports`](crate::Instance::exports)
+/// or [`Instance::get_export`](crate::Instance::get_export).
+#[derive(Clone, Debug)]
+pub enum Extern {
+    /// A WebAssembly global which acts like a [`Cell<T>`] of sorts, supporting `get` and `set` operations.
+    ///
+    /// [`Cell<T>`]: https://doc.rust-lang.org/core/cell/struct.Cell.html
+    Global(Global),
+    /// A WebAssembly table which is an array of funtion references.
+    Table(Table),
+    /// A WebAssembly linear memory.
+    Memory(Memory),
+    /// A WebAssembly function which can be called.
+    Func(Func),
+}
+
+impl<E: WasmEngine> From<&crate::backend::Extern<E>> for Extern {
+    fn from(value: &crate::backend::Extern<E>) -> Self {
+        match value {
+            crate::backend::Extern::Global(x) => Self::Global(Global { global: BackendObject::new(x.clone()) }),
+            crate::backend::Extern::Table(x) => Self::Table(Table { table: BackendObject::new(x.clone()) }),
+            crate::backend::Extern::Memory(x) => Self::Memory(Memory { memory: BackendObject::new(x.clone()) }),
+            crate::backend::Extern::Func(x) => Self::Func(Func { func: BackendObject::new(x.clone()) })
+        }
+    }
+}
+
+impl<E: WasmEngine> From<&Extern> for crate::backend::Extern<E> {
+    fn from(value: &Extern) -> Self {
+        match value {
+            Extern::Global(x) => Self::Global(x.global.cast::<E::Global>().clone()),
+            Extern::Table(x) => Self::Table(x.table.cast::<E::Table>().clone()),
+            Extern::Memory(x) => Self::Memory(x.memory.cast::<E::Memory>().clone()),
+            Extern::Func(x) => Self::Func(x.func.cast::<E::Func>().clone())
+        }
+    }
+}
+
+/// A descriptor for an exported WebAssembly value of an [`Instance`].
+///
+/// This type is primarily accessed from the [`Instance::exports`] method and describes
+/// what names are exported from a Wasm [`Instance`] and the type of the item that is exported.
+pub struct Export {
+    /// The name by which the export is known.
+    pub name: String,
+    /// The value of the exported item.
+    pub value: Extern,
+}
+
+impl<E: WasmEngine> From<crate::backend::Export<E>> for Export {
+    fn from(value: crate::backend::Export<E>) -> Self {
+        Self {
+            name: value.name,
+            value: (&value.value).into()
+        }
+    }
+}
+
+/// All of the import data used when instantiating.
+#[derive(Clone)]
+pub struct Imports {
+    pub(crate) map: HashMap<(String, String), Extern>,
+}
+
+impl Imports {
+    /// Create a new `Imports`.
+    pub fn new() -> Self {
+        Self { map: HashMap::default() }
+    }
+
+    /// Gets an export given a module and a name
+    pub fn get_export(&self, module: &str, name: &str) -> Option<Extern> {
+        if self.exists(module, name) {
+            let ext = &self.map[&(module.to_string(), name.to_string())];
+            return Some(ext.clone());
+        }
+        None
+    }
+
+    /// Returns if an export exist for a given module and name.
+    pub fn exists(&self, module: &str, name: &str) -> bool {
+        self.map
+            .contains_key(&(module.to_string(), name.to_string()))
+    }
+
+    /// Returns true if the Imports contains namespace with the provided name.
+    pub fn contains_namespace(&self, name: &str) -> bool {
+        self.map.keys().any(|(k, _)| (k == name))
+    }
+
+    /// Register a list of externs into a namespace.
+    pub fn register_namespace(
+        &mut self,
+        ns: &str,
+        contents: impl IntoIterator<Item = (String, Extern)>,
+    ) {
+        for (name, extern_) in contents.into_iter() {
+            self.map.insert((ns.to_string(), name.clone()), extern_);
+        }
+    }
+
+    /// Add a single import with a namespace `ns` and name `name`.
+    pub fn define(&mut self, ns: &str, name: &str, val: impl Into<Extern>) {
+        self.map
+            .insert((ns.to_string(), name.to_string()), val.into());
+    }
+
+    /// Iterates through all the imports in this structure
+    pub fn iter(&self) -> ImportsIterator {
+        ImportsIterator::new(self)
+    }
+}
+
+pub struct ImportsIterator<'a> {
+    iter: std::collections::hash_map::Iter<'a, (String, String), Extern>,
+}
+
+impl<'a> ImportsIterator<'a> {
+    fn new(imports: &'a Imports) -> Self {
+        let iter = imports.map.iter();
+        Self { iter }
+    }
+}
+
+impl<'a> Iterator for ImportsIterator<'a> {
+    type Item = (&'a str, &'a str, &'a Extern);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter
+            .next()
+            .map(|(k, v)| (k.0.as_str(), k.1.as_str(), v))
+    }
+}
+
+impl IntoIterator for &Imports {
+    type IntoIter = std::collections::hash_map::IntoIter<(String, String), Extern>;
+    type Item = ((String, String), Extern);
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.map.clone().into_iter()
+    }
+}
+
+impl Default for Imports {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Extend<((String, String), Extern)> for Imports {
+    fn extend<T: IntoIterator<Item = ((String, String), Extern)>>(&mut self, iter: T) {
+        for ((ns, name), ext) in iter.into_iter() {
+            self.define(&ns, &name, ext);
+        }
+    }
+}
+
+impl std::fmt::Debug for Imports {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        enum SecretMap {
+            Empty,
+            Some(usize),
+        }
+
+        impl SecretMap {
+            fn new(len: usize) -> Self {
+                if len == 0 {
+                    Self::Empty
+                } else {
+                    Self::Some(len)
+                }
+            }
+        }
+
+        impl std::fmt::Debug for SecretMap {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                match self {
+                    Self::Empty => write!(f, "(empty)"),
+                    Self::Some(len) => write!(f, "(... {} item(s) ...)", len),
+                }
+            }
+        }
+
+        f.debug_struct("Imports")
+            .field("map", &SecretMap::new(self.map.len()))
+            .finish()
+    }
+}
+
 #[derive(RefCast, Clone)]
 #[repr(transparent)]
 pub struct Engine<E: WasmEngine> {
@@ -327,7 +524,7 @@ impl<T, E: WasmEngine> Store<T, E> {
 }
 
 pub struct StoreContext<'a, T: 'a, E: WasmEngine> {
-    inner: <E::Store<T> as WasmStore<T, E>>::Context<'a>
+    inner: E::StoreContext<'a, T>
 }
 
 impl<'a, T: 'a, E: WasmEngine> StoreContext<'a, T, E> {
@@ -341,7 +538,7 @@ impl<'a, T: 'a, E: WasmEngine> StoreContext<'a, T, E> {
 }
 
 pub struct StoreContextMut<'a, T: 'a, E: WasmEngine> {
-    inner: <E::Store<T> as WasmStore<T, E>>::ContextMut<'a>
+    inner: E::StoreContextMut<'a, T>
 }
 
 impl<'a, T: 'a, E: WasmEngine> StoreContextMut<'a, T, E> {
@@ -365,24 +562,54 @@ pub enum Value {
     F32(f32),
     F64(f64),
     FuncRef(Option<Func>),
-    //ExternRef(Option<E::ExternRef>),
+    ExternRef(Option<ExternRef>),
 }
 
-impl Value {
-    fn into_backend<E: WasmEngine>(&self) -> crate::backend::Value<E> {
-        match self {
-            Self::I32(i32) => crate::backend::Value::I32(*i32),
-            Self::I64(i64) => crate::backend::Value::I64(*i64),
-            Self::F32(f32) => crate::backend::Value::F32(*f32),
-            Self::F64(f64) => crate::backend::Value::F64(*f64),
-            Self::FuncRef(None) => crate::backend::Value::FuncRef(None),
-            Self::FuncRef(Some(func)) => crate::backend::Value::FuncRef(Some(func.func.cast::<E::Func>().clone()))
+impl<E: WasmEngine> From<&Value> for crate::backend::Value<E> {
+    fn from(value: &Value) -> Self {
+        match value {
+            Value::I32(i32) => Self::I32(*i32),
+            Value::I64(i64) => Self::I64(*i64),
+            Value::F32(f32) => Self::F32(*f32),
+            Value::F64(f64) => Self::F64(*f64),
+            Value::FuncRef(None) => Self::FuncRef(None),
+            Value::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
+            Value::ExternRef(None) => Self::ExternRef(None),
+            Value::ExternRef(Some(extern_ref)) => Self::ExternRef(Some(extern_ref.extern_ref.cast::<E::ExternRef>().clone()))
         }
     }
 }
 
-fn test_it<T, E: WasmEngine>(mut ctx: StoreContextMut<T, E>) {
-    let ff = Func::new::<T, E>(ctx, FuncType::new([], []), |ctx, _, _| { println!("hit it"); Ok(()) });
+impl<E: WasmEngine> From<&backend::Value<E>> for Value {
+    fn from(value: &crate::backend::Value<E>) -> Self {
+        match value {
+            crate::backend::Value::I32(i32) => Self::I32(*i32),
+            crate::backend::Value::I64(i64) => Self::I64(*i64),
+            crate::backend::Value::F32(f32) => Self::F32(*f32),
+            crate::backend::Value::F64(f64) => Self::F64(*f64),
+            crate::backend::Value::FuncRef(None) => Self::FuncRef(None),
+            crate::backend::Value::FuncRef(Some(func)) => Self::FuncRef(Some(Func { func: BackendObject::new(func.clone()) })),
+            crate::backend::Value::ExternRef(None) => Self::ExternRef(None),
+            crate::backend::Value::ExternRef(Some(extern_ref)) => Self::ExternRef(Some(ExternRef { extern_ref: BackendObject::new(extern_ref.clone()) }))
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ExternRef {
+    extern_ref: BackendObject
+}
+
+impl ExternRef {
+    pub fn new<T: 'static + Send + Sync, C: AsContextMut>(mut ctx: C, object: impl Into<Option<T>>) -> Self {
+        Self {
+            extern_ref: BackendObject::new(<<C::Engine as WasmEngine>::ExternRef as WasmExternRef<C::Engine>>::new(ctx.as_context_mut().inner, object.into()))
+        }
+    }
+
+    pub fn downcast<'a, T: 'static, S: 'a, E: WasmEngine>(&self, ctx: StoreContext<'a, S, E>) -> Result<Option<&'a T>> {
+        self.extern_ref.cast::<E::ExternRef>().downcast(ctx.inner)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -391,21 +618,190 @@ pub struct Func {
 }
 
 impl Func {
-    pub fn new<'a: 'c, 'c, T: 'a, E: WasmEngine>(ctx: StoreContextMut<'c, T, E>, ty: FuncType, func: impl for<'b> backend::private::HostFunctionSealed<'a, 'b, T, E>) -> Self {
-        //let raw_func = <E::Func as WasmFunc<E>>::new2::<T>(ctx.inner, ty, func);
+    pub fn new<C: AsContextMut>(mut ctx: C, ty: FuncType, func: impl 'static + Send + Sync + Fn(StoreContextMut<'_, C::UserState, C::Engine>, &[Value], &mut [Value]) -> Result<()>) -> Self {
+        let raw_func = <<C::Engine as WasmEngine>::Func as WasmFunc<C::Engine>>::new(ctx.as_context_mut().inner, ty, move |ctx, args, results| {
+            let mut input = ArgumentVec::with_capacity(args.len());
+            input.extend(args.iter().map(Into::into));
 
-        todo!()
-        /*Self {
-            func: BackendObject::new::<<C::Engine as WasmEngine>::Func>()),
-        }*/
+            let mut output = ArgumentVec::with_capacity(results.len());
+            output.extend(results.iter().map(Into::into));
+
+            func(StoreContextMut { inner: ctx }, &input, &mut output)?;;
+
+            for (i, result) in output.iter().enumerate() {
+                results[i] = result.into();
+            }
+
+            std::result::Result::Ok(())
+        });
+        
+        Self { func: BackendObject::new(raw_func) }
     }
 
     pub fn ty<C: AsContext>(&self, ctx: C) -> FuncType {
         self.func.cast::<<C::Engine as WasmEngine>::Func>().ty(ctx.as_context().inner)
     }
+
+    pub fn call<C: AsContextMut>(&self, mut ctx: C, args: &[Value], results: &mut [Value]) -> Result<()> {
+        let raw_func = self.func.cast::<<C::Engine as WasmEngine>::Func>();
+
+        let mut input = ArgumentVec::with_capacity(args.len());
+        input.extend(args.iter().map(Into::into));
+
+        let mut output = ArgumentVec::with_capacity(results.len());
+        output.extend(results.iter().map(Into::into));
+
+        raw_func.call::<C::UserState>(ctx.as_context_mut().inner, &input, &mut output);
+
+        for (i, result) in output.iter().enumerate() {
+            results[i] = result.into();
+        }
+
+        std::result::Result::Ok(())
+    }
 }
 
-pub struct BackendObject {
+#[derive(Clone, Debug)]
+pub struct Global {
+    global: BackendObject
+}
+
+impl Global {
+    pub fn new<C: AsContextMut>(mut ctx: C, initial_value: Value, mutable: bool) -> Self {
+        Self {
+            global: BackendObject::new(<<C::Engine as WasmEngine>::Global as WasmGlobal<C::Engine>>::new(ctx.as_context_mut().inner, (&initial_value).into(), mutable))
+        }
+    }
+
+    pub fn ty<C: AsContext>(&self, ctx: C) -> GlobalType {
+        self.global.cast::<<C::Engine as WasmEngine>::Global>().ty(ctx.as_context().inner).into()
+    }
+
+    pub fn get<C: AsContext>(&self, ctx: C) -> Value {
+        (&self.global.cast::<<C::Engine as WasmEngine>::Global>().get(ctx.as_context().inner)).into()
+    }
+
+    pub fn set<C: AsContextMut>(&self, mut ctx: C, new_value: Value) -> Result<()> {
+        self.global.cast::<<C::Engine as WasmEngine>::Global>().set(ctx.as_context_mut().inner, (&new_value).into())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Module {
+    module: BackendObject
+}
+
+impl Module {
+    pub fn new<E: WasmEngine>(engine: &Engine<E>, stream: impl std::io::Read) -> Result<Self> {
+        Ok(Self {
+            module: BackendObject::new(<E::Module as WasmModule<E>>::new(&engine.backend, stream)?)
+        })
+    }
+
+    pub fn exports<E: WasmEngine>(&self, engine: &Engine<E>) -> impl '_ + Iterator<Item = ExportType<'_>> {
+        self.module.cast::<E::Module>().exports()
+    }
+
+    pub fn get_export<E: WasmEngine>(&self, engine: &Engine<E>, name: &str) -> Option<ExternType> {
+        self.module.cast::<E::Module>().get_export(name)
+    }
+
+    pub fn imports<E: WasmEngine>(&self, engine: &Engine<E>) -> impl '_ + Iterator<Item = ImportType<'_>> {
+        self.module.cast::<E::Module>().imports()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Instance {
+    instance: BackendObject
+}
+
+impl Instance {
+    fn new<C: AsContextMut>(mut ctx: C, module: &Module, imports: &Imports) -> Result<Self> {
+        let mut backend_imports = crate::backend::Imports::default();
+        backend_imports.extend(imports.into_iter().map(|((host, name), val)| ((host, name), (&val).into())));
+
+        Ok(Self {
+            instance: BackendObject::new(<<C::Engine as WasmEngine>::Instance as WasmInstance<C::Engine>>::new(ctx.as_context_mut().inner, module.module.cast(), &backend_imports)?)
+        })
+    }
+
+    fn exports<C: AsContext>(&self, ctx: C) -> impl Iterator<Item = Export> {
+        self.instance.cast::<<C::Engine as WasmEngine>::Instance>().exports(ctx.as_context().inner).map(Into::into)
+    }
+
+    fn get_export<C: AsContext>(&self, ctx: C, name: &str) -> Option<Extern> {
+        self.instance.cast::<<C::Engine as WasmEngine>::Instance>().get_export(ctx.as_context().inner, name).as_ref().map(Into::into)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Memory {
+    memory: BackendObject
+}
+
+impl Memory {
+    pub fn new<C: AsContextMut>(mut ctx: C, ty: MemoryType) -> Result<Self> {
+        Ok(Self {
+            memory: BackendObject::new(<<C::Engine as WasmEngine>::Memory as WasmMemory<C::Engine>>::new(ctx.as_context_mut().inner, ty)?)
+        })
+    }
+
+    pub fn ty<C: AsContext>(&self, ctx: C) -> MemoryType {
+        self.memory.cast::<<C::Engine as WasmEngine>::Memory>().ty(ctx.as_context().inner)
+    }
+
+    pub fn grow<C: AsContextMut>(&self, mut ctx: C, additional: u32) -> Result<u32> {
+        self.memory.cast::<<C::Engine as WasmEngine>::Memory>().grow(ctx.as_context_mut().inner, additional)
+    }
+
+    pub fn current_pages<C: AsContext>(&self, ctx: C) -> u32 {
+        self.memory.cast::<<C::Engine as WasmEngine>::Memory>().current_pages(ctx.as_context().inner)
+    }
+
+    pub fn read<C: AsContext>(&self, ctx: C, offset: usize, buffer: &mut [u8]) -> Result<()> {
+        self.memory.cast::<<C::Engine as WasmEngine>::Memory>().read(ctx.as_context().inner, offset, buffer)
+    }
+
+    pub fn write<C: AsContextMut>(&self, mut ctx: C, offset: usize, buffer: &[u8]) -> Result<()> {
+        self.memory.cast::<<C::Engine as WasmEngine>::Memory>().write(ctx.as_context_mut().inner, offset, buffer)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Table {
+    table: BackendObject
+}
+
+impl Table {
+    fn new<C: AsContextMut>(mut ctx: C, ty: TableType, init: Value) -> Result<Self> {
+        Ok(Self {
+            table: BackendObject::new(<<C::Engine as WasmEngine>::Table as WasmTable<C::Engine>>::new(ctx.as_context_mut().inner, ty, (&init).into())?)
+        })
+    }
+
+    fn ty<C: AsContext>(&self, ctx: C) -> TableType {
+        self.table.cast::<<C::Engine as WasmEngine>::Table>().ty(ctx.as_context().inner)
+    }
+
+    fn size<C: AsContext>(&self, ctx: C) -> u32 {
+        self.table.cast::<<C::Engine as WasmEngine>::Table>().size(ctx.as_context().inner)
+    }
+
+    fn grow<C: AsContextMut>(&self, mut ctx: C, delta: u32, init: Value) -> Result<u32> {
+        self.table.cast::<<C::Engine as WasmEngine>::Table>().grow(ctx.as_context_mut().inner, delta, (&init).into())
+    }
+
+    fn get<C: AsContext>(&self, ctx: C, index: u32) -> Option<Value> {
+        self.table.cast::<<C::Engine as WasmEngine>::Table>().get(ctx.as_context().inner, index).as_ref().map(Into::into)
+    }
+
+    fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, value: Value) -> Result<()> {
+        self.table.cast::<<C::Engine as WasmEngine>::Table>().set(ctx.as_context_mut().inner, index, (&value).into())
+    }
+}
+
+struct BackendObject {
     inner: Box<dyn AnyCloneBoxed>
 }
 
