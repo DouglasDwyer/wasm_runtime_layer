@@ -1,9 +1,6 @@
-use smallvec::*;
+use crate::backend::*;
+use crate::ArgumentVec;
 use std::sync::*;
-use super::*;
-
-const DEFAULT_ARGUMENT_SIZE: usize = 4;
-type ArgumentVec<T> = SmallVec<[T; 4]>;
 
 impl WasmEngine for wasmi::Engine {
     type ExternRef = wasmi::ExternRef;
@@ -28,50 +25,81 @@ impl WasmEngine for wasmi::Engine {
 }
 
 impl WasmExternRef<wasmi::Engine> for wasmi::ExternRef {
-    fn new<T: 'static + Send + Sync>(mut ctx: impl AsContextMut<wasmi::Engine>, object: Option<T>) -> Self {
+    fn new<T: 'static + Send + Sync>(
+        mut ctx: impl AsContextMut<wasmi::Engine>,
+        object: Option<T>,
+    ) -> Self {
         Self::new::<T>(ctx.as_context_mut(), object)
     }
 
-    fn downcast<'a, T: 'static, S: 'a>(&self, store: <wasmi::Engine as WasmEngine>::StoreContext<'a, S>) -> Result<Option<&'a T>> {
+    fn downcast<'a, T: 'static, S: 'a>(
+        &self,
+        store: <wasmi::Engine as WasmEngine>::StoreContext<'a, S>,
+    ) -> Result<Option<&'a T>> {
         if let Some(data) = self.data(store) {
-            data.downcast_ref().ok_or_else(|| Error::msg("Incorrect extern ref type.")).map(|x| Some(x))
-        }
-        else {
+            data.downcast_ref()
+                .ok_or_else(|| Error::msg("Incorrect extern ref type."))
+                .map(Some)
+        } else {
             Ok(None)
         }
     }
 }
 
 impl WasmFunc<wasmi::Engine> for wasmi::Func {
-    fn new<T>(mut ctx: impl AsContextMut<wasmi::Engine, UserState = T>, ty: FuncType, func: impl 'static + Send + Sync + Fn(wasmi::StoreContextMut<T>, &[Value<wasmi::Engine>], &mut [Value<wasmi::Engine>]) -> Result<()>) -> Self {
-       wasmi::Func::new(ctx.as_context_mut(), ty.into(), move |mut caller, args, results| {
-            let mut input = ArgumentVec::with_capacity(args.len());
-            input.extend(args.iter().map(|x| Value::from(x)));
+    fn new<T>(
+        mut ctx: impl AsContextMut<wasmi::Engine, UserState = T>,
+        ty: FuncType,
+        func: impl 'static
+            + Send
+            + Sync
+            + Fn(
+                wasmi::StoreContextMut<T>,
+                &[Value<wasmi::Engine>],
+                &mut [Value<wasmi::Engine>],
+            ) -> Result<()>,
+    ) -> Self {
+        wasmi::Func::new(
+            ctx.as_context_mut(),
+            ty.into(),
+            move |mut caller, args, results| {
+                let mut input = ArgumentVec::with_capacity(args.len());
+                input.extend(args.iter().map(Into::into));
 
-            let mut output = ArgumentVec::with_capacity(results.len());
-            output.extend(results.iter().map(|x| Value::from(x)));
+                let mut output = ArgumentVec::with_capacity(results.len());
+                output.extend(results.iter().map(Into::into));
 
-            func(wasmi::AsContextMut::as_context_mut(&mut caller), &input, &mut output)
+                func(
+                    wasmi::AsContextMut::as_context_mut(&mut caller),
+                    &input,
+                    &mut output,
+                )
                 .map_err(HostError)?;
 
-            for (i, result) in output.iter().enumerate() {
-                results[i] = result.into();
-            }
+                for (i, result) in output.iter().enumerate() {
+                    results[i] = result.into();
+                }
 
-            std::result::Result::Ok(())
-        })
+                std::result::Result::Ok(())
+            },
+        )
     }
 
     fn ty(&self, ctx: impl AsContext<wasmi::Engine>) -> FuncType {
         self.ty(ctx.as_context()).into()
     }
 
-    fn call<T>(&self, mut ctx: impl AsContextMut<wasmi::Engine>, args: &[Value<wasmi::Engine>], results: &mut [Value<wasmi::Engine>]) -> Result<()> {
+    fn call<T>(
+        &self,
+        mut ctx: impl AsContextMut<wasmi::Engine>,
+        args: &[Value<wasmi::Engine>],
+        results: &mut [Value<wasmi::Engine>],
+    ) -> Result<()> {
         let mut input = ArgumentVec::with_capacity(args.len());
-        input.extend(args.iter().map(|x| wasmi::Value::from(x)));
+        input.extend(args.iter().map(Into::into));
 
         let mut output = ArgumentVec::with_capacity(results.len());
-        output.extend(results.iter().map(|x| wasmi::Value::from(x)));
+        output.extend(results.iter().map(Into::into));
 
         self.call(ctx.as_context_mut(), &input[..], &mut output[..])
             .context("Error executing function")?;
@@ -85,16 +113,33 @@ impl WasmFunc<wasmi::Engine> for wasmi::Func {
 }
 
 impl WasmGlobal<wasmi::Engine> for wasmi::Global {
-    fn new(mut ctx: impl AsContextMut<wasmi::Engine>, value: Value<wasmi::Engine>, mutable: bool) -> Self {
-        Self::new(ctx.as_context_mut(), (&value).into(), if mutable { wasmi::Mutability::Var } else { wasmi::Mutability::Const })
+    fn new(
+        mut ctx: impl AsContextMut<wasmi::Engine>,
+        value: Value<wasmi::Engine>,
+        mutable: bool,
+    ) -> Self {
+        Self::new(
+            ctx.as_context_mut(),
+            (&value).into(),
+            if mutable {
+                wasmi::Mutability::Var
+            } else {
+                wasmi::Mutability::Const
+            },
+        )
     }
 
     fn ty(&self, ctx: impl AsContext<wasmi::Engine>) -> GlobalType {
         self.ty(ctx.as_context()).into()
     }
 
-    fn set(&self, mut ctx: impl AsContextMut<wasmi::Engine>, new_value: Value<wasmi::Engine>) -> Result<()> {
-        self.set(ctx.as_context_mut(), (&new_value).into()).map_err(as_error)
+    fn set(
+        &self,
+        mut ctx: impl AsContextMut<wasmi::Engine>,
+        new_value: Value<wasmi::Engine>,
+    ) -> Result<()> {
+        self.set(ctx.as_context_mut(), (&new_value).into())
+            .map_err(Error::msg)
     }
 
     fn get(&self, ctx: impl AsContext<wasmi::Engine>) -> Value<wasmi::Engine> {
@@ -103,9 +148,13 @@ impl WasmGlobal<wasmi::Engine> for wasmi::Global {
 }
 
 impl WasmInstance<wasmi::Engine> for wasmi::Instance {
-    fn new(mut store: impl AsContextMut<wasmi::Engine>, module: &<wasmi::Engine as WasmEngine>::Module, imports: &Imports<wasmi::Engine>) -> Result<Self> {
+    fn new(
+        mut store: impl AsContextMut<wasmi::Engine>,
+        module: &<wasmi::Engine as WasmEngine>::Module,
+        imports: &Imports<wasmi::Engine>,
+    ) -> Result<Self> {
         let mut linker = wasmi::Linker::new(store.as_context().engine());
-        
+
         for ((module, name), imp) in imports {
             linker.define(&module, &name, imp)?;
         }
@@ -114,18 +163,33 @@ impl WasmInstance<wasmi::Engine> for wasmi::Instance {
         Ok(pre.start(store.as_context_mut())?)
     }
 
-    fn exports<'a>(&self, store: impl AsContext<wasmi::Engine>) -> Box<dyn Iterator<Item = Export<wasmi::Engine>>> {
-        Box::new(self.exports(store.as_context()).into_iter().map(|x| Export { name: x.name().to_string(), value: x.into_extern().into() }).collect::<Vec<_>>().into_iter())
+    fn exports<'a>(
+        &self,
+        store: impl AsContext<wasmi::Engine>,
+    ) -> Box<dyn Iterator<Item = Export<wasmi::Engine>>> {
+        Box::new(
+            wasmi::Instance::exports(self, store.as_context())
+                .map(|x| Export {
+                    name: x.name().to_string(),
+                    value: x.into_extern().into(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
     }
 
-    fn get_export(&self, store: impl AsContext<wasmi::Engine>, name: &str) -> Option<Extern<wasmi::Engine>> {
-        self.get_export(store.as_context(), name).map(Into::into)
+    fn get_export(
+        &self,
+        store: impl AsContext<wasmi::Engine>,
+        name: &str,
+    ) -> Option<Extern<wasmi::Engine>> {
+        wasmi::Instance::get_export(self, store.as_context(), name).map(Into::into)
     }
 }
 
 impl WasmMemory<wasmi::Engine> for wasmi::Memory {
     fn new(mut ctx: impl AsContextMut<wasmi::Engine>, ty: MemoryType) -> Result<Self> {
-        Self::new(ctx.as_context_mut(), ty.into()).map_err(as_error)
+        Self::new(ctx.as_context_mut(), ty.into()).map_err(Error::msg)
     }
 
     fn ty(&self, ctx: impl AsContext<wasmi::Engine>) -> MemoryType {
@@ -133,19 +197,36 @@ impl WasmMemory<wasmi::Engine> for wasmi::Memory {
     }
 
     fn grow(&self, mut ctx: impl AsContextMut<wasmi::Engine>, additional: u32) -> Result<u32> {
-        self.grow(ctx.as_context_mut(), wasmi::core::Pages::new(additional).context("Could not create additional pages.")?).map(Into::into).map_err(as_error)
+        self.grow(
+            ctx.as_context_mut(),
+            wasmi::core::Pages::new(additional).context("Could not create additional pages.")?,
+        )
+        .map(Into::into)
+        .map_err(Error::msg)
     }
 
     fn current_pages(&self, ctx: impl AsContext<wasmi::Engine>) -> u32 {
         self.current_pages(ctx.as_context()).into()
     }
 
-    fn read(&self, ctx: impl AsContext<wasmi::Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
-        self.read(ctx.as_context(), offset, buffer).map_err(as_error)
+    fn read(
+        &self,
+        ctx: impl AsContext<wasmi::Engine>,
+        offset: usize,
+        buffer: &mut [u8],
+    ) -> Result<()> {
+        self.read(ctx.as_context(), offset, buffer)
+            .map_err(Error::msg)
     }
 
-    fn write(&self, mut ctx: impl AsContextMut<wasmi::Engine>, offset: usize, buffer: &[u8]) -> Result<()> {
-        self.write(ctx.as_context_mut(), offset, buffer).map_err(as_error)
+    fn write(
+        &self,
+        mut ctx: impl AsContextMut<wasmi::Engine>,
+        offset: usize,
+        buffer: &[u8],
+    ) -> Result<()> {
+        self.write(ctx.as_context_mut(), offset, buffer)
+            .map_err(Error::msg)
     }
 }
 
@@ -155,15 +236,22 @@ impl WasmModule<wasmi::Engine> for Arc<wasmi::Module> {
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
-        Box::new((**self).exports().map(|x| ExportType { name: x.name(), ty: x.ty().clone().into() }))
+        Box::new((**self).exports().map(|x| ExportType {
+            name: x.name(),
+            ty: x.ty().clone().into(),
+        }))
     }
 
     fn get_export(&self, name: &str) -> Option<ExternType> {
-        self.get_export(name).map(Into::into)
+        (**self).get_export(name).map(Into::into)
     }
 
     fn imports(&self) -> Box<dyn '_ + Iterator<Item = ImportType<'_>>> {
-        Box::new((**self).imports().map(|x| ImportType { module: x.module(), name: x.name(), ty: x.ty().clone().into() }))
+        Box::new((**self).imports().map(|x| ImportType {
+            module: x.module(),
+            name: x.name(),
+            ty: x.ty().clone().into(),
+        }))
     }
 }
 
@@ -238,8 +326,12 @@ impl<'a, T> WasmStoreContextMut<'a, T, wasmi::Engine> for wasmi::StoreContextMut
 }
 
 impl WasmTable<wasmi::Engine> for wasmi::Table {
-    fn new(mut ctx: impl AsContextMut<wasmi::Engine>, ty: TableType, init: Value<wasmi::Engine>) -> Result<Self> {
-        Self::new(ctx.as_context_mut(), ty.into(), (&init).into()).map_err(as_error)
+    fn new(
+        mut ctx: impl AsContextMut<wasmi::Engine>,
+        ty: TableType,
+        init: Value<wasmi::Engine>,
+    ) -> Result<Self> {
+        Self::new(ctx.as_context_mut(), ty.into(), (&init).into()).map_err(Error::msg)
     }
 
     fn ty(&self, ctx: impl AsContext<wasmi::Engine>) -> TableType {
@@ -250,16 +342,28 @@ impl WasmTable<wasmi::Engine> for wasmi::Table {
         self.size(ctx.as_context())
     }
 
-    fn grow(&self, mut ctx: impl AsContextMut<wasmi::Engine>, delta: u32, init: Value<wasmi::Engine>) -> Result<u32> {
-        self.grow(ctx.as_context_mut(), delta, (&init).into()).map_err(as_error)
+    fn grow(
+        &self,
+        mut ctx: impl AsContextMut<wasmi::Engine>,
+        delta: u32,
+        init: Value<wasmi::Engine>,
+    ) -> Result<u32> {
+        self.grow(ctx.as_context_mut(), delta, (&init).into())
+            .map_err(Error::msg)
     }
 
     fn get(&self, ctx: impl AsContext<wasmi::Engine>, index: u32) -> Option<Value<wasmi::Engine>> {
         self.get(ctx.as_context(), index).as_ref().map(Into::into)
     }
 
-    fn set(&self, mut ctx: impl AsContextMut<wasmi::Engine>, index: u32, value: Value<wasmi::Engine>) -> Result<()> {
-        self.set(ctx.as_context_mut(), index, (&value).into()).map_err(as_error)
+    fn set(
+        &self,
+        mut ctx: impl AsContextMut<wasmi::Engine>,
+        index: u32,
+        value: Value<wasmi::Engine>,
+    ) -> Result<()> {
+        self.set(ctx.as_context_mut(), index, (&value).into())
+            .map_err(Error::msg)
     }
 }
 
@@ -296,8 +400,10 @@ impl From<&wasmi::Value> for Value<wasmi::Engine> {
             wasmi::Value::I64(x) => Self::I64(*x),
             wasmi::Value::F32(x) => Self::F32(x.to_float()),
             wasmi::Value::F64(x) => Self::F64(x.to_float()),
-            wasmi::Value::FuncRef(x) => Self::FuncRef(x.func().map(|x| x.clone())),
-            wasmi::Value::ExternRef(x) => Self::ExternRef(if x.is_null() { None } else { Some(x.clone()) }),
+            wasmi::Value::FuncRef(x) => Self::FuncRef(x.func().copied()),
+            wasmi::Value::ExternRef(x) => {
+                Self::ExternRef(if x.is_null() { None } else { Some(*x) })
+            }
         }
     }
 }
@@ -309,21 +415,27 @@ impl From<&Value<wasmi::Engine>> for wasmi::Value {
             Value::I64(x) => Self::I64(*x),
             Value::F32(x) => Self::F32(wasmi::core::F32::from_float(*x)),
             Value::F64(x) => Self::F64(wasmi::core::F64::from_float(*x)),
-            Value::FuncRef(x) => Self::FuncRef(wasmi::FuncRef::new(x.clone())),
-            Value::ExternRef(x) => Self::ExternRef(x.clone().unwrap_or_default()),
+            Value::FuncRef(x) => Self::FuncRef(wasmi::FuncRef::new(*x)),
+            Value::ExternRef(x) => Self::ExternRef(x.unwrap_or_default()),
         }
     }
 }
 
 impl From<wasmi::FuncType> for FuncType {
     fn from(value: wasmi::FuncType) -> Self {
-        Self::new(value.params().iter().map(|&x| x.into()), value.results().iter().map(|&x| x.into()))
+        Self::new(
+            value.params().iter().map(|&x| x.into()),
+            value.results().iter().map(|&x| x.into()),
+        )
     }
 }
 
 impl From<FuncType> for wasmi::FuncType {
     fn from(value: FuncType) -> Self {
-        Self::new(value.params().iter().map(|&x| x.into()), value.results().iter().map(|&x| x.into()))
+        Self::new(
+            value.params().iter().map(|&x| x.into()),
+            value.results().iter().map(|&x| x.into()),
+        )
     }
 }
 
@@ -335,7 +447,14 @@ impl From<wasmi::GlobalType> for GlobalType {
 
 impl From<GlobalType> for wasmi::GlobalType {
     fn from(value: GlobalType) -> Self {
-        Self::new(value.content().into(), if value.mutable() { wasmi::Mutability::Var } else { wasmi::Mutability::Const })
+        Self::new(
+            value.content().into(),
+            if value.mutable() {
+                wasmi::Mutability::Var
+            } else {
+                wasmi::Mutability::Const
+            },
+        )
     }
 }
 
@@ -345,7 +464,7 @@ impl From<Extern<wasmi::Engine>> for wasmi::Extern {
             Extern::Func(x) => wasmi::Extern::Func(x),
             Extern::Global(x) => wasmi::Extern::Global(x),
             Extern::Memory(x) => wasmi::Extern::Memory(x),
-            Extern::Table(x) => wasmi::Extern::Table(x)
+            Extern::Table(x) => wasmi::Extern::Table(x),
         }
     }
 }
@@ -356,14 +475,17 @@ impl From<wasmi::Extern> for Extern<wasmi::Engine> {
             wasmi::Extern::Func(x) => Extern::Func(x),
             wasmi::Extern::Global(x) => Extern::Global(x),
             wasmi::Extern::Memory(x) => Extern::Memory(x),
-            wasmi::Extern::Table(x) => Extern::Table(x)
+            wasmi::Extern::Table(x) => Extern::Table(x),
         }
     }
 }
 
 impl From<wasmi::MemoryType> for MemoryType {
     fn from(value: wasmi::MemoryType) -> Self {
-        Self::new(value.initial_pages().into(), value.maximum_pages().map(Into::into))
+        Self::new(
+            value.initial_pages().into(),
+            value.maximum_pages().map(Into::into),
+        )
     }
 }
 
@@ -407,10 +529,7 @@ impl From<ExternType> for wasmi::ExternType {
     }
 }
 
-fn as_error<T: std::fmt::Debug>(value: T) -> anyhow::Error {
-    Error::msg(format!("{value:?}"))
-}
-
+/// Represents a `wasmi` error derived from `anyhow`.
 #[derive(Debug)]
 struct HostError(anyhow::Error);
 

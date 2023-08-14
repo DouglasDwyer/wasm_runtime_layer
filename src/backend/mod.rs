@@ -1,20 +1,27 @@
-use anyhow::*;
 use crate::*;
+use anyhow::*;
 use std::collections::*;
 use std::marker::*;
 use std::ops::*;
-use std::sync::*;
 
 #[cfg(feature = "backend_wasmi")]
+/// The backend which provides support for the `wasmi` runtime.
 mod backend_wasmi;
 
+/// Runtime representation of a value.
 #[derive(Clone)]
 pub enum Value<E: WasmEngine> {
+    /// Value of 32-bit signed or unsigned integer.
     I32(i32),
+    /// Value of 64-bit signed or unsigned integer.
     I64(i64),
+    /// Value of 32-bit floating point number.
     F32(f32),
+    /// Value of 64-bit floating point number.
     F64(f64),
+    /// An optional function reference.
     FuncRef(Option<E::Func>),
+    /// An optional external reference.
     ExternRef(Option<E::ExternRef>),
 }
 
@@ -130,23 +137,31 @@ pub struct Export<E: WasmEngine> {
     pub value: Extern<E>,
 }
 
-impl<E: WasmEngine> std::fmt::Debug for Export<E> where Extern<E>: std::fmt::Debug
+impl<E: WasmEngine> std::fmt::Debug for Export<E>
+where
+    Extern<E>: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Export").field("name", &self.name).field("value", &self.value).finish()
+        f.debug_struct("Export")
+            .field("name", &self.name)
+            .field("value", &self.value)
+            .finish()
     }
 }
 
 /// All of the import data used when instantiating.
 #[derive(Clone)]
 pub struct Imports<E: WasmEngine> {
+    /// The inner list of external imports.
     pub(crate) map: HashMap<(String, String), Extern<E>>,
 }
 
 impl<E: WasmEngine> Imports<E> {
     /// Create a new `Imports`.
     pub fn new() -> Self {
-        Self { map: HashMap::default() }
+        Self {
+            map: HashMap::default(),
+        }
     }
 
     /// Gets an export given a module and a name
@@ -192,11 +207,14 @@ impl<E: WasmEngine> Imports<E> {
     }
 }
 
+/// An iterator over imports.
 pub struct ImportsIterator<'a, E: WasmEngine> {
+    /// The inner iterator over external items.
     iter: std::collections::hash_map::Iter<'a, (String, String), Extern<E>>,
 }
 
 impl<'a, E: WasmEngine> ImportsIterator<'a, E> {
+    /// Creates a new iterator over the imports of an instance.
     fn new(imports: &'a Imports<E>) -> Self {
         let iter = imports.map.iter();
         Self { iter }
@@ -238,12 +256,16 @@ impl<E: WasmEngine> Extend<((String, String), Extern<E>)> for Imports<E> {
 
 impl<E: WasmEngine> std::fmt::Debug for Imports<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        /// Stores backing debug data.
         enum SecretMap {
+            /// The empty variant.
             Empty,
+            /// The filled index variant.
             Some(usize),
         }
 
         impl SecretMap {
+            /// Creates a new secret map representation of the given size.
             fn new(len: usize) -> Self {
                 if len == 0 {
                     Self::Empty
@@ -268,92 +290,173 @@ impl<E: WasmEngine> std::fmt::Debug for Imports<E> {
     }
 }
 
+/// Provides a backing implementation for a WebAssembly runtime.
 pub trait WasmEngine: 'static + Clone + Sized + Send + Sync {
+    /// The external reference type.
     type ExternRef: WasmExternRef<Self>;
+    /// The function type.
     type Func: WasmFunc<Self>;
+    /// The global type.
     type Global: WasmGlobal<Self>;
+    /// The instance type.
     type Instance: WasmInstance<Self>;
+    /// The memory type.
     type Memory: WasmMemory<Self>;
+    /// The module type.
     type Module: WasmModule<Self>;
+    /// The store type.
     type Store<T>: WasmStore<T, Self>;
+    /// The store context type.
     type StoreContext<'a, T: 'a>: WasmStoreContext<'a, T, Self>;
+    /// The mutable store context type.
     type StoreContextMut<'a, T: 'a>: WasmStoreContextMut<'a, T, Self>;
+    /// The table type.
     type Table: WasmTable<Self>;
 }
 
+/// Provides a nullable opaque reference to any data within WebAssembly.
 pub trait WasmExternRef<E: WasmEngine>: Clone + Sized + Send + Sync {
+    /// Creates a new reference wrapping the given value.
     fn new<T: 'static + Send + Sync>(ctx: impl AsContextMut<E>, object: Option<T>) -> Self;
-    fn downcast<'a, T: 'static, S: 'a>(&self, store: E::StoreContext<'a, S>) -> Result<Option<&'a T>>;
+    /// Returns a shared reference to the underlying data.
+    fn downcast<'a, T: 'static, S: 'a>(
+        &self,
+        store: E::StoreContext<'a, S>,
+    ) -> Result<Option<&'a T>>;
 }
 
+/// Provides a Wasm or host function reference.
 pub trait WasmFunc<E: WasmEngine>: Clone + Sized + Send + Sync {
-    fn new<T>(ctx: impl AsContextMut<E, UserState = T>, ty: FuncType, func: impl 'static + Send + Sync + Fn(E::StoreContextMut<'_, T>, &[Value<E>], &mut [Value<E>]) -> Result<()>) -> Self;
+    /// Creates a new function with the given arguments.
+    fn new<T>(
+        ctx: impl AsContextMut<E, UserState = T>,
+        ty: FuncType,
+        func: impl 'static
+            + Send
+            + Sync
+            + Fn(E::StoreContextMut<'_, T>, &[Value<E>], &mut [Value<E>]) -> Result<()>,
+    ) -> Self;
+    /// Gets the function type of this object.
     fn ty(&self, ctx: impl AsContext<E>) -> FuncType;
-    fn call<T>(&self, ctx: impl AsContextMut<E>, args: &[Value<E>], results: &mut [Value<E>]) -> Result<()>;
+    /// Calls the object with the given arguments.
+    fn call<T>(
+        &self,
+        ctx: impl AsContextMut<E>,
+        args: &[Value<E>],
+        results: &mut [Value<E>],
+    ) -> Result<()>;
 }
 
+/// Provides a Wasm global variable reference.
 pub trait WasmGlobal<E: WasmEngine>: Clone + Sized + Send + Sync {
+    /// Creates a new global variable to the store.
     fn new(ctx: impl AsContextMut<E>, value: Value<E>, mutable: bool) -> Self;
+    /// Returns the type of the global variable.
     fn ty(&self, ctx: impl AsContext<E>) -> GlobalType;
+    /// Sets the value of the global variable.
     fn set(&self, ctx: impl AsContextMut<E>, new_value: Value<E>) -> Result<()>;
+    /// Gets the value of the global variable.
     fn get(&self, ctx: impl AsContext<E>) -> Value<E>;
 }
 
+/// Provides a Wasm linear memory reference.
 pub trait WasmMemory<E: WasmEngine>: Clone + Sized + Send + Sync {
+    /// Creates a new linear memory to the store.
     fn new(ctx: impl AsContextMut<E>, ty: MemoryType) -> Result<Self>;
+    /// Returns the memory type of the linear memory.
     fn ty(&self, ctx: impl AsContext<E>) -> MemoryType;
+    /// Grows the linear memory by the given amount of new pages.
     fn grow(&self, ctx: impl AsContextMut<E>, additional: u32) -> Result<u32>;
+    /// Returns the amount of pages in use by the linear memory.
     fn current_pages(&self, ctx: impl AsContext<E>) -> u32;
+    /// Reads `n` bytes from `memory[offset..offset+n]` into `buffer`
+    /// where `n` is the length of `buffer`.
     fn read(&self, ctx: impl AsContext<E>, offset: usize, buffer: &mut [u8]) -> Result<()>;
+    /// Writes `n` bytes to `memory[offset..offset+n]` from `buffer`
+    /// where `n` if the length of `buffer`.
     fn write(&self, ctx: impl AsContextMut<E>, offset: usize, buffer: &[u8]) -> Result<()>;
 }
 
+/// Provides a Wasm table reference.
 pub trait WasmTable<E: WasmEngine>: Clone + Sized + Send + Sync {
+    /// Creates a new table to the store.
     fn new(ctx: impl AsContextMut<E>, ty: TableType, init: Value<E>) -> Result<Self>;
+    /// Returns the type and limits of the table.
     fn ty(&self, ctx: impl AsContext<E>) -> TableType;
+    /// Returns the current size of the table.
     fn size(&self, ctx: impl AsContext<E>) -> u32;
+    /// Grows the table by the given amount of elements.
     fn grow(&self, ctx: impl AsContextMut<E>, delta: u32, init: Value<E>) -> Result<u32>;
+    /// Returns the table element value at `index`.
     fn get(&self, ctx: impl AsContext<E>, index: u32) -> Option<Value<E>>;
+    /// Sets the value of this table at `index`.
     fn set(&self, ctx: impl AsContextMut<E>, index: u32, value: Value<E>) -> Result<()>;
 }
 
+/// Provides an instantiated WASM module.
 pub trait WasmInstance<E: WasmEngine>: Clone + Sized + Send + Sync {
+    /// Creates a new instance.
     fn new(store: impl AsContextMut<E>, module: &E::Module, imports: &Imports<E>) -> Result<Self>;
+    /// Gets the exports of this instance.
     fn exports(&self, store: impl AsContext<E>) -> Box<dyn Iterator<Item = Export<E>>>;
+    /// Gets the export of the given name, if any, from this instance.
     fn get_export(&self, store: impl AsContext<E>, name: &str) -> Option<Extern<E>>;
 }
 
+/// Provides a parsed and validated WASM module.
 pub trait WasmModule<E: WasmEngine>: Clone + Sized + Send + Sync {
+    /// Creates a new module from the given byte stream.
     fn new(engine: &E, stream: impl std::io::Read) -> Result<Self>;
+    /// Gets the export types of the module.
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>>;
+    /// Gets the export type of the given name, if any, from this module.
     fn get_export(&self, name: &str) -> Option<ExternType>;
+    /// Gets the import types of the module.
     fn imports(&self) -> Box<dyn '_ + Iterator<Item = ImportType<'_>>>;
 }
 
+/// Provides all of the global state that can be manipulated by WASM programs.
 pub trait WasmStore<T, E: WasmEngine> {
+    /// Creates a new store atop the given engine.
     fn new(engine: &E, data: T) -> Self;
+    /// Gets the engine associated with this store.
     fn engine(&self) -> &E;
+    /// Gets an immutable reference to the underlying stored data.
     fn data(&self) -> &T;
+    /// Gets a mutable reference to the underlying stored data.
     fn data_mut(&mut self) -> &mut T;
+    /// Consumes `self` and returns its user provided data.
     fn into_data(self) -> T;
 }
 
+/// Provides a temporary immutable handle to a store.
 pub trait WasmStoreContext<'a, T, E: WasmEngine>: AsContext<E, UserState = T> {
+    /// Gets the engine associated with this store.
     fn engine(&self) -> &E;
+    /// Gets an immutable reference to the underlying stored data.
     fn data(&self) -> &T;
 }
 
-pub trait WasmStoreContextMut<'a, T, E: WasmEngine>: WasmStoreContext<'a, T, E> + AsContextMut<E, UserState = T> {
+/// Provides a temporary mutable handle to a store.
+pub trait WasmStoreContextMut<'a, T, E: WasmEngine>:
+    WasmStoreContext<'a, T, E> + AsContextMut<E, UserState = T>
+{
+    /// Gets a mutable reference to the underlying stored data.
     fn data_mut(&mut self) -> &mut T;
 }
 
+/// A trait used to get shared access to a store.
 pub trait AsContext<E: WasmEngine> {
+    /// The type of data associated with the store.
     type UserState;
 
+    /// Returns the store context that this type provides access to.
     fn as_context(&self) -> E::StoreContext<'_, Self::UserState>;
 }
 
+/// A trait used to get mutable access to a store.
 pub trait AsContextMut<E: WasmEngine>: AsContext<E> {
+    /// Returns the store context that this type provides access to.
     fn as_context_mut(&mut self) -> E::StoreContextMut<'_, Self::UserState>;
 }
 
