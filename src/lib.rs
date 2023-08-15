@@ -4,19 +4,19 @@
 #![warn(clippy::missing_docs_in_private_items)]
 
 //! `wasm_runtime_layer` creates a thin abstraction over WebAssembly runtimes, allowing for backend-agnostic host code. The interface is based upon the `wasmtime` and `wasmi` crates, but may be implemented for any runtime.
-//! 
+//!
 //! ## Usage
-//! 
+//!
 //! To use this crate, first instantiate a backend runtime. The runtime may be any
 //! value that implements `backend::WasmEngine`. Some runtimes are already implemented as optional features.
 //! Then, one can create an `Engine` from the backend runtime, and use it to initialize modules and instances:
-//! 
+//!
 //! ```rust
 //! # use wasm_runtime_layer::*;
 //! // 1. Instantiate a runtime
 //! let engine = Engine::new(wasmi::Engine::default());
 //! let mut store = Store::new(&engine, ());
-//! 
+//!
 //! // 2. Create modules and instances, similar to other runtimes
 //! let module_bin = wabt::wat2wasm(
 //!     r#"
@@ -29,10 +29,10 @@
 //! "#,
 //! )
 //! .unwrap();
-//! 
+//!
 //! let module = Module::new(&engine, std::io::Cursor::new(&module_bin)).unwrap();
 //! let instance = Instance::new(&mut store, &module, &Imports::default()).unwrap();
-//! 
+//!
 //! let add_one = instance
 //!     .get_export(&store, "add_one")
 //!     .unwrap()
@@ -43,14 +43,14 @@
 //! add_one
 //!     .call(&mut store, &[Value::I32(42)], &mut result)
 //!     .unwrap();
-//! 
+//!
 //! assert_eq!(result[0], Value::I32(43));
 //! ```
-//! 
+//!
 //! ## Optional features and backends
-//! 
+//!
 //! **backend_wasmi** - Implements the `WasmEngine` trait for `wasmi::Engine` instances.
-//! 
+//!
 //! Contributions for additional backend implementations are welcome!
 
 /// Provides traits for implementing runtime backends.
@@ -58,10 +58,10 @@ pub mod backend;
 
 use crate::backend::*;
 use anyhow::*;
+use fxhash::*;
 use ref_cast::*;
 use smallvec::*;
 use std::any::*;
-use std::collections::*;
 use std::marker::*;
 use std::sync::*;
 
@@ -471,14 +471,14 @@ impl<E: WasmEngine> From<crate::backend::Export<E>> for Export {
 #[derive(Clone, Debug)]
 pub struct Imports {
     /// The mapping from names to externals.
-    pub(crate) map: HashMap<(String, String), Extern>,
+    pub(crate) map: FxHashMap<(String, String), Extern>,
 }
 
 impl Imports {
     /// Create a new `Imports`.
     pub fn new() -> Self {
         Self {
-            map: HashMap::default(),
+            map: FxHashMap::default(),
         }
     }
 

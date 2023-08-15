@@ -1,6 +1,6 @@
 [package]
 name = "wasm_runtime_layer"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DouglasDwyer/wasm_runtime_layer"
@@ -11,6 +11,7 @@ Compatibility interface for WASM runtimes.
 
 [dependencies]
 anyhow = "1.0.71"
+fxhash = "0.2.1"
 ref-cast = "1.0.19"
 smallvec = "1.11.0"
 

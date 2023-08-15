@@ -1,6 +1,6 @@
 use crate::*;
 use anyhow::*;
-use std::collections::*;
+use fxhash::*;
 use std::marker::*;
 use std::ops::*;
 
@@ -153,14 +153,14 @@ where
 #[derive(Clone)]
 pub struct Imports<E: WasmEngine> {
     /// The inner list of external imports.
-    pub(crate) map: HashMap<(String, String), Extern<E>>,
+    pub(crate) map: FxHashMap<(String, String), Extern<E>>,
 }
 
 impl<E: WasmEngine> Imports<E> {
     /// Create a new `Imports`.
     pub fn new() -> Self {
         Self {
-            map: HashMap::default(),
+            map: FxHashMap::default(),
         }
     }
 
