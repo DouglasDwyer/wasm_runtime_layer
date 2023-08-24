@@ -50,6 +50,8 @@
 //! ## Optional features and backends
 //!
 //! **backend_wasmi** - Implements the `WasmEngine` trait for `wasmi::Engine` instances.
+//! 
+//! **backend_wasmtime** - Implements the `WasmEngine` trait for `wasmtime::Engine` instances.
 //!
 //! Contributions for additional backend implementations are welcome!
 

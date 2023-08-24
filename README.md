@@ -51,4 +51,6 @@ assert_eq!(result[0], Value::I32(43));
 
 **backend_wasmi** - Implements the `WasmEngine` trait for `wasmi::Engine` instances.
 
+**backend_wasmtime** - Implements the `WasmEngine` trait for `wasmtime::Engine` instances.
+
 Contributions for additional backend implementations are welcome!

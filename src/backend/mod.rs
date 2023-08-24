@@ -8,7 +8,7 @@ use std::ops::*;
 /// The backend which provides support for the `wasmi` runtime.
 mod backend_wasmi;
 
-//#[cfg(feature = "backend_wasmtime")]
+#[cfg(feature = "backend_wasmtime")]
 /// The backend which provides support for the `wasmtime` runtime.
 mod backend_wasmtime;
 
