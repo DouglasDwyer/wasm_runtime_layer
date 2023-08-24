@@ -898,11 +898,11 @@ impl Global {
     }
 
     /// Returns the current value of the global variable.
-    pub fn get<C: AsContext>(&self, ctx: C) -> Value {
+    pub fn get<C: AsContextMut>(&self, mut ctx: C) -> Value {
         (&self
             .global
             .cast::<<C::Engine as WasmEngine>::Global>()
-            .get(ctx.as_context().inner))
+            .get(ctx.as_context_mut().inner))
             .into()
     }
 
@@ -1112,10 +1112,10 @@ impl Table {
     /// Returns the [`Table`] element value at `index`.
     ///
     /// Returns `None` if `index` is out of bounds.
-    pub fn get<C: AsContext>(&self, ctx: C, index: u32) -> Option<Value> {
+    pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Value> {
         self.table
             .cast::<<C::Engine as WasmEngine>::Table>()
-            .get(ctx.as_context().inner, index)
+            .get(ctx.as_context_mut().inner, index)
             .as_ref()
             .map(Into::into)
     }

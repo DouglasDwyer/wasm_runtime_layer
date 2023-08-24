@@ -142,7 +142,7 @@ impl WasmGlobal<wasmi::Engine> for wasmi::Global {
             .map_err(Error::msg)
     }
 
-    fn get(&self, ctx: impl AsContext<wasmi::Engine>) -> Value<wasmi::Engine> {
+    fn get(&self, ctx: impl AsContextMut<wasmi::Engine>) -> Value<wasmi::Engine> {
         (&self.get(ctx.as_context())).into()
     }
 }
@@ -166,10 +166,10 @@ impl WasmInstance<wasmi::Engine> for wasmi::Instance {
     fn exports<'a>(
         &self,
         store: impl AsContext<wasmi::Engine>,
-    ) -> Box<dyn Iterator<Item = Export<wasmi::Engine>>> {
+    ) -> Box<dyn Iterator<Item = backend::Export<wasmi::Engine>>> {
         Box::new(
             wasmi::Instance::exports(self, store.as_context())
-                .map(|x| Export {
+                .map(|x| backend::Export {
                     name: x.name().to_string(),
                     value: x.into_extern().into(),
                 })
@@ -182,7 +182,7 @@ impl WasmInstance<wasmi::Engine> for wasmi::Instance {
         &self,
         store: impl AsContext<wasmi::Engine>,
         name: &str,
-    ) -> Option<Extern<wasmi::Engine>> {
+    ) -> Option<backend::Extern<wasmi::Engine>> {
         wasmi::Instance::get_export(self, store.as_context(), name).map(Into::into)
     }
 }
@@ -352,7 +352,7 @@ impl WasmTable<wasmi::Engine> for wasmi::Table {
             .map_err(Error::msg)
     }
 
-    fn get(&self, ctx: impl AsContext<wasmi::Engine>, index: u32) -> Option<Value<wasmi::Engine>> {
+    fn get(&self, ctx: impl AsContextMut<wasmi::Engine>, index: u32) -> Option<Value<wasmi::Engine>> {
         self.get(ctx.as_context(), index).as_ref().map(Into::into)
     }
 

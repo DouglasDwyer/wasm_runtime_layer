@@ -8,6 +8,10 @@ use std::ops::*;
 /// The backend which provides support for the `wasmi` runtime.
 mod backend_wasmi;
 
+//#[cfg(feature = "backend_wasmtime")]
+/// The backend which provides support for the `wasmtime` runtime.
+mod backend_wasmtime;
+
 /// Runtime representation of a value.
 #[derive(Clone)]
 pub enum Value<E: WasmEngine> {
@@ -130,6 +134,7 @@ where
 ///
 /// This type is primarily accessed from the [`Instance::exports`] method and describes
 /// what names are exported from a Wasm [`Instance`] and the type of the item that is exported.
+#[derive(Clone)]
 pub struct Export<E: WasmEngine> {
     /// The name by which the export is known.
     pub name: String,
@@ -356,7 +361,7 @@ pub trait WasmGlobal<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Sets the value of the global variable.
     fn set(&self, ctx: impl AsContextMut<E>, new_value: Value<E>) -> Result<()>;
     /// Gets the value of the global variable.
-    fn get(&self, ctx: impl AsContext<E>) -> Value<E>;
+    fn get(&self, ctx: impl AsContextMut<E>) -> Value<E>;
 }
 
 /// Provides a Wasm linear memory reference.
@@ -388,7 +393,7 @@ pub trait WasmTable<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Grows the table by the given amount of elements.
     fn grow(&self, ctx: impl AsContextMut<E>, delta: u32, init: Value<E>) -> Result<u32>;
     /// Returns the table element value at `index`.
-    fn get(&self, ctx: impl AsContext<E>, index: u32) -> Option<Value<E>>;
+    fn get(&self, ctx: impl AsContextMut<E>, index: u32) -> Option<Value<E>>;
     /// Sets the value of this table at `index`.
     fn set(&self, ctx: impl AsContextMut<E>, index: u32, value: Value<E>) -> Result<()>;
 }
