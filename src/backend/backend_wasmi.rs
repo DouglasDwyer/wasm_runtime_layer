@@ -352,7 +352,11 @@ impl WasmTable<wasmi::Engine> for wasmi::Table {
             .map_err(Error::msg)
     }
 
-    fn get(&self, ctx: impl AsContextMut<wasmi::Engine>, index: u32) -> Option<Value<wasmi::Engine>> {
+    fn get(
+        &self,
+        ctx: impl AsContextMut<wasmi::Engine>,
+        index: u32,
+    ) -> Option<Value<wasmi::Engine>> {
         self.get(ctx.as_context(), index).as_ref().map(Into::into)
     }
 

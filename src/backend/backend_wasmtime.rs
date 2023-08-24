@@ -35,7 +35,11 @@ impl WasmExternRef<wasmtime::Engine> for wasmtime::ExternRef {
         &self,
         _: <wasmtime::Engine as WasmEngine>::StoreContext<'a, S>,
     ) -> Result<Option<&'a T>> {
-        Ok(self.data().downcast_ref::<&Option<T>>().ok_or_else(|| Error::msg("Incorrect extern ref type."))?.as_ref())
+        Ok(self
+            .data()
+            .downcast_ref::<&Option<T>>()
+            .ok_or_else(|| Error::msg("Incorrect extern ref type."))?
+            .as_ref())
     }
 }
 
@@ -113,9 +117,17 @@ impl WasmGlobal<wasmtime::Engine> for wasmtime::Global {
         let value = wasmtime::Val::from(&value);
         Self::new(
             ctx.as_context_mut(),
-            wasmtime::GlobalType::new(value.ty(), if mutable { wasmtime::Mutability::Var } else { wasmtime::Mutability::Const }),
+            wasmtime::GlobalType::new(
+                value.ty(),
+                if mutable {
+                    wasmtime::Mutability::Var
+                } else {
+                    wasmtime::Mutability::Const
+                },
+            ),
             value,
-        ).expect("Could not create global.")
+        )
+        .expect("Could not create global.")
     }
 
     fn ty(&self, ctx: impl AsContext<wasmtime::Engine>) -> GlobalType {
@@ -142,7 +154,7 @@ pub struct InstanceData {
     /// The instance itself.
     pub instance: wasmtime::Instance,
     /// The instance exports.
-    pub exports: Arc<FxHashMap<String, backend::Export<wasmtime::Engine>>>
+    pub exports: Arc<FxHashMap<String, backend::Export<wasmtime::Engine>>>,
 }
 
 impl WasmInstance<wasmtime::Engine> for InstanceData {
@@ -158,21 +170,37 @@ impl WasmInstance<wasmtime::Engine> for InstanceData {
         }
 
         let res = linker.instantiate(store.as_context_mut(), module)?;
-        let exports = Arc::new(res.exports(store.as_context_mut())
-            .map(|x| (x.name().to_string(), backend::Export {
-                name: x.name().to_string(),
-                value: x.into_extern().into(),
-            }))
-            .collect());
+        let exports = Arc::new(
+            res.exports(store.as_context_mut())
+                .map(|x| {
+                    (
+                        x.name().to_string(),
+                        backend::Export {
+                            name: x.name().to_string(),
+                            value: x.into_extern().into(),
+                        },
+                    )
+                })
+                .collect(),
+        );
 
-        Ok(Self { instance: res, exports })
+        Ok(Self {
+            instance: res,
+            exports,
+        })
     }
 
     fn exports<'a>(
         &self,
         _: impl AsContext<wasmtime::Engine>,
     ) -> Box<dyn Iterator<Item = backend::Export<wasmtime::Engine>>> {
-        Box::new(self.exports.values().cloned().collect::<Vec<_>>().into_iter())
+        Box::new(
+            self.exports
+                .values()
+                .cloned()
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
     }
 
     fn get_export(
@@ -194,12 +222,9 @@ impl WasmMemory<wasmtime::Engine> for wasmtime::Memory {
     }
 
     fn grow(&self, mut ctx: impl AsContextMut<wasmtime::Engine>, additional: u32) -> Result<u32> {
-        self.grow(
-            ctx.as_context_mut(),
-            additional as u64
-        )
-        .map(|x| x as u32)
-        .map_err(Error::msg)
+        self.grow(ctx.as_context_mut(), additional as u64)
+            .map(|x| x as u32)
+            .map_err(Error::msg)
     }
 
     fn current_pages(&self, ctx: impl AsContext<wasmtime::Engine>) -> u32 {
@@ -351,8 +376,14 @@ impl WasmTable<wasmtime::Engine> for wasmtime::Table {
             .map_err(Error::msg)
     }
 
-    fn get(&self, mut ctx: impl AsContextMut<wasmtime::Engine>, index: u32) -> Option<Value<wasmtime::Engine>> {
-        self.get(ctx.as_context_mut(), index).as_ref().map(Into::into)
+    fn get(
+        &self,
+        mut ctx: impl AsContextMut<wasmtime::Engine>,
+        index: u32,
+    ) -> Option<Value<wasmtime::Engine>> {
+        self.get(ctx.as_context_mut(), index)
+            .as_ref()
+            .map(Into::into)
     }
 
     fn set(
@@ -391,7 +422,7 @@ impl From<wasmtime::ValType> for ValueType {
             wasmtime::ValType::F64 => Self::F64,
             wasmtime::ValType::FuncRef => Self::FuncRef,
             wasmtime::ValType::ExternRef => Self::ExternRef,
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -418,7 +449,7 @@ impl From<&wasmtime::Val> for Value<wasmtime::Engine> {
             wasmtime::Val::F64(x) => Self::F64(f64::from_bits(*x)),
             wasmtime::Val::FuncRef(x) => Self::FuncRef(*x),
             wasmtime::Val::ExternRef(x) => Self::ExternRef(x.clone()),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -456,7 +487,10 @@ impl From<FuncType> for wasmtime::FuncType {
 
 impl From<wasmtime::GlobalType> for GlobalType {
     fn from(value: wasmtime::GlobalType) -> Self {
-        Self::new(value.content().clone().into(), matches!(value.mutability(), wasmtime::Mutability::Var))
+        Self::new(
+            value.content().clone().into(),
+            matches!(value.mutability(), wasmtime::Mutability::Var),
+        )
     }
 }
 
@@ -491,17 +525,14 @@ impl From<wasmtime::Extern> for Extern<wasmtime::Engine> {
             wasmtime::Extern::Global(x) => Extern::Global(x),
             wasmtime::Extern::Memory(x) => Extern::Memory(x),
             wasmtime::Extern::Table(x) => Extern::Table(x),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
 
 impl From<wasmtime::MemoryType> for MemoryType {
     fn from(value: wasmtime::MemoryType) -> Self {
-        Self::new(
-            value.minimum() as u32,
-            value.maximum().map(|x| x as u32),
-        )
+        Self::new(value.minimum() as u32, value.maximum().map(|x| x as u32))
     }
 }
 
