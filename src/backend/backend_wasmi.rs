@@ -101,8 +101,7 @@ impl WasmFunc<wasmi::Engine> for wasmi::Func {
         let mut output = ArgumentVec::with_capacity(results.len());
         output.extend(results.iter().map(Into::into));
 
-        self.call(ctx.as_context_mut(), &input[..], &mut output[..])
-            .context("Error executing function")?;
+        self.call(ctx.as_context_mut(), &input[..], &mut output[..])?;
 
         for (i, result) in output.iter().enumerate() {
             results[i] = result.into();
