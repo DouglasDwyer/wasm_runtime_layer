@@ -255,7 +255,7 @@ impl WasmModule<wasmtime::Engine> for wasmtime::Module {
     fn new(engine: &wasmtime::Engine, mut stream: impl std::io::Read) -> Result<Self> {
         let mut buf = Vec::default();
         stream.read_to_end(&mut buf)?;
-        Ok(Self::new(engine, &buf)?)
+        Ok(wasmtime::Module::from_binary(engine, &buf)?)
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
