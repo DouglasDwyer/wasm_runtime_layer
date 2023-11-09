@@ -18,6 +18,10 @@ smallvec = { version = "1.11.0", default-features = false }
 wasmi = { version = ">=0.0.0", optional = true, default-features = false, features = [ "std" ] }
 wasmtime = { version = ">=0.0.0", optional = true, default-features = false, features = [ "cranelift" ] }
 
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", optional = true }
+
 [dev-dependencies]
 wabt = "0.10.0"
 wasm_runtime_layer = { path = ".", features = [ "backend_wasmi" ] }
@@ -25,3 +29,4 @@ wasm_runtime_layer = { path = ".", features = [ "backend_wasmi" ] }
 [features]
 backend_wasmi = [ "wasmi" ]
 backend_wasmtime = [ "wasmtime" ]
+backend_web = [ "wasm-bindgen", "js-sys", "web-sys" ]
