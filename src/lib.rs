@@ -1,4 +1,6 @@
-#![deny(warnings)]
+// #![deny(warnings)]
+
+#![allow(unused_variables)]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
@@ -50,13 +52,16 @@
 //! ## Optional features and backends
 //!
 //! **backend_wasmi** - Implements the `WasmEngine` trait for `wasmi::Engine` instances.
-//! 
+//!
 //! **backend_wasmtime** - Implements the `WasmEngine` trait for `wasmtime::Engine` instances.
 //!
 //! Contributions for additional backend implementations are welcome!
 
 /// Provides traits for implementing runtime backends.
 pub mod backend;
+
+#[cfg(feature = "backend_web")]
+pub mod web;
 
 use crate::backend::*;
 use anyhow::*;

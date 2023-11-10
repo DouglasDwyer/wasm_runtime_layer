@@ -9,6 +9,10 @@ use super::{
     AsContext, AsContextMut, TableType, Value, WasmEngine, WasmExternRef, WasmFunc, WasmGlobal,
     WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext, WasmStoreContextMut,
 };
+use crate::web::{
+    Engine, Func, Instance, InstanceInner, Memory, Module, ModuleInner, Store, StoreContext,
+    StoreContextMut,
+};
 
 #[derive(Debug, Clone)]
 struct JsErrorMsg {
@@ -49,10 +53,6 @@ impl From<JsValue> for JsErrorMsg {
     }
 }
 
-#[derive(Debug, Clone)]
-/// Runtime for WebAssembly
-pub struct Engine {}
-
 impl WasmEngine for Engine {
     type ExternRef = ExternRef;
 
@@ -75,38 +75,35 @@ impl WasmEngine for Engine {
     type Table = Table;
 }
 
-#[derive(Debug, Clone)]
-pub struct Instance {
-    id: usize,
-}
-
 impl WasmInstance<Engine> for Instance {
     fn new(
         mut store: impl super::AsContextMut<Engine>,
         module: &Module,
         imports: &super::Imports<Engine>,
     ) -> anyhow::Result<Self> {
-        let store = store.as_context_mut();
+        let mut store: StoreContextMut<_> = store.as_context_mut();
 
-        // let import_object = js_sys::Object::new();
+        let module = &mut store.modules[module.id];
 
-        // for ((module, name), imp) in imports {
-        //     tracing::debug!(module, name, "export");
-        // }
+        let import_object = js_sys::Object::new();
 
-        // tracing::info!("instantiate module");
-        // // TODO: async instantiation, possibly through a `.ready().await` call on the returned
-        // // module
-        // // let instance = WebAssembly::instantiate_module(&module.module, &imports);
-        // let instance =
-        //     WebAssembly::Instance::new(&module.module, &import_object).map_err(JsErrorMsg::from)?;
+        for ((module, name), imp) in imports {
+            tracing::debug!(module, name, "export");
+        }
 
-        // let exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
-        // let exports = process_exports(exports)?;
+        tracing::info!("instantiate module");
+        // TODO: async instantiation, possibly through a `.ready().await` call on the returned
+        // module
+        // let instance = WebAssembly::instantiate_module(&module.module, &imports);
+        let instance =
+            WebAssembly::Instance::new(&module.module, &import_object).map_err(JsErrorMsg::from)?;
 
-        // let instance = InstanceInner { instance, exports };
+        let exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
+        let exports = process_exports(exports)?;
 
-        // let instance_id = store;
+        let instance = InstanceInner { instance, exports };
+
+        let instance_id = store;
         todo!();
     }
 
@@ -165,9 +162,6 @@ impl WasmExternRef<Engine> for ExternRef {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Func {}
-
 impl WasmFunc<Engine> for Func {
     fn new<T>(
         ctx: impl AsContextMut<Engine, UserState = T>,
@@ -223,9 +217,6 @@ impl WasmGlobal<Engine> for Global {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Memory {}
-
 impl WasmMemory<Engine> for Memory {
     fn new(ctx: impl AsContextMut<Engine>, ty: crate::MemoryType) -> anyhow::Result<Self> {
         todo!()
@@ -262,16 +253,6 @@ impl WasmMemory<Engine> for Memory {
     }
 }
 
-pub struct ModuleInner {
-    module: js_sys::WebAssembly::Module,
-    exports: js_sys::Object,
-}
-
-#[derive(Debug, Clone)]
-pub struct Module {
-    id: usize,
-}
-
 impl WasmModule<Engine> for Module {
     fn new(engine: &Engine, stream: impl std::io::Read) -> anyhow::Result<Self> {
         todo!()
@@ -290,24 +271,12 @@ impl WasmModule<Engine> for Module {
     }
 }
 
-/// Not Send + Sync
-struct InstanceInner {
-    instance: WebAssembly::Instance,
-    exports: HashMap<String, JsValue>,
-}
-
-/// Owns all the data for the wasm module
-pub struct Store<T> {
-    engine: Engine,
-    instances: Slab<InstanceInner>,
-    data: T,
-}
-
 impl<T> WasmStore<T, Engine> for Store<T> {
     fn new(engine: &Engine, data: T) -> Self {
         Self {
             engine: engine.clone(),
             instances: Slab::new(),
+            modules: Slab::new(),
             data,
         }
     }
@@ -339,23 +308,17 @@ impl<T> AsContext<Engine> for Store<T> {
 
 impl<T> AsContextMut<Engine> for Store<T> {
     fn as_context_mut(&mut self) -> StoreContextMut<T> {
-        StoreContextMut { store: self }
+        StoreContextMut::new(&mut *self)
     }
-}
-
-/// Immutable context to the store
-pub struct StoreContext<'a, T: 'a> {
-    /// The store
-    store: &'a Store<T>,
 }
 
 impl<'a, T: 'a> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
     fn engine(&self) -> &Engine {
-        &self.store.engine
+        &self.engine
     }
 
     fn data(&self) -> &T {
-        &self.store.data
+        &self.data
     }
 }
 
@@ -363,29 +326,23 @@ impl<'a, T: 'a> AsContext<Engine> for StoreContext<'a, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<'a, T> {
-        StoreContext { store: self.store }
+        StoreContext::new(self.store)
     }
-}
-
-/// Mutable context to the store
-pub struct StoreContextMut<'a, T: 'a> {
-    /// The store
-    store: &'a mut Store<T>,
 }
 
 impl<'a, T: 'a> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
     fn engine(&self) -> &Engine {
-        &self.store.engine
+        &self.engine
     }
 
     fn data(&self) -> &T {
-        &self.store.data
+        &self.data
     }
 }
 
 impl<'a, T: 'a> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, T> {
     fn data_mut(&mut self) -> &mut T {
-        &mut self.store.data
+        &mut self.data
     }
 }
 
@@ -393,13 +350,13 @@ impl<'a, T: 'a> AsContext<Engine> for StoreContextMut<'a, T> {
     type UserState = T;
 
     fn as_context(&self) -> <Engine as WasmEngine>::StoreContext<'_, Self::UserState> {
-        StoreContext { store: self.store }
+        StoreContext::new(&self)
     }
 }
 
 impl<'a, T: 'a> AsContextMut<Engine> for StoreContextMut<'a, T> {
     fn as_context_mut(&mut self) -> StoreContextMut<'_, T> {
-        StoreContextMut { store: self.store }
+        StoreContextMut::new(&mut *self)
     }
 }
 
