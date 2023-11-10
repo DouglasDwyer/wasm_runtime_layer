@@ -6,12 +6,12 @@ use slab::Slab;
 use wasm_bindgen::{JsCast, JsValue};
 
 use super::{
-    AsContext, AsContextMut, WasmEngine, WasmInstance, WasmStore, WasmStoreContext,
-    WasmStoreContextMut,
+    AsContext, AsContextMut, TableType, Value, WasmEngine, WasmExternRef, WasmFunc, WasmGlobal,
+    WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext, WasmStoreContextMut,
 };
 
 #[derive(Debug, Clone)]
-pub struct JsErrorMsg {
+struct JsErrorMsg {
     message: String,
 }
 
@@ -50,6 +50,7 @@ impl From<JsValue> for JsErrorMsg {
 }
 
 #[derive(Debug, Clone)]
+/// Runtime for WebAssembly
 pub struct Engine {}
 
 impl WasmEngine for Engine {
@@ -75,37 +76,37 @@ impl WasmEngine for Engine {
 }
 
 #[derive(Debug, Clone)]
-struct Instance {
+pub struct Instance {
     id: usize,
 }
 
 impl WasmInstance<Engine> for Instance {
     fn new(
-        store: impl super::AsContextMut<Engine>,
+        mut store: impl super::AsContextMut<Engine>,
         module: &Module,
         imports: &super::Imports<Engine>,
     ) -> anyhow::Result<Self> {
         let store = store.as_context_mut();
 
-        let import_object = js_sys::Object::new();
+        // let import_object = js_sys::Object::new();
 
-        for ((module, name), imp) in imports {
-            tracing::debug!(module, name, "export");
-        }
+        // for ((module, name), imp) in imports {
+        //     tracing::debug!(module, name, "export");
+        // }
 
-        tracing::info!("instantiate module");
-        // TODO: async instantiation, possibly through a `.ready().await` call on the returned
-        // module
-        // let instance = WebAssembly::instantiate_module(&module.module, &imports);
-        let instance =
-            WebAssembly::Instance::new(&module.module, &import_object).map_err(JsErrorMsg::from)?;
+        // tracing::info!("instantiate module");
+        // // TODO: async instantiation, possibly through a `.ready().await` call on the returned
+        // // module
+        // // let instance = WebAssembly::instantiate_module(&module.module, &imports);
+        // let instance =
+        //     WebAssembly::Instance::new(&module.module, &import_object).map_err(JsErrorMsg::from)?;
 
-        let exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
-        let exports = process_exports(exports)?;
+        // let exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
+        // let exports = process_exports(exports)?;
 
-        let instance = InstanceInner { instance, exports };
+        // let instance = InstanceInner { instance, exports };
 
-        let instance_id = store;
+        // let instance_id = store;
         todo!();
     }
 
@@ -148,17 +149,145 @@ fn process_exports(js_exports: JsValue) -> anyhow::Result<HashMap<String, JsValu
     Ok(exports)
 }
 
-struct ExternRef {}
+#[derive(Debug, Clone)]
+pub struct ExternRef {}
 
-struct Func {}
+impl WasmExternRef<Engine> for ExternRef {
+    fn new<T: 'static + Send + Sync>(ctx: impl AsContextMut<Engine>, object: Option<T>) -> Self {
+        todo!()
+    }
 
-struct Global {}
+    fn downcast<'a, T: 'static, S: 'a>(
+        &self,
+        store: <Engine as WasmEngine>::StoreContext<'a, S>,
+    ) -> anyhow::Result<Option<&'a T>> {
+        todo!()
+    }
+}
 
-struct Memory {}
+#[derive(Debug, Clone)]
+pub struct Func {}
 
-struct Module {
+impl WasmFunc<Engine> for Func {
+    fn new<T>(
+        ctx: impl AsContextMut<Engine, UserState = T>,
+        ty: crate::FuncType,
+        func: impl 'static
+            + Send
+            + Sync
+            + Fn(
+                StoreContextMut<T>,
+                &[super::Value<Engine>],
+                &mut [super::Value<Engine>],
+            ) -> anyhow::Result<()>,
+    ) -> Self {
+        todo!()
+    }
+
+    fn ty(&self, ctx: impl AsContext<Engine>) -> crate::FuncType {
+        todo!()
+    }
+
+    fn call<T>(
+        &self,
+        ctx: impl AsContextMut<Engine>,
+        args: &[super::Value<Engine>],
+        results: &mut [super::Value<Engine>],
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Global {}
+
+impl WasmGlobal<Engine> for Global {
+    fn new(ctx: impl AsContextMut<Engine>, value: super::Value<Engine>, mutable: bool) -> Self {
+        todo!()
+    }
+
+    fn ty(&self, ctx: impl AsContext<Engine>) -> crate::GlobalType {
+        todo!()
+    }
+
+    fn set(
+        &self,
+        ctx: impl AsContextMut<Engine>,
+        new_value: super::Value<Engine>,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    fn get(&self, ctx: impl AsContextMut<Engine>) -> super::Value<Engine> {
+        todo!()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Memory {}
+
+impl WasmMemory<Engine> for Memory {
+    fn new(ctx: impl AsContextMut<Engine>, ty: crate::MemoryType) -> anyhow::Result<Self> {
+        todo!()
+    }
+
+    fn ty(&self, ctx: impl AsContext<Engine>) -> crate::MemoryType {
+        todo!()
+    }
+
+    fn grow(&self, ctx: impl AsContextMut<Engine>, additional: u32) -> anyhow::Result<u32> {
+        todo!()
+    }
+
+    fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
+        todo!()
+    }
+
+    fn read(
+        &self,
+        ctx: impl AsContext<Engine>,
+        offset: usize,
+        buffer: &mut [u8],
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    fn write(
+        &self,
+        ctx: impl AsContextMut<Engine>,
+        offset: usize,
+        buffer: &[u8],
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+}
+
+pub struct ModuleInner {
     module: js_sys::WebAssembly::Module,
     exports: js_sys::Object,
+}
+
+#[derive(Debug, Clone)]
+pub struct Module {
+    id: usize,
+}
+
+impl WasmModule<Engine> for Module {
+    fn new(engine: &Engine, stream: impl std::io::Read) -> anyhow::Result<Self> {
+        todo!()
+    }
+
+    fn exports(&self) -> Box<dyn '_ + Iterator<Item = crate::ExportType<'_>>> {
+        todo!()
+    }
+
+    fn get_export(&self, name: &str) -> Option<crate::ExternType> {
+        todo!()
+    }
+
+    fn imports(&self) -> Box<dyn '_ + Iterator<Item = crate::ImportType<'_>>> {
+        todo!()
+    }
 }
 
 /// Not Send + Sync
@@ -167,7 +296,8 @@ struct InstanceInner {
     exports: HashMap<String, JsValue>,
 }
 
-struct Store<T> {
+/// Owns all the data for the wasm module
+pub struct Store<T> {
     engine: Engine,
     instances: Slab<InstanceInner>,
     data: T,
@@ -213,7 +343,9 @@ impl<T> AsContextMut<Engine> for Store<T> {
     }
 }
 
-struct StoreContext<'a, T: 'a> {
+/// Immutable context to the store
+pub struct StoreContext<'a, T: 'a> {
+    /// The store
     store: &'a Store<T>,
 }
 
@@ -235,7 +367,9 @@ impl<'a, T: 'a> AsContext<Engine> for StoreContext<'a, T> {
     }
 }
 
-struct StoreContextMut<'a, T: 'a> {
+/// Mutable context to the store
+pub struct StoreContextMut<'a, T: 'a> {
+    /// The store
     store: &'a mut Store<T>,
 }
 
@@ -264,9 +398,51 @@ impl<'a, T: 'a> AsContext<Engine> for StoreContextMut<'a, T> {
 }
 
 impl<'a, T: 'a> AsContextMut<Engine> for StoreContextMut<'a, T> {
-    fn as_context_mut(&mut self) -> StoreContextMut<'a, T> {
+    fn as_context_mut(&mut self) -> StoreContextMut<'_, T> {
         StoreContextMut { store: self.store }
     }
 }
 
-struct Table {}
+/// A table of references
+#[derive(Debug, Clone)]
+pub struct Table {}
+
+impl super::WasmTable<Engine> for Table {
+    fn new(
+        ctx: impl AsContextMut<Engine>,
+        ty: TableType,
+        init: Value<Engine>,
+    ) -> anyhow::Result<Self> {
+        todo!()
+    }
+    /// Returns the type and limits of the table.
+    fn ty(&self, ctx: impl AsContext<Engine>) -> TableType {
+        todo!()
+    }
+    /// Returns the current size of the table.
+    fn size(&self, ctx: impl AsContext<Engine>) -> u32 {
+        todo!()
+    }
+    /// Grows the table by the given amount of elements.
+    fn grow(
+        &self,
+        ctx: impl AsContextMut<Engine>,
+        delta: u32,
+        init: Value<Engine>,
+    ) -> anyhow::Result<u32> {
+        todo!()
+    }
+    /// Returns the table element value at `index`.
+    fn get(&self, ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
+        todo!()
+    }
+    /// Sets the value of this table at `index`.
+    fn set(
+        &self,
+        ctx: impl AsContextMut<Engine>,
+        index: u32,
+        value: Value<Engine>,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+}

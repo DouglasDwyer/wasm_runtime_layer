@@ -403,7 +403,7 @@ pub trait WasmTable<E: WasmEngine>: Clone + Sized + Send + Sync {
 }
 
 /// Provides an instantiated WASM module.
-pub trait WasmInstance<E: WasmEngine>: Clone + Sized {
+pub trait WasmInstance<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new instance.
     fn new(store: impl AsContextMut<E>, module: &E::Module, imports: &Imports<E>) -> Result<Self>;
     /// Gets the exports of this instance.
