@@ -6,12 +6,16 @@ use slab::Slab;
 use wasm_bindgen::{JsCast, JsValue};
 
 use super::{
-    AsContext, AsContextMut, TableType, Value, WasmEngine, WasmExternRef, WasmFunc, WasmGlobal,
-    WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext, WasmStoreContextMut,
+    AsContext, AsContextMut, Export, TableType, Value, WasmEngine, WasmExternRef, WasmFunc,
+    WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
+    WasmStoreContextMut,
 };
-use crate::web::{
-    Engine, Func, Instance, InstanceInner, Memory, Module, ModuleInner, Store, StoreContext,
-    StoreContextMut,
+use crate::{
+    backend::Extern,
+    web::{
+        Engine, Func, FuncInner, Instance, InstanceInner, Memory, Module, ModuleInner, Store,
+        StoreContext, StoreContextMut,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -99,7 +103,7 @@ impl WasmInstance<Engine> for Instance {
             WebAssembly::Instance::new(&module.module, &import_object).map_err(JsErrorMsg::from)?;
 
         let exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
-        let exports = process_exports(exports)?;
+        let exports = process_exports(&mut store, exports)?;
 
         let instance = InstanceInner { instance, exports };
 
@@ -111,7 +115,20 @@ impl WasmInstance<Engine> for Instance {
         &self,
         store: impl super::AsContext<Engine>,
     ) -> Box<dyn Iterator<Item = super::Export<Engine>>> {
-        todo!()
+        // TODO: modify this trait to make the lifetime of the returned iterator depend on the
+        // anonymous lifetime of the store
+        let instance: &InstanceInner = &store.as_context().instances[self.id];
+        Box::new(
+            instance
+                .exports
+                .iter()
+                .map(|(name, value)| Export {
+                    name: name.into(),
+                    value: value.clone().into(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
     }
 
     fn get_export(
@@ -119,11 +136,15 @@ impl WasmInstance<Engine> for Instance {
         store: impl super::AsContext<Engine>,
         name: &str,
     ) -> Option<super::Extern<Engine>> {
-        todo!()
+        let instance: &InstanceInner = &store.as_context().instances[self.id];
+        instance.exports.get(name).cloned()
     }
 }
 
-fn process_exports(js_exports: JsValue) -> anyhow::Result<HashMap<String, JsValue>> {
+fn process_exports<T>(
+    store: &mut Store<T>,
+    js_exports: JsValue,
+) -> anyhow::Result<HashMap<String, Extern<Engine>>> {
     if !js_exports.is_object() {
         bail!(
             "WebAssembly exports must be an object, got '{:?}' instead",
@@ -131,7 +152,6 @@ fn process_exports(js_exports: JsValue) -> anyhow::Result<HashMap<String, JsValu
         );
     }
 
-    // TODO: this is duplicated somewhere, but here ...
     let js_exports: Object = js_exports.into();
     let names = Object::get_own_property_names(&js_exports);
     let len = names.length();
@@ -141,6 +161,19 @@ fn process_exports(js_exports: JsValue) -> anyhow::Result<HashMap<String, JsValu
         let name_js = Reflect::get_u32(&names, i).expect("names is array");
         let name = name_js.as_string().expect("name is string");
         let export = Reflect::get(&js_exports, &name_js).expect("js_exports is object");
+
+        let export = match export.js_typeof().as_string().as_deref() {
+            Some("function") => {
+                let func = store.create_func(FuncInner {
+                    func: export.dyn_into().unwrap(),
+                });
+
+                Extern::Func(func)
+            }
+            _ => unimplemented!(),
+        };
+
+        tracing::debug!(?name, ?export, "export");
         exports.insert(name, export);
     }
     Ok(exports)
@@ -277,6 +310,7 @@ impl<T> WasmStore<T, Engine> for Store<T> {
             engine: engine.clone(),
             instances: Slab::new(),
             modules: Slab::new(),
+            funcs: Slab::new(),
             data,
         }
     }

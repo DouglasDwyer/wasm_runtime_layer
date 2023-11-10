@@ -3,9 +3,11 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use js_sys::WebAssembly;
+use js_sys::{Function, WebAssembly};
 use slab::Slab;
 use wasm_bindgen::JsValue;
+
+use crate::backend::Extern;
 
 #[derive(Default, Debug, Clone)]
 /// Runtime for WebAssembly
@@ -14,7 +16,7 @@ pub struct Engine {}
 /// Not Send + Sync
 pub(crate) struct InstanceInner {
     pub(crate) instance: WebAssembly::Instance,
-    pub(crate) exports: HashMap<String, JsValue>,
+    pub(crate) exports: HashMap<String, Extern<Engine>>,
 }
 
 #[derive(Debug, Clone)]
@@ -22,8 +24,14 @@ pub struct Instance {
     pub(crate) id: usize,
 }
 
+pub(crate) struct FuncInner {
+    pub(crate) func: Function,
+}
+
 #[derive(Debug, Clone)]
-pub struct Func {}
+pub struct Func {
+    id: usize,
+}
 
 #[derive(Debug, Clone)]
 pub struct Memory {}
@@ -45,7 +53,16 @@ pub struct Store<T> {
     pub(crate) instances: Slab<InstanceInner>,
     // Modules are not Send + Sync
     pub(crate) modules: Slab<ModuleInner>,
+    pub(crate) funcs: Slab<FuncInner>,
     pub(crate) data: T,
+}
+
+impl<T> Store<T> {
+    pub(crate) fn create_func(&mut self, func: FuncInner) -> Func {
+        Func {
+            id: self.funcs.insert(func),
+        }
+    }
 }
 
 /// Immutable context to the store
