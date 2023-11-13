@@ -1,9 +1,15 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    collections::HashMap,
+    error::Error,
+    fmt::Display,
+    rc::Rc,
+};
 
 use anyhow::bail;
 use js_sys::{JsString, Object, Reflect, WebAssembly};
 use slab::Slab;
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 
 use super::{
     AsContext, AsContextMut, Export, TableType, Value, WasmEngine, WasmExternRef, WasmFunc,
@@ -14,7 +20,7 @@ use crate::{
     backend::Extern,
     web::{
         Engine, Func, FuncInner, Instance, InstanceInner, Memory, Module, ModuleInner, Store,
-        StoreContext, StoreContextMut,
+        StoreContext, StoreContextMut, StoreInner,
     },
 };
 
@@ -85,6 +91,7 @@ impl WasmInstance<Engine> for Instance {
         module: &Module,
         imports: &super::Imports<Engine>,
     ) -> anyhow::Result<Self> {
+        let _span = tracing::info_span!("Instance::new").entered();
         let mut store: StoreContextMut<_> = store.as_context_mut();
 
         let module = &mut store.modules[module.id];
@@ -124,7 +131,7 @@ impl WasmInstance<Engine> for Instance {
                 .iter()
                 .map(|(name, value)| Export {
                     name: name.into(),
-                    value: value.clone().into(),
+                    value: value.clone(),
                 })
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -141,8 +148,9 @@ impl WasmInstance<Engine> for Instance {
     }
 }
 
+/// Processes a wasm module's exports into a rust side hashmap
 fn process_exports<T>(
-    store: &mut Store<T>,
+    store: &mut StoreContextMut<T>,
     js_exports: JsValue,
 ) -> anyhow::Result<HashMap<String, Extern<Engine>>> {
     if !js_exports.is_object() {
@@ -202,13 +210,12 @@ impl WasmFunc<Engine> for Func {
         func: impl 'static
             + Send
             + Sync
-            + Fn(
-                StoreContextMut<T>,
-                &[super::Value<Engine>],
-                &mut [super::Value<Engine>],
-            ) -> anyhow::Result<()>,
+            + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> anyhow::Result<()>,
     ) -> Self {
+        let _span = tracing::info_span!("Func::new").entered();
+
         todo!()
+        // let mut closure = Closure::new()
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> crate::FuncType {
@@ -218,8 +225,8 @@ impl WasmFunc<Engine> for Func {
     fn call<T>(
         &self,
         ctx: impl AsContextMut<Engine>,
-        args: &[super::Value<Engine>],
-        results: &mut [super::Value<Engine>],
+        args: &[Value<Engine>],
+        results: &mut [Value<Engine>],
     ) -> anyhow::Result<()> {
         todo!()
     }
@@ -229,23 +236,21 @@ impl WasmFunc<Engine> for Func {
 pub struct Global {}
 
 impl WasmGlobal<Engine> for Global {
-    fn new(ctx: impl AsContextMut<Engine>, value: super::Value<Engine>, mutable: bool) -> Self {
+    fn new(ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
+        tracing::info!("Global::new");
         todo!()
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> crate::GlobalType {
+        tracing::info!("Global::ty");
         todo!()
     }
 
-    fn set(
-        &self,
-        ctx: impl AsContextMut<Engine>,
-        new_value: super::Value<Engine>,
-    ) -> anyhow::Result<()> {
+    fn set(&self, ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> anyhow::Result<()> {
         todo!()
     }
 
-    fn get(&self, ctx: impl AsContextMut<Engine>) -> super::Value<Engine> {
+    fn get(&self, ctx: impl AsContextMut<Engine>) -> Value<Engine> {
         todo!()
     }
 }
@@ -301,96 +306,6 @@ impl WasmModule<Engine> for Module {
 
     fn imports(&self) -> Box<dyn '_ + Iterator<Item = crate::ImportType<'_>>> {
         todo!()
-    }
-}
-
-impl<T> WasmStore<T, Engine> for Store<T> {
-    fn new(engine: &Engine, data: T) -> Self {
-        Self {
-            engine: engine.clone(),
-            instances: Slab::new(),
-            modules: Slab::new(),
-            funcs: Slab::new(),
-            data,
-        }
-    }
-
-    fn engine(&self) -> &Engine {
-        &self.engine
-    }
-
-    fn data(&self) -> &T {
-        &self.data
-    }
-
-    fn data_mut(&mut self) -> &mut T {
-        &mut self.data
-    }
-
-    fn into_data(self) -> T {
-        todo!()
-    }
-}
-
-impl<T> AsContext<Engine> for Store<T> {
-    type UserState = T;
-
-    fn as_context(&self) -> <Engine as WasmEngine>::StoreContext<'_, Self::UserState> {
-        StoreContext { store: self }
-    }
-}
-
-impl<T> AsContextMut<Engine> for Store<T> {
-    fn as_context_mut(&mut self) -> StoreContextMut<T> {
-        StoreContextMut::new(&mut *self)
-    }
-}
-
-impl<'a, T: 'a> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
-    fn engine(&self) -> &Engine {
-        &self.engine
-    }
-
-    fn data(&self) -> &T {
-        &self.data
-    }
-}
-
-impl<'a, T: 'a> AsContext<Engine> for StoreContext<'a, T> {
-    type UserState = T;
-
-    fn as_context(&self) -> StoreContext<'a, T> {
-        StoreContext::new(self.store)
-    }
-}
-
-impl<'a, T: 'a> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
-    fn engine(&self) -> &Engine {
-        &self.engine
-    }
-
-    fn data(&self) -> &T {
-        &self.data
-    }
-}
-
-impl<'a, T: 'a> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, T> {
-    fn data_mut(&mut self) -> &mut T {
-        &mut self.data
-    }
-}
-
-impl<'a, T: 'a> AsContext<Engine> for StoreContextMut<'a, T> {
-    type UserState = T;
-
-    fn as_context(&self) -> <Engine as WasmEngine>::StoreContext<'_, Self::UserState> {
-        StoreContext::new(&self)
-    }
-}
-
-impl<'a, T: 'a> AsContextMut<Engine> for StoreContextMut<'a, T> {
-    fn as_context_mut(&mut self) -> StoreContextMut<'_, T> {
-        StoreContextMut::new(&mut *self)
     }
 }
 
