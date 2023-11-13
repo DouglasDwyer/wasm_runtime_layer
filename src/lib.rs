@@ -1001,17 +1001,16 @@ impl Instance {
 
     /// Returns an iterator over the exports of the [`Instance`].
     pub fn exports<C: AsContext>(&self, ctx: C) -> impl Iterator<Item = Export> {
-        self.instance
-            .cast::<<C::Engine as WasmEngine>::Instance>()
-            .exports(ctx.as_context().inner)
-            .map(Into::into)
+        let instance = self.instance.cast::<<C::Engine as WasmEngine>::Instance>();
+
+        <_ as WasmInstance<_>>::exports(instance, ctx.as_context().inner).map(Into::into)
     }
 
     /// Returns the value exported to the given `name` if any.
     pub fn get_export<C: AsContext>(&self, ctx: C, name: &str) -> Option<Extern> {
-        self.instance
-            .cast::<<C::Engine as WasmEngine>::Instance>()
-            .get_export(ctx.as_context().inner, name)
+        let instance = self.instance.cast::<<C::Engine as WasmEngine>::Instance>();
+
+        <_ as WasmInstance<_>>::get_export(instance, ctx.as_context().inner, name)
             .as_ref()
             .map(Into::into)
     }
@@ -1109,31 +1108,27 @@ impl Table {
     ///
     /// Returns the old size of the [`Table`] upon success.
     pub fn grow<C: AsContextMut>(&self, mut ctx: C, delta: u32, init: Value) -> Result<u32> {
-        self.table.cast::<<C::Engine as WasmEngine>::Table>().grow(
-            ctx.as_context_mut().inner,
-            delta,
-            (&init).into(),
-        )
+        let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
+
+        <_ as WasmTable<_>>::grow(table, ctx.as_context_mut().inner, delta, (&init).into())
     }
 
     /// Returns the [`Table`] element value at `index`.
     ///
     /// Returns `None` if `index` is out of bounds.
     pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Value> {
-        self.table
-            .cast::<<C::Engine as WasmEngine>::Table>()
-            .get(ctx.as_context_mut().inner, index)
+        let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
+
+        <_ as WasmTable<_>>::get(table, ctx.as_context_mut().inner, index)
             .as_ref()
             .map(Into::into)
     }
 
     /// Sets the [`Value`] of this [`Table`] at `index`.
     pub fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, value: Value) -> Result<()> {
-        self.table.cast::<<C::Engine as WasmEngine>::Table>().set(
-            ctx.as_context_mut().inner,
-            index,
-            (&value).into(),
-        )
+        let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
+
+        <_ as WasmTable<_>>::set(table, ctx.as_context_mut().inner, index, (&value).into())
     }
 }
 
