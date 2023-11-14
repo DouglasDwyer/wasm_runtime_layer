@@ -300,7 +300,7 @@ impl<E: WasmEngine> std::fmt::Debug for Imports<E> {
 }
 
 /// Provides a backing implementation for a WebAssembly runtime.
-pub trait WasmEngine: 'static + Clone + Sized + Send + Sync {
+pub trait WasmEngine: 'static + Clone + Sized {
     /// The external reference type.
     type ExternRef: WasmExternRef<Self>;
     /// The function type.
@@ -432,12 +432,6 @@ pub trait WasmStore<T, E: WasmEngine>:
     fn new(engine: &E, data: T) -> Self;
     /// Gets the engine associated with this store.
     fn engine(&self) -> &E;
-    /// Gets an immutable reference to the underlying stored data.
-    fn data(&self) -> &T;
-    /// Gets a mutable reference to the underlying stored data.
-    fn data_mut(&mut self) -> &mut T;
-    /// Consumes `self` and returns its user provided data.
-    fn into_data(self) -> T;
 }
 
 /// Provides a temporary immutable handle to a store.

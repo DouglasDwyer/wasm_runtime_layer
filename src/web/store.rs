@@ -204,17 +204,17 @@ impl<T> WasmStore<T, Engine> for Store<T> {
         unimplemented!()
     }
 
-    fn data(&self) -> &T {
-        unimplemented!()
-    }
+    // fn data(&self) -> &T {
+    //     unimplemented!()
+    // }
 
-    fn data_mut(&mut self) -> &mut T {
-        unimplemented!()
-    }
+    // fn data_mut(&mut self) -> &mut T {
+    //     unimplemented!()
+    // }
 
-    fn into_data(self) -> T {
-        todo!()
-    }
+    // fn into_data(self) -> T {
+    //     todo!()
+    // }
 }
 
 impl<T> AsContext<Engine> for Store<T> {

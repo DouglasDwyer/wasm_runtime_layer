@@ -287,17 +287,17 @@ impl<T> WasmStore<T, wasmtime::Engine> for wasmtime::Store<T> {
         self.engine()
     }
 
-    fn data(&self) -> &T {
-        self.data()
-    }
+    // fn data(&self) -> &T {
+    //     self.data()
+    // }
 
-    fn data_mut(&mut self) -> &mut T {
-        self.data_mut()
-    }
+    // fn data_mut(&mut self) -> &mut T {
+    //     self.data_mut()
+    // }
 
-    fn into_data(self) -> T {
-        self.into_data()
-    }
+    // fn into_data(self) -> T {
+    //     self.into_data()
+    // }
 }
 
 impl<'a, T> WasmStoreContext<'a, T, wasmtime::Engine> for wasmtime::StoreContext<'a, T> {

@@ -1,8 +1,13 @@
 mod store;
+use slab::Slab;
 pub use store::{Store, StoreContext, StoreContextMut, StoreInner};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 
-use std::collections::HashMap;
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    collections::HashMap,
+    rc::Rc,
+};
 
 use js_sys::{Array, Function, WebAssembly};
 
@@ -27,7 +32,32 @@ impl DropResource {
 
 #[derive(Default, Debug, Clone)]
 /// Runtime for WebAssembly
-pub struct Engine {}
+pub struct Engine {
+    inner: Rc<RefCell<EngineInner>>,
+}
+
+impl Engine {
+    pub(crate) fn borrow(&self) -> Ref<EngineInner> {
+        self.inner.borrow()
+    }
+
+    pub(crate) fn borrow_mut(&self) -> RefMut<EngineInner> {
+        self.inner.borrow_mut()
+    }
+}
+
+#[derive(Default, Debug)]
+pub(crate) struct EngineInner {
+    pub(crate) modules: Slab<ModuleInner>,
+}
+
+impl EngineInner {
+    pub fn insert_module(&mut self, module: ModuleInner) -> Module {
+        Module {
+            id: self.modules.insert(module),
+        }
+    }
+}
 
 /// Not Send + Sync
 #[derive(Debug)]
@@ -104,7 +134,6 @@ pub struct Memory {}
 #[derive(Debug)]
 pub(crate) struct ModuleInner {
     pub(crate) module: js_sys::WebAssembly::Module,
-    pub(crate) exports: js_sys::Object,
 }
 
 #[derive(Debug, Clone)]

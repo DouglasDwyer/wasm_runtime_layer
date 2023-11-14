@@ -1,26 +1,18 @@
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    collections::HashMap,
-    error::Error,
-    fmt::Display,
-    rc::Rc,
-};
+use std::{collections::HashMap, error::Error, fmt::Display};
 
-use anyhow::bail;
-use js_sys::{JsString, Object, Reflect, WebAssembly};
-use slab::Slab;
-use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use anyhow::{bail, Context};
+use js_sys::{JsString, Object, Reflect, Uint8Array, WebAssembly};
+use wasm_bindgen::{JsCast, JsValue};
 
 use super::{
-    AsContext, AsContextMut, Export, TableType, Value, WasmEngine, WasmExternRef, WasmFunc,
-    WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
-    WasmStoreContextMut,
+    AsContext, AsContextMut, Export, TableType, Value, WasmEngine, WasmExternRef, WasmGlobal,
+    WasmInstance, WasmMemory, WasmModule,
 };
 use crate::{
     backend::Extern,
     web::{
         Engine, Func, FuncInner, Instance, InstanceInner, Memory, Module, ModuleInner, Store,
-        StoreContext, StoreContextMut, StoreInner,
+        StoreContext, StoreContextMut,
     },
 };
 
@@ -263,8 +255,19 @@ impl WasmMemory<Engine> for Memory {
 }
 
 impl WasmModule<Engine> for Module {
-    fn new(engine: &Engine, stream: impl std::io::Read) -> anyhow::Result<Self> {
-        todo!()
+    fn new(engine: &Engine, mut stream: impl std::io::Read) -> anyhow::Result<Self> {
+        let mut buf = Vec::new();
+        stream
+            .read_to_end(&mut buf)
+            .context("Failed to read module bytes")?;
+
+        let module = ModuleInner {
+            module: WebAssembly::Module::new(&Uint8Array::from(buf.as_slice()).into())
+                .map_err(JsErrorMsg::from)?,
+        };
+        let module = engine.borrow_mut().insert_module(module);
+
+        Ok(module)
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = crate::ExportType<'_>>> {
