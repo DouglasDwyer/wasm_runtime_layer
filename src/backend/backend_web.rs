@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{collections::HashMap, error::Error, fmt::Display, sync::Arc};
 
 use anyhow::{bail, Context};
 use js_sys::{JsString, Object, Reflect, Uint8Array, WebAssembly};
@@ -11,12 +11,14 @@ use super::{
 use crate::{
     backend::Extern,
     web::{
-        Engine, Func, FuncInner, Instance, InstanceInner, Memory, Module, ModuleInner, Store,
-        StoreContext, StoreContextMut,
+        Engine, Func, FuncInner, Global, GlobalInner, Import, Instance, InstanceInner, Memory,
+        Module, ModuleInner, Store, StoreContext, StoreContextMut, StoreInner,
     },
+    ExternType, GlobalType, ImportType, MemoryType, ValueType,
 };
 
 #[derive(Debug, Clone)]
+// Helper to convert a `JsValue` into a proper error, as well as making it `Send` + `Sync`
 struct JsErrorMsg {
     message: String,
 }
@@ -85,21 +87,27 @@ impl WasmInstance<Engine> for Instance {
     ) -> anyhow::Result<Self> {
         let _span = tracing::info_span!("Instance::new").entered();
         let mut store: StoreContextMut<_> = store.as_context_mut();
+        let mut store = &mut *store;
 
-        let module = &mut store.modules[module.id];
+        let instance = {
+            let mut engine = store.engine.borrow_mut();
+            tracing::info!(?module.id, "get module");
+            let module = &mut engine.modules[module.id];
 
-        let import_object = js_sys::Object::new();
+            let import_object = js_sys::Object::new();
 
-        for ((module, name), imp) in imports {
-            tracing::debug!(module, name, "export");
-        }
+            for ((module, name), imp) in imports {
+                tracing::debug!(module, name, "export");
+            }
 
-        tracing::info!("instantiate module");
-        // TODO: async instantiation, possibly through a `.ready().await` call on the returned
-        // module
-        // let instance = WebAssembly::instantiate_module(&module.module, &imports);
-        let instance =
-            WebAssembly::Instance::new(&module.module, &import_object).map_err(JsErrorMsg::from)?;
+            tracing::info!("instantiate module");
+            // TODO: async instantiation, possibly through a `.ready().await` call on the returned
+            // module
+            // let instance = WebAssembly::instantiate_module(&module.module, &imports);
+            WebAssembly::Instance::new(&module.module, &import_object).map_err(JsErrorMsg::from)?
+        };
+
+        tracing::info!(?instance, "created instance");
 
         let exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
         let exports = process_exports(&mut store, exports)?;
@@ -142,9 +150,10 @@ impl WasmInstance<Engine> for Instance {
 
 /// Processes a wasm module's exports into a rust side hashmap
 fn process_exports<T>(
-    store: &mut StoreContextMut<T>,
+    store: &mut StoreInner<T>,
     js_exports: JsValue,
 ) -> anyhow::Result<HashMap<String, Extern<Engine>>> {
+    let _span = tracing::info_span!("process_exports").entered();
     if !js_exports.is_object() {
         bail!(
             "WebAssembly exports must be an object, got '{:?}' instead",
@@ -164,7 +173,7 @@ fn process_exports<T>(
 
         let export = match export.js_typeof().as_string().as_deref() {
             Some("function") => {
-                let func = store.create_func(FuncInner {
+                let func = store.insert_func(FuncInner {
                     func: export.dyn_into().unwrap(),
                 });
 
@@ -195,16 +204,25 @@ impl WasmExternRef<Engine> for ExternRef {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Global {}
-
 impl WasmGlobal<Engine> for Global {
-    fn new(ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
-        tracing::info!("Global::new");
-        todo!()
+    fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
+        let mut ctx = ctx.as_context_mut();
+
+        let desc = Object::new();
+
+        Reflect::set(&desc, &"value".into(), &value.to_js_descriptor().into()).unwrap();
+        Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
+
+        let value = value.to_js_value(&ctx);
+
+        let global = GlobalInner {
+            value: WebAssembly::Global::new(&desc, &value).unwrap().into(),
+        };
+
+        ctx.insert_global(global)
     }
 
-    fn ty(&self, ctx: impl AsContext<Engine>) -> crate::GlobalType {
+    fn ty(&self, ctx: impl AsContext<Engine>) -> GlobalType {
         tracing::info!("Global::ty");
         todo!()
     }
@@ -261,11 +279,35 @@ impl WasmModule<Engine> for Module {
             .read_to_end(&mut buf)
             .context("Failed to read module bytes")?;
 
-        let module = ModuleInner {
-            module: WebAssembly::Module::new(&Uint8Array::from(buf.as_slice()).into())
-                .map_err(JsErrorMsg::from)?,
-        };
-        let module = engine.borrow_mut().insert_module(module);
+        let module = WebAssembly::Module::new(&Uint8Array::from(buf.as_slice()).into())
+            .map_err(JsErrorMsg::from)?;
+
+        let imports = WebAssembly::Module::imports(&module);
+
+        // https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Module/imports
+        let imports: Vec<_> = imports
+            .into_iter()
+            .map(|import| {
+                let module = Reflect::get(&import, &"module".into()).unwrap();
+                let name = Reflect::get(&import, &"name".into()).unwrap();
+                let kind = Reflect::get(&import, &"kind".into()).unwrap();
+
+                Import {
+                    module: module.as_string().expect("module is string").into(),
+                    name: name.as_string().expect("name is string").into(),
+                    kind: ExternType::from_js_extern_kind(
+                        kind.as_string().expect("kind is string").as_str(),
+                    )
+                    .expect("invalid kind"),
+                }
+            })
+            .collect();
+
+        let module = ModuleInner { module };
+
+        let module = engine.borrow_mut().insert_module(module, imports);
+
+        tracing::info!(?module, "created module");
 
         Ok(module)
     }
@@ -278,8 +320,12 @@ impl WasmModule<Engine> for Module {
         todo!()
     }
 
-    fn imports(&self) -> Box<dyn '_ + Iterator<Item = crate::ImportType<'_>>> {
-        todo!()
+    fn imports(&self) -> Box<dyn '_ + Iterator<Item = ImportType<'_>>> {
+        Box::new(self.imports.iter().map(|v| ImportType {
+            module: &v.module,
+            name: &v.name,
+            ty: v.kind.clone(),
+        }))
     }
 }
 
@@ -324,5 +370,93 @@ impl super::WasmTable<Engine> for Table {
         value: Value<Engine>,
     ) -> anyhow::Result<()> {
         todo!()
+    }
+}
+
+impl Value<Engine> {
+    /// Convert the value enum to a JavaScript descriptor
+    ///
+    /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
+    pub fn to_js_descriptor(&self) -> &str {
+        match self {
+            Value::I32(_) => "i32",
+            Value::I64(_) => "i64",
+            Value::F32(_) => "f32",
+            Value::F64(_) => "f64",
+            Value::FuncRef(_) => "anyfunc",
+            Value::ExternRef(_) => "externref",
+        }
+    }
+
+    /// Convert the value enum to a JavaScript value
+    pub fn to_js_value(&self, store: impl AsContext<Engine>) -> JsValue {
+        match self {
+            &Value::I32(v) => v.into(),
+            &Value::I64(v) => v.into(),
+            &Value::F32(v) => v.into(),
+            &Value::F64(v) => v.into(),
+            Value::FuncRef(Some(func)) => {
+                let ctx: StoreContext<_> = store.as_context();
+                let v: &JsValue = ctx.funcs[func.id].func.as_ref();
+                v.clone()
+            }
+            Value::FuncRef(None) => JsValue::NULL,
+            Value::ExternRef(_) => todo!(),
+        }
+    }
+
+    /// Convert from a JavaScript value.
+    ///
+    /// Returns `None` if the value can not be represented
+    pub fn from_js_value(&self, value: &JsValue) -> Option<Self> {
+        match &*value
+            .js_typeof()
+            .as_string()
+            .expect("typeof returns a string")
+        {
+            "number" => Some(Value::F64(value.try_into().unwrap())),
+            "bigint" => Some(Value::I64(value.clone().try_into().unwrap())),
+            "boolean" => Some(Value::I32(value.as_bool().unwrap() as i32)),
+            "null" => Some(Value::I32(0)),
+            _ => None,
+        }
+    }
+}
+
+impl ExternType {
+    /// See: <https://webassembly.github.io/spec/js-api/#dom-moduleimportdescriptor-kind>
+    pub fn to_js_extern_kind(&self) -> &str {
+        match self {
+            ExternType::Global(_) => "global",
+            ExternType::Table(_) => "table",
+            ExternType::Memory(_) => "memory",
+            ExternType::Func(_) => "function",
+        }
+    }
+
+    pub fn from_js_extern_kind(kind: &str) -> Option<Self> {
+        match kind {
+            "global" => Some(ExternType::Global(GlobalType {
+                content: crate::ValueType::I32,
+                mutable: true,
+            })),
+            "table" => Some(ExternType::Table(TableType {
+                element: ValueType::I32,
+                min: 0,
+                max: None,
+            })),
+            "memory" => Some(ExternType::Memory(MemoryType {
+                initial: 0,
+                maximum: None,
+            })),
+            "function" => Some(ExternType::Func(crate::FuncType {
+                len_params: 0,
+                params_results: Arc::from([]),
+            })),
+            _ => {
+                tracing::error!(?kind, "unknown import kind");
+                None
+            }
+        }
     }
 }

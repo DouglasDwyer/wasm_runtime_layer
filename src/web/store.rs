@@ -10,7 +10,7 @@ use crate::backend::{
     AsContext, AsContextMut, WasmEngine, WasmStore, WasmStoreContext, WasmStoreContextMut,
 };
 
-use super::{DropResource, Engine, Func, FuncInner, InstanceInner, ModuleInner};
+use super::{DropResource, Engine, Func, FuncInner, Global, GlobalInner, InstanceInner};
 
 /// Owns all the data for the wasm module
 ///
@@ -107,8 +107,8 @@ pub struct StoreInner<T> {
     // Instances are not Send + Sync
     pub(crate) instances: Slab<InstanceInner>,
     // Modules are not Send + Sync
-    pub(crate) modules: Slab<ModuleInner>,
     pub(crate) funcs: Slab<FuncInner>,
+    pub(crate) globals: Slab<GlobalInner>,
     pub(crate) data: T,
 
     /// **Note**: append ONLY. No resource must be dropped or removed from this vector as long as
@@ -120,15 +120,21 @@ pub struct StoreInner<T> {
 }
 
 impl<T> StoreInner<T> {
-    pub(crate) fn create_func(&mut self, func: FuncInner) -> Func {
+    pub(crate) fn insert_func(&mut self, func: FuncInner) -> Func {
         Func {
             id: self.funcs.insert(func),
         }
     }
 
+    pub(crate) fn insert_global(&mut self, global: GlobalInner) -> Global {
+        Global {
+            id: self.globals.insert(global),
+        }
+    }
+
     /// Tie the lifetime of a reference or other value to the lifetime of the store using
     /// [`DropResource`].
-    pub(crate) fn push_drop_resource(&mut self, value: DropResource) {
+    pub(crate) fn insert_drop_resource(&mut self, value: DropResource) {
         self.drop_resources.push(value)
     }
 }
@@ -193,8 +199,8 @@ impl<T> WasmStore<T, Engine> for Store<T> {
         Self::from_inner(Rc::new(RefCell::new(StoreInner {
             engine: engine.clone(),
             instances: Slab::new(),
-            modules: Slab::new(),
             funcs: Slab::new(),
+            globals: Slab::new(),
             drop_resources: Vec::new(),
             data,
         })))

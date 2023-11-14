@@ -11,7 +11,10 @@ use std::{
 
 use js_sys::{Array, Function, WebAssembly};
 
-use crate::backend::{AsContext, AsContextMut, Extern, Value, WasmFunc};
+use crate::{
+    backend::{AsContext, AsContextMut, Extern, Value, WasmFunc},
+    ExternType,
+};
 
 /// Handle used to retain the lifetime of Js passed objects and drop them at an appropriate time.
 ///
@@ -52,9 +55,10 @@ pub(crate) struct EngineInner {
 }
 
 impl EngineInner {
-    pub fn insert_module(&mut self, module: ModuleInner) -> Module {
+    pub fn insert_module(&mut self, module: ModuleInner, imports: Vec<Import>) -> Module {
         Module {
             id: self.modules.insert(module),
+            imports,
         }
     }
 }
@@ -81,7 +85,7 @@ pub(crate) struct FuncInner {
 /// A bound function
 #[derive(Debug, Clone)]
 pub struct Func {
-    id: usize,
+    pub(crate) id: usize,
 }
 
 impl WasmFunc<Engine> for Func {
@@ -104,12 +108,12 @@ impl WasmFunc<Engine> for Func {
             JsValue::UNDEFINED
         });
 
-        let func = ctx.create_func(FuncInner {
+        let func = ctx.insert_func(FuncInner {
             func: closure.as_ref().unchecked_ref::<Function>().clone(),
         });
 
         tracing::debug!(id = func.id, "func");
-        ctx.push_drop_resource(DropResource::new(closure));
+        ctx.insert_drop_resource(DropResource::new(closure));
 
         func
     }
@@ -137,6 +141,27 @@ pub(crate) struct ModuleInner {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct Import {
+    pub(crate) module: String,
+    pub(crate) name: String,
+    pub(crate) kind: ExternType,
+}
+
+#[derive(Debug, Clone)]
 pub struct Module {
     pub(crate) id: usize,
+    pub(crate) imports: Vec<Import>,
+}
+
+/// A global variable accesible as an import or export in a module
+///
+/// Stored within the store
+#[derive(Debug, Clone)]
+pub struct Global {
+    pub(crate) id: usize,
+}
+
+#[derive(Debug)]
+pub(crate) struct GlobalInner {
+    pub(crate) value: WebAssembly::Global,
 }
