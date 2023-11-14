@@ -203,35 +203,6 @@ impl WasmExternRef<Engine> for ExternRef {
     }
 }
 
-impl WasmFunc<Engine> for Func {
-    fn new<T>(
-        ctx: impl AsContextMut<Engine, UserState = T>,
-        ty: crate::FuncType,
-        func: impl 'static
-            + Send
-            + Sync
-            + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> anyhow::Result<()>,
-    ) -> Self {
-        let _span = tracing::info_span!("Func::new").entered();
-
-        todo!()
-        // let mut closure = Closure::new()
-    }
-
-    fn ty(&self, ctx: impl AsContext<Engine>) -> crate::FuncType {
-        todo!()
-    }
-
-    fn call<T>(
-        &self,
-        ctx: impl AsContextMut<Engine>,
-        args: &[Value<Engine>],
-        results: &mut [Value<Engine>],
-    ) -> anyhow::Result<()> {
-        todo!()
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Global {}
 

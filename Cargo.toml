@@ -24,9 +24,9 @@ wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
 web-sys = { version = "0.3", optional = true }
 
-[dev-dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 wabt = "0.10.0"
-wasm_runtime_layer = { path = ".", features = [ "backend_wasmi" ] }
+# wasm_runtime_layer = { path = ".", features = [ "backend_wasmi" ] }
 
 [features]
 backend_wasmi = [ "wasmi" ]

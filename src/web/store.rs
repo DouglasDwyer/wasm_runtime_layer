@@ -10,11 +10,49 @@ use crate::backend::{
     AsContext, AsContextMut, WasmEngine, WasmStore, WasmStoreContext, WasmStoreContextMut,
 };
 
-use super::{Engine, Func, FuncInner, InstanceInner, ModuleInner};
+use super::{DropResource, Engine, Func, FuncInner, InstanceInner, ModuleInner};
 
 /// Owns all the data for the wasm module
+///
+/// Can be cheaply cloned
 pub struct Store<T> {
     inner: Rc<RefCell<StoreInner<T>>>,
+}
+
+impl<T> Store<T> {
+    pub(crate) fn from_inner(inner: Rc<RefCell<StoreInner<T>>>) -> Self {
+        Self { inner }
+    }
+
+    pub(crate) fn borrow(&mut self) -> Ref<'_, StoreInner<T>> {
+        self.inner.borrow()
+    }
+
+    pub(crate) fn borrow_mut(&mut self) -> RefMut<'_, StoreInner<T>> {
+        self.inner.borrow_mut()
+    }
+
+    pub(crate) fn get_mut(&mut self) -> StoreContextMut<T> {
+        StoreContextMut::from_store(self)
+    }
+
+    pub(crate) fn get(&self) -> StoreContext<T> {
+        StoreContext::from_store(self)
+    }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Store<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl<T> Clone for Store<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 /// TODO: consider moving this to compile time by modifying the AsContext(Mut) traits to return an
@@ -63,6 +101,7 @@ impl<'a, T> DerefMut for RcOrRefMut<'a, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct StoreInner<T> {
     pub(crate) engine: Engine,
     // Instances are not Send + Sync
@@ -71,28 +110,13 @@ pub struct StoreInner<T> {
     pub(crate) modules: Slab<ModuleInner>,
     pub(crate) funcs: Slab<FuncInner>,
     pub(crate) data: T,
-}
 
-impl<T> Store<T> {
-    pub(crate) fn from_inner(inner: Rc<RefCell<StoreInner<T>>>) -> Self {
-        Self { inner }
-    }
-
-    pub(crate) fn borrow(&mut self) -> Ref<'_, StoreInner<T>> {
-        self.inner.borrow()
-    }
-
-    pub(crate) fn borrow_mut(&mut self) -> RefMut<'_, StoreInner<T>> {
-        self.inner.borrow_mut()
-    }
-
-    pub(crate) fn get_mut(&mut self) -> StoreContextMut<T> {
-        StoreContextMut::from_store(self)
-    }
-
-    pub(crate) fn get(&self) -> StoreContext<T> {
-        StoreContext::from_store(self)
-    }
+    /// **Note**: append ONLY. No resource must be dropped or removed from this vector as long as
+    /// the store is still alive.
+    ///
+    /// Dropping a resource too early is safe, but the resulting behavior is not specifed and may
+    /// include incorrect results, memory leaks or panics, etc.
+    drop_resources: Vec<DropResource>,
 }
 
 impl<T> StoreInner<T> {
@@ -100,6 +124,12 @@ impl<T> StoreInner<T> {
         Func {
             id: self.funcs.insert(func),
         }
+    }
+
+    /// Tie the lifetime of a reference or other value to the lifetime of the store using
+    /// [`DropResource`].
+    pub(crate) fn push_drop_resource(&mut self, value: DropResource) {
+        self.drop_resources.push(value)
     }
 }
 
@@ -165,6 +195,7 @@ impl<T> WasmStore<T, Engine> for Store<T> {
             instances: Slab::new(),
             modules: Slab::new(),
             funcs: Slab::new(),
+            drop_resources: Vec::new(),
             data,
         })))
     }
@@ -259,6 +290,22 @@ impl<'a, T: 'a> AsContextMut<Engine> for StoreContextMut<'a, T> {
         StoreContextMut {
             store: RcOrRefMut::Ref(&mut *self.store),
             orig: self.orig,
+        }
+    }
+}
+
+impl<'a, T> StoreContext<'a, T> {
+    pub fn store(&self) -> Store<T> {
+        Store {
+            inner: self.orig.clone(),
+        }
+    }
+}
+
+impl<'a, T> StoreContextMut<'a, T> {
+    pub fn store(&self) -> Store<T> {
+        Store {
+            inner: self.orig.clone(),
         }
     }
 }

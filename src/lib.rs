@@ -1285,6 +1285,7 @@ impl<'a, T: 'a, E: WasmEngine> AsContextMut for StoreContextMut<'a, T, E> {
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use crate::*;
 
