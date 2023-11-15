@@ -417,7 +417,8 @@ impl Extern<Engine> {
                 global.value.clone().dyn_into().unwrap()
             }
             Extern::Table(v) => {
-                let table = store.tables[v.id];
+                let table = &store.tables[v.id];
+                table.to_js(store).dyn_into().unwrap()
             }
             Extern::Memory(_) => todo!(),
             Extern::Func(_) => todo!(),

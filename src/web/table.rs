@@ -1,12 +1,10 @@
-use std::{io::repeat, ops::Deref};
-
 use anyhow::Context;
-use js_sys::{Function, Object, Reflect, WebAssembly};
+use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::{
-    backend::{AsContext, AsContextMut, Value, WasmModule, WasmTable},
-    TableType, ValueType,
+    backend::{AsContext, AsContextMut, Value, WasmTable},
+    TableType,
 };
 
 use super::{Engine, JsErrorMsg, StoreContextMut, StoreInner};
@@ -17,19 +15,6 @@ pub struct Table {
 }
 
 pub(crate) struct TableInner {
-    /// NOTE: these two needs to be kept in sync
-    ///
-    /// When getting a value from the table we can not naively get it from the js side table, as we
-    /// thus need to allocate a new store entry to keep it in rust.
-    ///
-    /// As such, every value in the table needs to have a equivalent Rust side counterpart that can
-    /// be returned and not duplicated.
-    ///
-    /// We could also solve this by interning all Js functions, memories, and other references when
-    /// creating this in the store to ensure that we do not create multiple instances in the slab
-    /// referencing the same resource, causing unbounded memory growth. This however, is more
-    /// difficult as we can not reliable get a stable hash of a JavaScript value.
-    value: WebAssembly::Table,
     values: Vec<Value<Engine>>,
     ty: TableType,
 }
@@ -38,7 +23,7 @@ impl std::fmt::Debug for TableInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TableInner")
             .field("ty", &self.ty)
-            .field("values", &self.value)
+            .field("values", &self.values.len())
             .finish_non_exhaustive()
     }
 }
@@ -47,10 +32,7 @@ impl TableInner {
     pub fn from_js<T>(store: &mut StoreInner<T>, table: &JsValue) -> Self {
         let table = table.dyn_ref::<WebAssembly::Table>().unwrap();
 
-        let mut ty = table
-            .get(0)
-            .map(|v| Value::from_js_value(store, &*v).ty())
-            .unwrap_or(ValueType::FuncRef);
+        let mut ty = crate::ValueType::FuncRef;
 
         let values: Vec<_> = (0..table.length())
             .map(|i| {
@@ -65,14 +47,40 @@ impl TableInner {
             .collect();
 
         TableInner {
-            value: table.clone(),
-            values,
             ty: TableType {
                 element: ty,
-                min: 0,
+                min: values.len() as _,
                 max: None,
             },
+            values,
         }
+    }
+
+    pub fn to_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Table {
+        let desc = Object::new();
+
+        Reflect::set(
+            &desc,
+            &"element".into(),
+            &self.ty.element.to_js_descriptor().into(),
+        );
+        Reflect::set(&desc, &"initial".into(), &self.ty.min.into());
+
+        if let Some(max) = self.ty.max {
+            Reflect::set(&desc, &"maximum".into(), &max.into());
+        }
+
+        let table = WebAssembly::Table::new(&desc)
+            .map_err(JsErrorMsg::from)
+            .context("Failed to create table")
+            .unwrap();
+
+        for (i, value) in self.values.iter().enumerate() {
+            let value = value.to_js_value(&store);
+            table.set(i as u32, &value.dyn_into().unwrap());
+        }
+
+        table
     }
 }
 
@@ -84,31 +92,9 @@ impl WasmTable<Engine> for Table {
     ) -> anyhow::Result<Self> {
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
-        let desc = Object::new();
-
-        Reflect::set(
-            &desc,
-            &"element".into(),
-            &ty.element.to_js_descriptor().into(),
-        );
-        Reflect::set(&desc, &"initial".into(), &ty.min.into());
-        if let Some(max) = ty.max {
-            Reflect::set(&desc, &"maximum".into(), &max.into());
-        }
-
-        let table = WebAssembly::Table::new(&desc)
-            .map_err(JsErrorMsg::from)
-            .context("Failed to create table")
-            .unwrap();
-
-        let init = init.to_js_value(&ctx);
-
-        for i in 0..ty.min {}
-
         let table = TableInner {
-            value: table,
+            values: std::iter::repeat(init).take(ty.min as usize).collect(),
             ty,
-            values,
         };
 
         let table = ctx.insert_table(table);
@@ -121,9 +107,8 @@ impl WasmTable<Engine> for Table {
     }
     /// Returns the current size of the table.
     fn size(&self, ctx: impl AsContext<Engine>) -> u32 {
-        ctx.as_context().tables[self.id].value.length()
+        ctx.as_context().tables[self.id].values.len() as _
     }
-
     /// Grows the table by the given amount of elements.
     fn grow(
         &self,
@@ -134,22 +119,10 @@ impl WasmTable<Engine> for Table {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let table = &mut ctx.tables[self.id];
 
-        // NOTE: <https://docs.rs/js-sys/0.3.65/js_sys/WebAssembly/struct.Table.html#method.grow> is
-        // not correct, as it should accept a second optional argument.
-        //
-        // We need to get this function manually.
-        //
-        // Neither can we use <https://docs.rs/js-sys/0.3.65/js_sys/WebAssembly/struct.Table.html#method.set>
-        // since it incorrectly uses `Function` values and not the more generic JsValue :|
-        let grow_func: Function = Reflect::get(&*table.value, &"grow".into())
-            .expect("Table has method `grow`")
-            .into();
-
-        let old_size = grow_func
-            .call2(&*table.value, &delta.into(), &init.to_js_value(ctx))
-            .unwrap()
-            .as_f64()
-            .expect("grow returns a number") as u32;
+        let old_size = table.values.len() as _;
+        table
+            .values
+            .extend(std::iter::repeat(init).take(delta as _));
 
         Ok(old_size)
     }
@@ -161,9 +134,9 @@ impl WasmTable<Engine> for Table {
         // Explicitely telling it that this is a slice of Value<Engine> causes it to see the
         // slice::get method rather than the WasmTable::get function, which shouldn't happen and is
         // a bug since &[]` does not implement `WasmTable`, but alas...
-        let value = &ctx.tables[self.id].value.get(index).ok()?;
+        let values: &[Value<Engine>] = &ctx.tables[self.id].values;
 
-        Value::from_js_value(ctx, &*value)
+        values.get(index as usize).cloned()
     }
     /// Sets the value of this table at `index`.
     fn set(
