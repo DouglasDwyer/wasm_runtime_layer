@@ -32,6 +32,19 @@ pub enum Value<E: WasmEngine> {
     /// An optional external reference.
     ExternRef(Option<E::ExternRef>),
 }
+impl<E: WasmEngine> Value<E> {
+    /// Convert a value to its type
+    pub(crate) fn ty(&self) -> ValueType {
+        match self {
+            Value::I32(_) => ValueType::I32,
+            Value::I64(_) => ValueType::I64,
+            Value::F32(_) => ValueType::F32,
+            Value::F64(_) => ValueType::F64,
+            Value::FuncRef(_) => ValueType::FuncRef,
+            Value::ExternRef(_) => ValueType::ExternRef,
+        }
+    }
+}
 
 /// An external item to a WebAssembly module.
 ///

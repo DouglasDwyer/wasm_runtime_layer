@@ -10,7 +10,10 @@ use crate::backend::{
     AsContext, AsContextMut, WasmEngine, WasmStore, WasmStoreContext, WasmStoreContextMut,
 };
 
-use super::{DropResource, Engine, Func, FuncInner, Global, GlobalInner, InstanceInner};
+use super::{
+    table::TableInner, DropResource, Engine, Func, FuncInner, Global, GlobalInner, Instance,
+    InstanceInner, Table,
+};
 
 /// Owns all the data for the wasm module
 ///
@@ -38,6 +41,51 @@ impl<T> Store<T> {
 
     pub(crate) fn get(&self) -> StoreContext<T> {
         StoreContext::from_store(self)
+    }
+}
+
+impl<T> WasmStore<T, Engine> for Store<T> {
+    fn new(engine: &Engine, data: T) -> Self {
+        let _span = tracing::info_span!("Store::new").entered();
+        Self::from_inner(Rc::new(RefCell::new(StoreInner {
+            engine: engine.clone(),
+            instances: Slab::new(),
+            funcs: Slab::new(),
+            globals: Slab::new(),
+            tables: Slab::new(),
+            drop_resources: Vec::new(),
+            data,
+        })))
+    }
+
+    fn engine(&self) -> &Engine {
+        unimplemented!()
+    }
+
+    // fn data(&self) -> &T {
+    //     unimplemented!()
+    // }
+
+    // fn data_mut(&mut self) -> &mut T {
+    //     unimplemented!()
+    // }
+
+    // fn into_data(self) -> T {
+    //     todo!()
+    // }
+}
+
+impl<T> AsContext<Engine> for Store<T> {
+    type UserState = T;
+
+    fn as_context(&self) -> <Engine as WasmEngine>::StoreContext<'_, Self::UserState> {
+        self.get()
+    }
+}
+
+impl<T> AsContextMut<Engine> for Store<T> {
+    fn as_context_mut(&mut self) -> StoreContextMut<T> {
+        StoreContextMut::from_store(&mut *self)
     }
 }
 
@@ -109,6 +157,7 @@ pub struct StoreInner<T> {
     // Modules are not Send + Sync
     pub(crate) funcs: Slab<FuncInner>,
     pub(crate) globals: Slab<GlobalInner>,
+    pub(crate) tables: Slab<TableInner>,
     pub(crate) data: T,
 
     /// **Note**: append ONLY. No resource must be dropped or removed from this vector as long as
@@ -121,6 +170,7 @@ pub struct StoreInner<T> {
 
 impl<T> StoreInner<T> {
     pub(crate) fn insert_func(&mut self, func: FuncInner) -> Func {
+        tracing::info!(?func, "insert_func");
         Func {
             id: self.funcs.insert(func),
         }
@@ -129,6 +179,20 @@ impl<T> StoreInner<T> {
     pub(crate) fn insert_global(&mut self, global: GlobalInner) -> Global {
         Global {
             id: self.globals.insert(global),
+        }
+    }
+
+    pub(crate) fn insert_table(&mut self, table: TableInner) -> Table {
+        Table {
+            id: self.tables.insert(table),
+        }
+    }
+
+    pub(crate) fn insert_instance(&mut self, instance: InstanceInner) -> super::Instance {
+        tracing::info!(?instance, "insert_instance");
+
+        Instance {
+            id: self.instances.insert(instance),
         }
     }
 
@@ -190,50 +254,6 @@ impl<'a, T> Deref for StoreContextMut<'a, T> {
 impl<'a, T> DerefMut for StoreContextMut<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut *self.store
-    }
-}
-
-impl<T> WasmStore<T, Engine> for Store<T> {
-    fn new(engine: &Engine, data: T) -> Self {
-        let _span = tracing::info_span!("Store::new").entered();
-        Self::from_inner(Rc::new(RefCell::new(StoreInner {
-            engine: engine.clone(),
-            instances: Slab::new(),
-            funcs: Slab::new(),
-            globals: Slab::new(),
-            drop_resources: Vec::new(),
-            data,
-        })))
-    }
-
-    fn engine(&self) -> &Engine {
-        unimplemented!()
-    }
-
-    // fn data(&self) -> &T {
-    //     unimplemented!()
-    // }
-
-    // fn data_mut(&mut self) -> &mut T {
-    //     unimplemented!()
-    // }
-
-    // fn into_data(self) -> T {
-    //     todo!()
-    // }
-}
-
-impl<T> AsContext<Engine> for Store<T> {
-    type UserState = T;
-
-    fn as_context(&self) -> <Engine as WasmEngine>::StoreContext<'_, Self::UserState> {
-        self.get()
-    }
-}
-
-impl<T> AsContextMut<Engine> for Store<T> {
-    fn as_context_mut(&mut self) -> StoreContextMut<T> {
-        StoreContextMut::from_store(&mut *self)
     }
 }
 

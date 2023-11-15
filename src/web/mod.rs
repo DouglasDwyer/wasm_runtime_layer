@@ -1,6 +1,9 @@
 mod store;
-use slab::Slab;
+pub(crate) mod table;
+
 pub use store::{Store, StoreContext, StoreContextMut, StoreInner};
+pub use table::Table;
+
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 
 use std::{
@@ -8,6 +11,8 @@ use std::{
     collections::HashMap,
     rc::Rc,
 };
+
+use slab::Slab;
 
 use js_sys::{Array, Function, WebAssembly};
 
@@ -80,6 +85,12 @@ pub struct Instance {
 #[derive(Debug)]
 pub(crate) struct FuncInner {
     pub(crate) func: Function,
+}
+
+impl FuncInner {
+    pub(crate) fn new(func: Function) -> Self {
+        Self { func }
+    }
 }
 
 /// A bound function
