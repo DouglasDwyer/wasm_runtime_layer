@@ -9,17 +9,59 @@ use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
+    error::Error,
+    fmt::Display,
     rc::Rc,
 };
 
 use slab::Slab;
 
-use js_sys::{Array, Function, WebAssembly};
+use js_sys::{Array, Function, JsString, Reflect, WebAssembly};
 
 use crate::{
     backend::{AsContext, AsContextMut, Extern, Value, WasmFunc},
     ExternType,
 };
+
+#[derive(Debug, Clone)]
+// Helper to convert a `JsValue` into a proper error, as well as making it `Send` + `Sync`
+pub(crate) struct JsErrorMsg {
+    message: String,
+}
+
+impl Display for JsErrorMsg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.message.fmt(f)
+    }
+}
+
+impl Error for JsErrorMsg {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl From<&JsValue> for JsErrorMsg {
+    fn from(value: &JsValue) -> Self {
+        if let Some(v) = value.dyn_ref::<JsString>() {
+            Self { message: v.into() }
+        } else if let Ok(v) = Reflect::get(value, &"message".into()) {
+            Self {
+                message: v.as_string().expect("A string object"),
+            }
+        } else {
+            Self {
+                message: format!("{value:?}"),
+            }
+        }
+    }
+}
+
+impl From<JsValue> for JsErrorMsg {
+    fn from(value: JsValue) -> Self {
+        Self::from(&value)
+    }
+}
 
 /// Handle used to retain the lifetime of Js passed objects and drop them at an appropriate time.
 ///

@@ -1,7 +1,7 @@
-use std::{collections::HashMap, error::Error, fmt::Display, iter::repeat, sync::Arc};
+use std::{collections::HashMap, iter::repeat, sync::Arc};
 
 use anyhow::{bail, Context};
-use js_sys::{JsString, Object, Reflect, Uint8Array, WebAssembly};
+use js_sys::{Object, Reflect, Uint8Array, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 
 use super::{
@@ -12,51 +12,11 @@ use crate::{
     backend::Extern,
     web::{
         table::TableInner, Engine, Func, FuncInner, Global, GlobalInner, Import, Instance,
-        InstanceInner, Memory, Module, ModuleInner, Store, StoreContext, StoreContextMut,
-        StoreInner, Table,
+        InstanceInner, JsErrorMsg, Memory, Module, ModuleInner, Store, StoreContext,
+        StoreContextMut, StoreInner, Table,
     },
     ExternType, GlobalType, ImportType, MemoryType, ValueType,
 };
-
-#[derive(Debug, Clone)]
-// Helper to convert a `JsValue` into a proper error, as well as making it `Send` + `Sync`
-struct JsErrorMsg {
-    message: String,
-}
-
-impl Display for JsErrorMsg {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.message.fmt(f)
-    }
-}
-
-impl Error for JsErrorMsg {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
-
-impl From<&JsValue> for JsErrorMsg {
-    fn from(value: &JsValue) -> Self {
-        if let Some(v) = value.dyn_ref::<JsString>() {
-            Self { message: v.into() }
-        } else if let Ok(v) = Reflect::get(value, &"message".into()) {
-            Self {
-                message: v.as_string().expect("A string object"),
-            }
-        } else {
-            Self {
-                message: format!("{value:?}"),
-            }
-        }
-    }
-}
-
-impl From<JsValue> for JsErrorMsg {
-    fn from(value: JsValue) -> Self {
-        Self::from(&value)
-    }
-}
 
 impl WasmEngine for Engine {
     type ExternRef = ExternRef;
@@ -237,7 +197,12 @@ impl WasmGlobal<Engine> for Global {
 
         let desc = Object::new();
 
-        Reflect::set(&desc, &"value".into(), &value.to_js_descriptor().into()).unwrap();
+        Reflect::set(
+            &desc,
+            &"value".into(),
+            &value.ty().to_js_descriptor().into(),
+        )
+        .unwrap();
         Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
 
         let value = value.to_js_value(&ctx);
@@ -358,30 +323,15 @@ impl WasmModule<Engine> for Module {
 
 /// A table of references
 impl Value<Engine> {
-    /// Convert the value enum to a JavaScript descriptor
-    ///
-    /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
-    pub fn to_js_descriptor(&self) -> &str {
-        match self {
-            Value::I32(_) => "i32",
-            Value::I64(_) => "i64",
-            Value::F32(_) => "f32",
-            Value::F64(_) => "f64",
-            Value::FuncRef(_) => "anyfunc",
-            Value::ExternRef(_) => "externref",
-        }
-    }
-
     /// Convert the value enum to a JavaScript value
-    pub fn to_js_value(&self, store: impl AsContext<Engine>) -> JsValue {
+    pub fn to_js_value<T>(&self, store: &StoreInner<T>) -> JsValue {
         match self {
             &Value::I32(v) => v.into(),
             &Value::I64(v) => v.into(),
             &Value::F32(v) => v.into(),
             &Value::F64(v) => v.into(),
             Value::FuncRef(Some(func)) => {
-                let ctx: StoreContext<_> = store.as_context();
-                let v: &JsValue = ctx.funcs[func.id].func.as_ref();
+                let v: &JsValue = store.funcs[func.id].func.as_ref();
                 v.clone()
             }
             Value::FuncRef(None) => JsValue::NULL,
@@ -467,10 +417,26 @@ impl Extern<Engine> {
                 global.value.clone().dyn_into().unwrap()
             }
             Extern::Table(v) => {
-                let table = store.tables[table];
+                let table = store.tables[v.id];
             }
             Extern::Memory(_) => todo!(),
             Extern::Func(_) => todo!(),
+        }
+    }
+}
+
+impl ValueType {
+    /// Convert the value enum to a JavaScript descriptor
+    ///
+    /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
+    pub fn to_js_descriptor(&self) -> &str {
+        match self {
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::F32 => "f32",
+            Self::F64 => "f64",
+            Self::FuncRef => "anyfunc",
+            Self::ExternRef => "externref",
         }
     }
 }
