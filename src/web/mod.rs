@@ -11,16 +11,17 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::Display,
+    ops::Deref,
     rc::Rc,
 };
 
 use slab::Slab;
 
-use js_sys::{Array, Function, JsString, Reflect, WebAssembly};
+use js_sys::{Array, Function, JsString, Object, Reflect, WebAssembly};
 
 use crate::{
-    backend::{AsContext, AsContextMut, Extern, Value, WasmFunc},
-    ExternType,
+    backend::{AsContext, AsContextMut, Extern, Value, WasmFunc, WasmGlobal},
+    ExternType, GlobalType,
 };
 
 #[derive(Debug, Clone)]
@@ -141,6 +142,18 @@ pub struct Func {
     pub(crate) id: usize,
 }
 
+impl Func {
+    pub(crate) fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Self {
+        let func: Function = value.dyn_into().unwrap();
+
+        store.insert_func(FuncInner { func })
+    }
+    pub(crate) fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+        let func = &store.funcs[self.id];
+        (func.func.deref().deref()).clone()
+    }
+}
+
 impl WasmFunc<Engine> for Func {
     fn new<T>(
         mut ctx: impl AsContextMut<Engine, UserState = T>,
@@ -181,12 +194,37 @@ impl WasmFunc<Engine> for Func {
         args: &[Value<Engine>],
         results: &mut [Value<Engine>],
     ) -> anyhow::Result<()> {
-        todo!()
+        tracing::info!(id = self.id, ?args, ?results, "call");
+
+        todo!();
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Memory {}
+pub struct Memory {
+    id: usize,
+}
+
+#[derive(Debug)]
+pub struct MemoryInner {
+    value: WebAssembly::Memory,
+}
+
+impl Memory {
+    pub fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+        let memory = &store.memories[self.id];
+
+        (&**memory.value).clone()
+    }
+
+    pub fn from_js<T>(store: &mut StoreInner<T>, value: &JsValue) -> Self {
+        let memory: &WebAssembly::Memory = value.dyn_ref().unwrap();
+
+        store.insert_memory(MemoryInner {
+            value: memory.clone(),
+        })
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct ModuleInner {
@@ -216,5 +254,58 @@ pub struct Global {
 
 #[derive(Debug)]
 pub(crate) struct GlobalInner {
-    pub(crate) value: WebAssembly::Global,
+    value: WebAssembly::Global,
+}
+
+impl Global {
+    pub fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+        let global = &store.globals[self.id];
+
+        (&**global.value).clone()
+    }
+
+    pub fn from_js<T>(store: &mut StoreInner<T>, value: &JsValue) -> Self {
+        let global: &WebAssembly::Global = value.dyn_ref().unwrap();
+
+        store.insert_global(GlobalInner {
+            value: global.clone(),
+        })
+    }
+}
+
+impl WasmGlobal<Engine> for Global {
+    fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
+        let mut ctx = ctx.as_context_mut();
+
+        let desc = Object::new();
+
+        Reflect::set(
+            &desc,
+            &"value".into(),
+            &value.ty().to_js_descriptor().into(),
+        )
+        .unwrap();
+        Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
+
+        let value = value.to_js_value(&ctx);
+
+        let global = GlobalInner {
+            value: WebAssembly::Global::new(&desc, &value).unwrap().into(),
+        };
+
+        ctx.insert_global(global)
+    }
+
+    fn ty(&self, ctx: impl AsContext<Engine>) -> GlobalType {
+        tracing::info!("Global::ty");
+        todo!()
+    }
+
+    fn set(&self, ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    fn get(&self, ctx: impl AsContextMut<Engine>) -> Value<Engine> {
+        todo!()
+    }
 }

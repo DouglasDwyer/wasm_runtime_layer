@@ -1,19 +1,21 @@
-use std::{collections::HashMap, iter::repeat, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use anyhow::{bail, Context};
-use js_sys::{Object, Reflect, Uint8Array, WebAssembly};
+use js_sys::{JsString, Object, Reflect, Uint8Array, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 
 use super::{
-    AsContext, AsContextMut, Export, TableType, Value, WasmEngine, WasmExternRef, WasmGlobal,
-    WasmInstance, WasmMemory, WasmModule,
+    AsContext, AsContextMut, Export, TableType, Value, WasmEngine, WasmExternRef, WasmInstance,
+    WasmMemory, WasmModule,
 };
 use crate::{
     backend::Extern,
     web::{
-        table::TableInner, Engine, Func, FuncInner, Global, GlobalInner, Import, Instance,
-        InstanceInner, JsErrorMsg, Memory, Module, ModuleInner, Store, StoreContext,
-        StoreContextMut, StoreInner, Table,
+        Engine, Func, Global, Import, Instance, InstanceInner, JsErrorMsg, Memory, Module,
+        ModuleInner, Store, StoreContext, StoreContextMut, StoreInner, Table,
     },
     ExternType, GlobalType, ImportType, MemoryType, ValueType,
 };
@@ -47,26 +49,21 @@ impl WasmInstance<Engine> for Instance {
         imports: &super::Imports<Engine>,
     ) -> anyhow::Result<Self> {
         let _span = tracing::info_span!("Instance::new").entered();
-        let mut store: StoreContextMut<_> = store.as_context_mut();
-        let mut store = &mut *store;
+        tracing::info!("Instance::new");
+        let mut store: &mut StoreInner<_> = &mut *store.as_context_mut();
 
         let instance = {
             let mut engine = store.engine.borrow_mut();
             tracing::info!(?module.id, "get module");
             let module = &mut engine.modules[module.id];
 
-            let import_object = js_sys::Object::new();
+            let imports_object = process_imports(store, imports);
 
-            for ((module, name), imp) in imports {
-                // let ext    =
-                tracing::debug!(module, name, "export");
-            }
-
-            tracing::info!("instantiate module");
+            tracing::info!(?imports_object, "instantiate module");
             // TODO: async instantiation, possibly through a `.ready().await` call on the returned
             // module
             // let instance = WebAssembly::instantiate_module(&module.module, &imports);
-            WebAssembly::Instance::new(&module.module, &import_object)
+            WebAssembly::Instance::new(&module.module, &imports_object)
                 .map_err(JsErrorMsg::from)
                 .with_context(|| format!("Failed to instantiate module"))?
         };
@@ -113,6 +110,41 @@ impl WasmInstance<Engine> for Instance {
     }
 }
 
+fn process_imports<T>(store: &StoreInner<T>, imports: &super::Imports<Engine>) -> Object {
+    let _span = tracing::info_span!("process_imports").entered();
+
+    let imports = imports
+        .into_iter()
+        .map(|((module, name), imp)| {
+            tracing::debug!(?module, ?name, ?imp, "import");
+            let js = imp.to_js(store);
+
+            tracing::debug!(module, name, "export");
+
+            (module, (JsString::from(&*name), js))
+        })
+        .fold(BTreeMap::<String, Vec<_>>::new(), |mut acc, (m, value)| {
+            acc.entry(m).or_default().push(value);
+            acc
+        });
+
+    imports
+        .iter()
+        .map(|(module, imports)| {
+            let obj = Object::new();
+
+            for (name, value) in imports {
+                Reflect::set(&obj, &name, value).unwrap();
+            }
+
+            (module, obj)
+        })
+        .fold(Object::new(), |acc, (m, imports)| {
+            Reflect::set(&acc, &(&*m).into(), &imports).unwrap();
+            acc
+        })
+}
+
 /// Processes a wasm module's exports into a rust side hashmap
 fn process_exports<T>(
     store: &mut StoreInner<T>,
@@ -139,34 +171,49 @@ fn process_exports<T>(
                 .unwrap()
                 .as_string()
                 .expect("name is string");
-            let value: Object = Reflect::get_u32(&entry, 1).unwrap().into();
+
+            let value: JsValue = Reflect::get_u32(&entry, 1).unwrap().into();
+
+            let _span = tracing::info_span!("process_export", ?name, ?value).entered();
 
             let ty = value.js_typeof();
 
-            let bytes: &[u8] = &[];
-            let image_count = 2;
-            let pixels: Vec<f32> = bytes
-                .iter()
-                .chain(repeat(&0u8))
-                .take(28 * 28 * image_count)
-                .map(|&v| (v as f32) / 255.0)
-                .collect();
+            let ext = match &value
+                .js_typeof()
+                .as_string()
+                .expect("typeof returns a string")[..]
+            {
+                "function" => {
+                    tracing::info!("function");
+                    let func = Func::from_js(store, value);
 
-            let ext = if value.is_instance_of::<js_sys::Function>() {
-                tracing::info!("function");
-                let func = store.insert_func(FuncInner {
-                    func: value.dyn_into().unwrap(),
-                });
+                    Extern::Func(func)
+                }
+                "object" => {
+                    if value.is_instance_of::<js_sys::Function>() {
+                        tracing::info!("function");
+                        let func = Func::from_js(store, value);
 
-                Extern::Func(func)
-            } else if value.is_instance_of::<WebAssembly::Table>() {
-                tracing::info!(?value, "table");
-                let table = TableInner::from_js(store, &value);
+                        Extern::Func(func)
+                    } else if value.is_instance_of::<WebAssembly::Table>() {
+                        tracing::info!(?value, "export table");
+                        let table = Table::from_js(store, &value);
 
-                let table = store.insert_table(table);
-                Extern::Table(table)
-            } else {
-                anyhow::bail!("Unsupported export type {value:?}")
+                        Extern::Table(table)
+                    } else if value.is_instance_of::<WebAssembly::Memory>() {
+                        let memory = Memory::from_js(store, &value);
+
+                        Extern::Memory(memory)
+                    } else if value.is_instance_of::<WebAssembly::Global>() {
+                        let global = Global::from_js(store, &value);
+
+                        Extern::Global(global)
+                    } else {
+                        tracing::error!("Unsupported export type {value:?}");
+                        panic!("Unsupported export type {value:?}")
+                    }
+                }
+                _ => panic!("Unsupported export type {value:?}"),
             };
 
             Ok((name, ext))
@@ -187,43 +234,6 @@ impl WasmExternRef<Engine> for ExternRef {
         &self,
         store: <Engine as WasmEngine>::StoreContext<'a, S>,
     ) -> anyhow::Result<Option<&'a T>> {
-        todo!()
-    }
-}
-
-impl WasmGlobal<Engine> for Global {
-    fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
-        let mut ctx = ctx.as_context_mut();
-
-        let desc = Object::new();
-
-        Reflect::set(
-            &desc,
-            &"value".into(),
-            &value.ty().to_js_descriptor().into(),
-        )
-        .unwrap();
-        Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
-
-        let value = value.to_js_value(&ctx);
-
-        let global = GlobalInner {
-            value: WebAssembly::Global::new(&desc, &value).unwrap().into(),
-        };
-
-        ctx.insert_global(global)
-    }
-
-    fn ty(&self, ctx: impl AsContext<Engine>) -> GlobalType {
-        tracing::info!("Global::ty");
-        todo!()
-    }
-
-    fn set(&self, ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> anyhow::Result<()> {
-        todo!()
-    }
-
-    fn get(&self, ctx: impl AsContextMut<Engine>) -> Value<Engine> {
         todo!()
     }
 }
@@ -343,6 +353,7 @@ impl Value<Engine> {
     ///
     /// Returns `None` if the value can not be represented
     pub fn from_js_value<T>(store: &mut StoreInner<T>, value: &JsValue) -> Self {
+        tracing::info!(?value, "from_js_value");
         match &*value
             .js_typeof()
             .as_string()
@@ -354,16 +365,24 @@ impl Value<Engine> {
             "null" => Value::I32(0),
             "function" => {
                 // TODO: this will not depuplicate function definitions
-                let func = store.insert_func(FuncInner::new(value.clone().dyn_into().unwrap()));
+                let func = Func::from_js(store, value.clone());
 
                 Value::FuncRef(Some(func))
             }
             // An instance of a WebAssembly.* class or null
             "object" => {
-                if value.is_null() {
-                    Value::I32(0)
+                if value.is_instance_of::<js_sys::Function>() {
+                    tracing::info!("function");
+                    if value.is_null() {
+                        Value::FuncRef(None)
+                    } else {
+                        let func = Func::from_js(store, value.clone());
+
+                        Value::FuncRef(Some(func))
+                    }
                 } else {
-                    panic!("Unknown object type {value:?}");
+                    tracing::error!(?value, "Unsupported value type");
+                    panic!("Unsupported value type {value:?}")
                 }
             }
             v => panic!("Unknown value type {v} {value:?}"),
@@ -410,18 +429,14 @@ impl ExternType {
 }
 
 impl Extern<Engine> {
-    pub fn to_js<T>(&self, store: &StoreInner<T>) -> Object {
+    pub fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+        let _span = tracing::info_span!("Extern::to_js", ?self).entered();
+
         match self {
-            Extern::Global(v) => {
-                let global = &store.globals[v.id];
-                global.value.clone().dyn_into().unwrap()
-            }
-            Extern::Table(v) => {
-                let table = &store.tables[v.id];
-                table.to_js(store).dyn_into().unwrap()
-            }
-            Extern::Memory(_) => todo!(),
-            Extern::Func(_) => todo!(),
+            Extern::Global(v) => v.to_js(store),
+            Extern::Table(v) => v.to_js(store),
+            Extern::Memory(v) => v.to_js(store),
+            Extern::Func(v) => v.to_js(store),
         }
     }
 }

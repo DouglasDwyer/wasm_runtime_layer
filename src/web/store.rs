@@ -12,7 +12,7 @@ use crate::backend::{
 
 use super::{
     table::TableInner, DropResource, Engine, Func, FuncInner, Global, GlobalInner, Instance,
-    InstanceInner, Table,
+    InstanceInner, Memory, MemoryInner, Table,
 };
 
 /// Owns all the data for the wasm module
@@ -53,6 +53,7 @@ impl<T> WasmStore<T, Engine> for Store<T> {
             funcs: Slab::new(),
             globals: Slab::new(),
             tables: Slab::new(),
+            memories: Slab::new(),
             drop_resources: Vec::new(),
             data,
         })))
@@ -158,6 +159,7 @@ pub struct StoreInner<T> {
     pub(crate) funcs: Slab<FuncInner>,
     pub(crate) globals: Slab<GlobalInner>,
     pub(crate) tables: Slab<TableInner>,
+    pub(crate) memories: Slab<MemoryInner>,
     pub(crate) data: T,
 
     /// **Note**: append ONLY. No resource must be dropped or removed from this vector as long as
@@ -188,11 +190,19 @@ impl<T> StoreInner<T> {
         }
     }
 
-    pub(crate) fn insert_instance(&mut self, instance: InstanceInner) -> super::Instance {
+    pub(crate) fn insert_instance(&mut self, instance: InstanceInner) -> Instance {
         tracing::info!(?instance, "insert_instance");
 
         Instance {
             id: self.instances.insert(instance),
+        }
+    }
+
+    pub(crate) fn insert_memory(&mut self, memory: MemoryInner) -> Memory {
+        tracing::info!(?memory, "insert_memory");
+
+        Memory {
+            id: self.memories.insert(memory),
         }
     }
 

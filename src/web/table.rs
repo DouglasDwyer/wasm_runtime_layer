@@ -4,7 +4,8 @@ use wasm_bindgen::{JsCast, JsValue};
 
 use crate::{
     backend::{AsContext, AsContextMut, Value, WasmTable},
-    TableType,
+    web::Func,
+    TableType, ValueType,
 };
 
 use super::{Engine, JsErrorMsg, StoreContextMut, StoreInner};
@@ -28,59 +29,82 @@ impl std::fmt::Debug for TableInner {
     }
 }
 
-impl TableInner {
-    pub fn from_js<T>(store: &mut StoreInner<T>, table: &JsValue) -> Self {
-        let table = table.dyn_ref::<WebAssembly::Table>().unwrap();
+impl Table {
+    pub fn from_js<T>(store: &mut StoreInner<T>, value: &JsValue) -> Self {
+        let _span = tracing::info_span!("Table::from_js", ?value).entered();
+        let table = value.dyn_ref::<WebAssembly::Table>().unwrap();
 
-        let mut ty = crate::ValueType::FuncRef;
+        // let mut ty = crate::ValueType::FuncRef;
 
         let values: Vec<_> = (0..table.length())
             .map(|i| {
                 let value = table.get(i).unwrap();
 
-                let v = Value::from_js_value(store, &*value);
+                // TODO: allow the api to accept table of ExternRef.
+                if value.is_null() {
+                    Value::FuncRef(None)
+                } else {
+                    Value::FuncRef(Some(Func::from_js(store, value.into())))
+                }
 
-                ty = v.ty();
+                // let v = Value::from_js_value(store, &*value);
 
-                v
+                // ty = v.ty();
             })
             .collect();
 
-        TableInner {
+        // tracing::info!(?ty, "inferred table type from js");
+
+        store.insert_table(TableInner {
             ty: TableType {
-                element: ty,
+                element: ValueType::FuncRef,
                 min: values.len() as _,
-                max: None,
+                max: Some(values.len() as _),
             },
             values,
-        }
+        })
     }
 
-    pub fn to_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Table {
+    pub fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+        let table = &store.tables[self.id];
         let desc = Object::new();
 
         Reflect::set(
             &desc,
             &"element".into(),
-            &self.ty.element.to_js_descriptor().into(),
-        );
-        Reflect::set(&desc, &"initial".into(), &self.ty.min.into());
+            &table.ty.element.to_js_descriptor().into(),
+        )
+        .unwrap();
 
-        if let Some(max) = self.ty.max {
-            Reflect::set(&desc, &"maximum".into(), &max.into());
+        Reflect::set(&desc, &"initial".into(), &table.ty.min.into()).unwrap();
+
+        if let Some(max) = table.ty.max {
+            Reflect::set(&desc, &"maximum".into(), &max.into()).unwrap();
         }
 
-        let table = WebAssembly::Table::new(&desc)
+        tracing::info!(?table, ?desc, "Table::to_js");
+        let table_js = WebAssembly::Table::new(&desc)
             .map_err(JsErrorMsg::from)
             .context("Failed to create table")
             .unwrap();
 
-        for (i, value) in self.values.iter().enumerate() {
+        for (i, value) in table.values.iter().enumerate() {
             let value = value.to_js_value(&store);
-            table.set(i as u32, &value.dyn_into().unwrap());
+            table_js
+                .set(
+                    i as u32,
+                    &value
+                        // Unchecked here to allow null functions.
+                        // `Table::set` should accept any JsValue according to MDN, but it currently
+                        // only accepts `Function`.
+                        //
+                        // See: <https://github.com/rustwasm/wasm-bindgen/issues/3708>
+                        .unchecked_into(),
+                )
+                .unwrap();
         }
 
-        table
+        table_js.into()
     }
 }
 

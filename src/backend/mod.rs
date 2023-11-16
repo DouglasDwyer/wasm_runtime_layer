@@ -1,6 +1,7 @@
 use crate::*;
 use anyhow::*;
 use fxhash::*;
+use std::fmt::Formatter;
 use std::marker::*;
 use std::ops::*;
 
@@ -32,6 +33,24 @@ pub enum Value<E: WasmEngine> {
     /// An optional external reference.
     ExternRef(Option<E::ExternRef>),
 }
+
+impl<E: WasmEngine> std::fmt::Debug for Value<E>
+where
+    E::Func: std::fmt::Debug,
+    E::ExternRef: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::I32(v) => f.debug_tuple("I32").field(v).finish(),
+            Value::I64(v) => f.debug_tuple("I64").field(v).finish(),
+            Value::F32(v) => f.debug_tuple("F32").field(v).finish(),
+            Value::F64(v) => f.debug_tuple("F64").field(v).finish(),
+            Value::FuncRef(v) => f.debug_tuple("FuncRef").field(v).finish(),
+            Value::ExternRef(v) => f.debug_tuple("ExternRef").field(v).finish(),
+        }
+    }
+}
+
 impl<E: WasmEngine> Value<E> {
     /// Convert a value to its type
     pub(crate) fn ty(&self) -> ValueType {
