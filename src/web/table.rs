@@ -8,7 +8,7 @@ use crate::{
     TableType, ValueType,
 };
 
-use super::{Engine, JsErrorMsg, StoreContextMut, StoreInner};
+use super::{conversion::JsConvert, Engine, JsErrorMsg, StoreContextMut, StoreInner};
 
 #[derive(Debug, Clone)]
 pub struct Table {
@@ -29,10 +29,10 @@ impl std::fmt::Debug for TableInner {
     }
 }
 
-impl Table {
-    pub fn from_js<T>(store: &mut StoreInner<T>, value: &JsValue) -> Self {
+impl JsConvert for Table {
+    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let _span = tracing::info_span!("Table::from_js", ?value).entered();
-        let table = value.dyn_ref::<WebAssembly::Table>().unwrap();
+        let table = value.dyn_ref::<WebAssembly::Table>()?;
 
         // let mut ty = crate::ValueType::FuncRef;
 
@@ -40,39 +40,37 @@ impl Table {
             .map(|i| {
                 let value = table.get(i).unwrap();
 
-                // TODO: allow the api to accept table of ExternRef.
+                // TODO: allow the api to accept table of ExternRef and not just Function.
+                //
+                // See: <https://github.com/rustwasm/wasm-bindgen/issues/3708>
                 if value.is_null() {
                     Value::FuncRef(None)
                 } else {
-                    Value::FuncRef(Some(Func::from_js(store, value.into())))
+                    Value::FuncRef(Some(
+                        Func::from_js(store, value.into()).expect("table value is not a function"),
+                    ))
                 }
-
-                // let v = Value::from_js_value(store, &*value);
-
-                // ty = v.ty();
             })
             .collect();
 
-        // tracing::info!(?ty, "inferred table type from js");
-
-        store.insert_table(TableInner {
+        Some(store.insert_table(TableInner {
             ty: TableType {
                 element: ValueType::FuncRef,
                 min: values.len() as _,
                 max: Some(values.len() as _),
             },
             values,
-        })
+        }))
     }
 
-    pub fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
         let table = &store.tables[self.id];
         let desc = Object::new();
 
         Reflect::set(
             &desc,
             &"element".into(),
-            &table.ty.element.to_js_descriptor().into(),
+            &table.ty.element.to_js(store).into(),
         )
         .unwrap();
 
@@ -89,7 +87,7 @@ impl Table {
             .unwrap();
 
         for (i, value) in table.values.iter().enumerate() {
-            let value = value.to_js_value(&store);
+            let value = value.to_js(&store);
             table_js
                 .set(
                     i as u32,

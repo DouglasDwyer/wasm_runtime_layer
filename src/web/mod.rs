@@ -1,3 +1,4 @@
+pub(crate) mod conversion;
 mod store;
 pub(crate) mod table;
 
@@ -23,6 +24,8 @@ use crate::{
     backend::{AsContext, AsContextMut, Extern, Value, WasmFunc, WasmGlobal},
     ExternType, GlobalType,
 };
+
+use self::conversion::JsConvert;
 
 #[derive(Debug, Clone)]
 // Helper to convert a `JsValue` into a proper error, as well as making it `Send` + `Sync`
@@ -142,15 +145,16 @@ pub struct Func {
     pub(crate) id: usize,
 }
 
-impl Func {
-    pub(crate) fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Self {
-        let func: Function = value.dyn_into().unwrap();
-
-        store.insert_func(FuncInner { func })
-    }
-    pub(crate) fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+impl JsConvert for Func {
+    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
         let func = &store.funcs[self.id];
         (func.func.deref().deref()).clone()
+    }
+
+    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+        let func: Function = value.dyn_into().ok()?;
+
+        Some(store.insert_func(FuncInner { func }))
     }
 }
 
@@ -210,19 +214,19 @@ pub struct MemoryInner {
     value: WebAssembly::Memory,
 }
 
-impl Memory {
-    pub fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+impl JsConvert for Memory {
+    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
         let memory = &store.memories[self.id];
 
         (&**memory.value).clone()
     }
 
-    pub fn from_js<T>(store: &mut StoreInner<T>, value: &JsValue) -> Self {
-        let memory: &WebAssembly::Memory = value.dyn_ref().unwrap();
+    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+        let memory: &WebAssembly::Memory = value.dyn_ref()?;
 
-        store.insert_memory(MemoryInner {
+        Some(store.insert_memory(MemoryInner {
             value: memory.clone(),
-        })
+        }))
     }
 }
 
@@ -257,19 +261,19 @@ pub(crate) struct GlobalInner {
     value: WebAssembly::Global,
 }
 
-impl Global {
-    pub fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+impl JsConvert for Global {
+    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
         let global = &store.globals[self.id];
 
         (&**global.value).clone()
     }
 
-    pub fn from_js<T>(store: &mut StoreInner<T>, value: &JsValue) -> Self {
-        let global: &WebAssembly::Global = value.dyn_ref().unwrap();
+    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+        let global: &WebAssembly::Global = value.dyn_ref()?;
 
-        store.insert_global(GlobalInner {
+        Some(store.insert_global(GlobalInner {
             value: global.clone(),
-        })
+        }))
     }
 }
 
@@ -287,7 +291,7 @@ impl WasmGlobal<Engine> for Global {
         .unwrap();
         Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
 
-        let value = value.to_js_value(&ctx);
+        let value = value.to_js(&ctx);
 
         let global = GlobalInner {
             value: WebAssembly::Global::new(&desc, &value).unwrap().into(),

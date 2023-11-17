@@ -14,8 +14,8 @@ use super::{
 use crate::{
     backend::Extern,
     web::{
-        Engine, Func, Global, Import, Instance, InstanceInner, JsErrorMsg, Memory, Module,
-        ModuleInner, Store, StoreContext, StoreContextMut, StoreInner, Table,
+        conversion::JsConvert, Engine, Func, Global, Import, Instance, InstanceInner, JsErrorMsg,
+        Memory, Module, ModuleInner, Store, StoreContext, StoreContextMut, StoreInner, Table,
     },
     ExternType, GlobalType, ImportType, MemoryType, ValueType,
 };
@@ -185,27 +185,27 @@ fn process_exports<T>(
             {
                 "function" => {
                     tracing::info!("function");
-                    let func = Func::from_js(store, value);
+                    let func = Func::from_js(store, value).unwrap();
 
                     Extern::Func(func)
                 }
                 "object" => {
                     if value.is_instance_of::<js_sys::Function>() {
                         tracing::info!("function");
-                        let func = Func::from_js(store, value);
+                        let func = Func::from_js(store, value).unwrap();
 
                         Extern::Func(func)
                     } else if value.is_instance_of::<WebAssembly::Table>() {
                         tracing::info!(?value, "export table");
-                        let table = Table::from_js(store, &value);
+                        let table = Table::from_js(store, value).unwrap();
 
                         Extern::Table(table)
                     } else if value.is_instance_of::<WebAssembly::Memory>() {
-                        let memory = Memory::from_js(store, &value);
+                        let memory = Memory::from_js(store, value).unwrap();
 
                         Extern::Memory(memory)
                     } else if value.is_instance_of::<WebAssembly::Global>() {
-                        let global = Global::from_js(store, &value);
+                        let global = Global::from_js(store, value).unwrap();
 
                         Extern::Global(global)
                     } else {
@@ -332,9 +332,9 @@ impl WasmModule<Engine> for Module {
 }
 
 /// A table of references
-impl Value<Engine> {
+impl JsConvert for Value<Engine> {
     /// Convert the value enum to a JavaScript value
-    pub fn to_js_value<T>(&self, store: &StoreInner<T>) -> JsValue {
+    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
         match self {
             &Value::I32(v) => v.into(),
             &Value::I64(v) => v.into(),
@@ -352,20 +352,21 @@ impl Value<Engine> {
     /// Convert from a JavaScript value.
     ///
     /// Returns `None` if the value can not be represented
-    pub fn from_js_value<T>(store: &mut StoreInner<T>, value: &JsValue) -> Self {
+    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         tracing::info!(?value, "from_js_value");
-        match &*value
+        let ty = &*value
             .js_typeof()
             .as_string()
-            .expect("typeof returns a string")
-        {
+            .expect("typeof returns a string");
+
+        let res = match ty {
             "number" => Value::F64(value.try_into().unwrap()),
             "bigint" => Value::I64(value.clone().try_into().unwrap()),
             "boolean" => Value::I32(value.as_bool().unwrap() as i32),
             "null" => Value::I32(0),
             "function" => {
                 // TODO: this will not depuplicate function definitions
-                let func = Func::from_js(store, value.clone());
+                let func = Func::from_js(store, value.clone()).unwrap();
 
                 Value::FuncRef(Some(func))
             }
@@ -376,17 +377,23 @@ impl Value<Engine> {
                     if value.is_null() {
                         Value::FuncRef(None)
                     } else {
-                        let func = Func::from_js(store, value.clone());
+                        let func = Func::from_js(store, value.clone())
+                            .expect("failed to convert to a function");
 
                         Value::FuncRef(Some(func))
                     }
                 } else {
                     tracing::error!(?value, "Unsupported value type");
-                    panic!("Unsupported value type {value:?}")
+                    return None;
                 }
             }
-            v => panic!("Unknown value type {v} {value:?}"),
-        }
+            v => {
+                tracing::error!(?ty, ?value, "Unknown value primitive type");
+                return None;
+            }
+        };
+
+        Some(res)
     }
 }
 
@@ -428,8 +435,8 @@ impl ExternType {
     }
 }
 
-impl Extern<Engine> {
-    pub fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+impl JsConvert for Extern<Engine> {
+    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
         let _span = tracing::info_span!("Extern::to_js", ?self).entered();
 
         match self {
@@ -439,13 +446,17 @@ impl Extern<Engine> {
             Extern::Func(v) => v.to_js(store),
         }
     }
+
+    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
 }
 
 impl ValueType {
-    /// Convert the value enum to a JavaScript descriptor
-    ///
-    /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
-    pub fn to_js_descriptor(&self) -> &str {
+    pub(crate) fn to_js_descriptor(&self) -> JsValue {
         match self {
             Self::I32 => "i32",
             Self::I64 => "i64",
@@ -454,5 +465,37 @@ impl ValueType {
             Self::FuncRef => "anyfunc",
             Self::ExternRef => "externref",
         }
+        .into()
+    }
+}
+
+impl JsConvert for ValueType {
+    /// Convert the value enum to a JavaScript descriptor
+    ///
+    /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
+    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+        self.to_js_descriptor()
+    }
+
+    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        let s = value.as_string()?;
+
+        let res = match &s[..] {
+            "i32" => Self::I32,
+            "i64" => Self::I64,
+            "f32" => Self::F32,
+            "f64" => Self::F64,
+            "anyfunc" => Self::FuncRef,
+            "externref" => Self::ExternRef,
+            _ => {
+                tracing::error!("Invalid value type {s:?}");
+                return None;
+            }
+        };
+
+        Some(res)
     }
 }
