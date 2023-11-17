@@ -25,7 +25,7 @@ use crate::{
     ExternType, GlobalType,
 };
 
-use self::conversion::JsConvert;
+use self::conversion::{FromJs, ToJs};
 
 #[derive(Debug, Clone)]
 // Helper to convert a `JsValue` into a proper error, as well as making it `Send` + `Sync`
@@ -133,24 +133,21 @@ pub(crate) struct FuncInner {
     pub(crate) func: Function,
 }
 
-impl FuncInner {
-    pub(crate) fn new(func: Function) -> Self {
-        Self { func }
-    }
-}
-
 /// A bound function
 #[derive(Debug, Clone)]
 pub struct Func {
     pub(crate) id: usize,
 }
 
-impl JsConvert for Func {
-    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+impl ToJs for Func {
+    type Repr = Function;
+    fn to_js<T>(&self, store: &StoreInner<T>) -> Function {
         let func = &store.funcs[self.id];
-        (func.func.deref().deref()).clone()
+        func.func.clone()
     }
+}
 
+impl FromJs for Func {
     fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let func: Function = value.dyn_into().ok()?;
 
@@ -214,13 +211,16 @@ pub struct MemoryInner {
     value: WebAssembly::Memory,
 }
 
-impl JsConvert for Memory {
-    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+impl ToJs for Memory {
+    type Repr = WebAssembly::Memory;
+    fn to_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Memory {
         let memory = &store.memories[self.id];
 
-        (&**memory.value).clone()
+        memory.value.clone()
     }
+}
 
+impl FromJs for Memory {
     fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let memory: &WebAssembly::Memory = value.dyn_ref()?;
 
@@ -261,13 +261,17 @@ pub(crate) struct GlobalInner {
     value: WebAssembly::Global,
 }
 
-impl JsConvert for Global {
-    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+impl ToJs for Global {
+    type Repr = WebAssembly::Global;
+
+    fn to_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Global {
         let global = &store.globals[self.id];
 
-        (&**global.value).clone()
+        global.value.clone()
     }
+}
 
+impl FromJs for Global {
     fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let global: &WebAssembly::Global = value.dyn_ref()?;
 

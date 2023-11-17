@@ -14,8 +14,9 @@ use super::{
 use crate::{
     backend::Extern,
     web::{
-        conversion::JsConvert, Engine, Func, Global, Import, Instance, InstanceInner, JsErrorMsg,
-        Memory, Module, ModuleInner, Store, StoreContext, StoreContextMut, StoreInner, Table,
+        conversion::{FromJs, ToJs},
+        Engine, Func, Global, Import, Instance, InstanceInner, JsErrorMsg, Memory, Module,
+        ModuleInner, Store, StoreContext, StoreContextMut, StoreInner, Table,
     },
     ExternType, GlobalType, ImportType, MemoryType, ValueType,
 };
@@ -332,7 +333,8 @@ impl WasmModule<Engine> for Module {
 }
 
 /// A table of references
-impl JsConvert for Value<Engine> {
+impl ToJs for Value<Engine> {
+    type Repr = JsValue;
     /// Convert the value enum to a JavaScript value
     fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
         match self {
@@ -348,7 +350,9 @@ impl JsConvert for Value<Engine> {
             Value::ExternRef(_) => todo!(),
         }
     }
+}
 
+impl FromJs for Value<Engine> {
     /// Convert from a JavaScript value.
     ///
     /// Returns `None` if the value can not be represented
@@ -435,28 +439,22 @@ impl ExternType {
     }
 }
 
-impl JsConvert for Extern<Engine> {
+impl ToJs for Extern<Engine> {
+    type Repr = JsValue;
     fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
         let _span = tracing::info_span!("Extern::to_js", ?self).entered();
 
         match self {
-            Extern::Global(v) => v.to_js(store),
-            Extern::Table(v) => v.to_js(store),
-            Extern::Memory(v) => v.to_js(store),
-            Extern::Func(v) => v.to_js(store),
+            Extern::Global(v) => v.to_js(store).into(),
+            Extern::Table(v) => v.to_js(store).into(),
+            Extern::Memory(v) => v.to_js(store).into(),
+            Extern::Func(v) => v.to_js(store).into(),
         }
-    }
-
-    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        todo!()
     }
 }
 
 impl ValueType {
-    pub(crate) fn to_js_descriptor(&self) -> JsValue {
+    pub(crate) fn to_js_descriptor(&self) -> &str {
         match self {
             Self::I32 => "i32",
             Self::I64 => "i64",
@@ -469,14 +467,17 @@ impl ValueType {
     }
 }
 
-impl JsConvert for ValueType {
+impl ToJs for ValueType {
+    type Repr = JsString;
     /// Convert the value enum to a JavaScript descriptor
     ///
     /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
-    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
-        self.to_js_descriptor()
+    fn to_js<T>(&self, store: &StoreInner<T>) -> JsString {
+        self.to_js_descriptor().into()
     }
+}
 
+impl FromJs for ValueType {
     fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self>
     where
         Self: Sized,

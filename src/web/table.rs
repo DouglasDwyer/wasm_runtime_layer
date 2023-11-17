@@ -8,7 +8,10 @@ use crate::{
     TableType, ValueType,
 };
 
-use super::{conversion::JsConvert, Engine, JsErrorMsg, StoreContextMut, StoreInner};
+use super::{
+    conversion::{FromJs, ToJs},
+    Engine, JsErrorMsg, StoreContextMut, StoreInner,
+};
 
 #[derive(Debug, Clone)]
 pub struct Table {
@@ -29,7 +32,7 @@ impl std::fmt::Debug for TableInner {
     }
 }
 
-impl JsConvert for Table {
+impl FromJs for Table {
     fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let _span = tracing::info_span!("Table::from_js", ?value).entered();
         let table = value.dyn_ref::<WebAssembly::Table>()?;
@@ -62,8 +65,12 @@ impl JsConvert for Table {
             values,
         }))
     }
+}
 
-    fn to_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+impl ToJs for Table {
+    type Repr = WebAssembly::Table;
+
+    fn to_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Table {
         let table = &store.tables[self.id];
         let desc = Object::new();
 
@@ -81,28 +88,27 @@ impl JsConvert for Table {
         }
 
         tracing::info!(?table, ?desc, "Table::to_js");
-        let table_js = WebAssembly::Table::new(&desc)
+        let res = WebAssembly::Table::new(&desc)
             .map_err(JsErrorMsg::from)
             .context("Failed to create table")
             .unwrap();
 
         for (i, value) in table.values.iter().enumerate() {
             let value = value.to_js(&store);
-            table_js
-                .set(
-                    i as u32,
-                    &value
-                        // Unchecked here to allow null functions.
-                        // `Table::set` should accept any JsValue according to MDN, but it currently
-                        // only accepts `Function`.
-                        //
-                        // See: <https://github.com/rustwasm/wasm-bindgen/issues/3708>
-                        .unchecked_into(),
-                )
-                .unwrap();
+            res.set(
+                i as u32,
+                &value
+                    // Unchecked here to allow null functions.
+                    // `Table::set` should accept any JsValue according to MDN, but it currently
+                    // only accepts `Function`.
+                    //
+                    // See: <https://github.com/rustwasm/wasm-bindgen/issues/3708>
+                    .unchecked_into(),
+            )
+            .unwrap();
         }
 
-        table_js.into()
+        res
     }
 }
 
