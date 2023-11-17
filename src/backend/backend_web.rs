@@ -364,9 +364,9 @@ impl FromJs for Value<Engine> {
             .expect("typeof returns a string");
 
         let res = match ty {
-            "number" => Value::F64(value.try_into().unwrap()),
-            "bigint" => Value::I64(value.clone().try_into().unwrap()),
-            "boolean" => Value::I32(value.as_bool().unwrap() as i32),
+            "number" => Value::F64(f64::from_js(store, value).unwrap()),
+            "bigint" => Value::I64(i64::from_js(store, value).unwrap()),
+            "boolean" => Value::I32(bool::from_js(store, value).unwrap() as i32),
             "null" => Value::I32(0),
             "function" => {
                 // TODO: this will not depuplicate function definitions

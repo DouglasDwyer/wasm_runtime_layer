@@ -1,24 +1,25 @@
 pub(crate) mod conversion;
+pub(crate) mod func;
 mod store;
 pub(crate) mod table;
 
+pub use func::Func;
 pub use store::{Store, StoreContext, StoreContextMut, StoreInner};
 pub use table::Table;
 
-use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue};
 
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
     error::Error,
     fmt::Display,
-    ops::Deref,
     rc::Rc,
 };
 
 use slab::Slab;
 
-use js_sys::{Array, Function, JsString, Object, Reflect, WebAssembly};
+use js_sys::{JsString, Object, Reflect, WebAssembly};
 
 use crate::{
     backend::{AsContext, AsContextMut, Extern, Value, WasmFunc, WasmGlobal},
@@ -125,80 +126,6 @@ pub(crate) struct InstanceInner {
 #[derive(Debug, Clone)]
 pub struct Instance {
     pub(crate) id: usize,
-}
-
-/// Internal represenation of [`Func`]
-#[derive(Debug)]
-pub(crate) struct FuncInner {
-    pub(crate) func: Function,
-}
-
-/// A bound function
-#[derive(Debug, Clone)]
-pub struct Func {
-    pub(crate) id: usize,
-}
-
-impl ToJs for Func {
-    type Repr = Function;
-    fn to_js<T>(&self, store: &StoreInner<T>) -> Function {
-        let func = &store.funcs[self.id];
-        func.func.clone()
-    }
-}
-
-impl FromJs for Func {
-    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
-        let func: Function = value.dyn_into().ok()?;
-
-        Some(store.insert_func(FuncInner { func }))
-    }
-}
-
-impl WasmFunc<Engine> for Func {
-    fn new<T>(
-        mut ctx: impl AsContextMut<Engine, UserState = T>,
-        ty: crate::FuncType,
-        func: impl 'static
-            + Send
-            + Sync
-            + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> anyhow::Result<()>,
-    ) -> Self {
-        let _span = tracing::info_span!("Func::new").entered();
-
-        let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
-
-        let store = ctx.store();
-        let closure: Closure<dyn Fn(Array) -> JsValue> = Closure::new(move |args: Array| {
-            tracing::info!(?args, "called");
-
-            JsValue::UNDEFINED
-        });
-
-        let func = ctx.insert_func(FuncInner {
-            func: closure.as_ref().unchecked_ref::<Function>().clone(),
-        });
-
-        tracing::debug!(id = func.id, "func");
-        ctx.insert_drop_resource(DropResource::new(closure));
-
-        func
-    }
-
-    fn ty(&self, ctx: impl AsContext<Engine>) -> crate::FuncType {
-        todo!()
-    }
-
-    fn call<T>(
-        &self,
-        ctx: impl AsContextMut<Engine>,
-        args: &[Value<Engine>],
-        results: &mut [Value<Engine>],
-    ) -> anyhow::Result<()> {
-        tracing::info!(id = self.id, ?args, ?results, "call");
-
-        todo!();
-    }
 }
 
 #[derive(Debug, Clone)]

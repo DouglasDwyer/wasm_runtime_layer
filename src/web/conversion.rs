@@ -69,3 +69,20 @@ impl FromJs for i64 {
         value.try_into().ok()
     }
 }
+
+impl FromJs for bool {
+    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        Some(value.as_bool()?)
+    }
+}
+
+impl ToJs for bool {
+    type Repr = JsValue;
+
+    fn to_js<T>(&self, _: &StoreInner<T>) -> Self::Repr {
+        JsValue::from(*self)
+    }
+}

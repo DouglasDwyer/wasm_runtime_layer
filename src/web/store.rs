@@ -11,7 +11,7 @@ use crate::backend::{
 };
 
 use super::{
-    table::TableInner, DropResource, Engine, Func, FuncInner, Global, GlobalInner, Instance,
+    func::FuncInner, table::TableInner, DropResource, Engine, Func, Global, GlobalInner, Instance,
     InstanceInner, Memory, MemoryInner, Table,
 };
 
