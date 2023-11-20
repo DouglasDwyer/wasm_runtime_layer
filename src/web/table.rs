@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    conversion::{FromJs, ToJs},
+    conversion::{FromStoredJs, ToJs, ToStoredJs},
     Engine, JsErrorMsg, StoreContextMut, StoreInner,
 };
 
@@ -32,8 +32,8 @@ impl std::fmt::Debug for TableInner {
     }
 }
 
-impl FromJs for Table {
-    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+impl FromStoredJs for Table {
+    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let _span = tracing::info_span!("Table::from_js", ?value).entered();
         let table = value.dyn_ref::<WebAssembly::Table>()?;
 
@@ -50,7 +50,8 @@ impl FromJs for Table {
                     Value::FuncRef(None)
                 } else {
                     Value::FuncRef(Some(
-                        Func::from_js(store, value.into()).expect("table value is not a function"),
+                        Func::from_stored_js(store, value.into())
+                            .expect("table value is not a function"),
                     ))
                 }
             })
@@ -67,19 +68,14 @@ impl FromJs for Table {
     }
 }
 
-impl ToJs for Table {
+impl ToStoredJs for Table {
     type Repr = WebAssembly::Table;
 
-    fn to_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Table {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Table {
         let table = &store.tables[self.id];
         let desc = Object::new();
 
-        Reflect::set(
-            &desc,
-            &"element".into(),
-            &table.ty.element.to_js(store).into(),
-        )
-        .unwrap();
+        Reflect::set(&desc, &"element".into(), &table.ty.element.to_js().into()).unwrap();
 
         Reflect::set(&desc, &"initial".into(), &table.ty.min.into()).unwrap();
 
@@ -94,7 +90,7 @@ impl ToJs for Table {
             .unwrap();
 
         for (i, value) in table.values.iter().enumerate() {
-            let value = value.to_js(&store);
+            let value = value.to_stored_js(&store);
             res.set(
                 i as u32,
                 &value

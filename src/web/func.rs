@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    conversion::{FromJs, ToJs},
+    conversion::{FromStoredJs, ToStoredJs},
     Engine, StoreContextMut, StoreInner,
 };
 
@@ -25,16 +25,16 @@ pub(crate) struct FuncInner {
     pub(crate) func: Function,
 }
 
-impl ToJs for Func {
+impl ToStoredJs for Func {
     type Repr = Function;
-    fn to_js<T>(&self, store: &StoreInner<T>) -> Function {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Function {
         let func = &store.funcs[self.id];
         func.func.clone()
     }
 }
 
-impl FromJs for Func {
-    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+impl FromStoredJs for Func {
+    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let func: Function = value.dyn_into().ok()?;
 
         Some(store.insert_func(FuncInner { func }))
@@ -54,9 +54,25 @@ impl WasmFunc<Engine> for Func {
 
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
-        let store = ctx.store();
-        let closure: Closure<dyn Fn(Array) -> JsValue> = Closure::new(move |args: Array| {
-            tracing::info!(?args, "called");
+        let mut store = ctx.store();
+        // let mut host_args = Vec::new();
+
+        let closure: Closure<dyn FnMut(Array) -> JsValue> = Closure::new(move |args: Array| {
+            // let store: &mut StoreInner<T> = &mut *store.as_context_mut();
+
+            let (arg_types, ret_types) = ty.params_results.split_at(ty.len_params);
+
+            tracing::info!(?args, "called import");
+
+            // host_args.clear();
+
+            // host_args.extend(
+            //     args.iter()
+            //         .zip(arg_types)
+            //         .map(|(value, ty)| Value::from_js_typed(store, ty, value)),
+            // );
+
+            // assert_eq!(host_args.len(), ty.len_params);
 
             JsValue::UNDEFINED
         });

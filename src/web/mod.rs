@@ -26,7 +26,7 @@ use crate::{
     ExternType, GlobalType,
 };
 
-use self::conversion::{FromJs, ToJs};
+use self::conversion::{FromJs, FromStoredJs, ToJs, ToStoredJs};
 
 #[derive(Debug, Clone)]
 // Helper to convert a `JsValue` into a proper error, as well as making it `Send` + `Sync`
@@ -138,17 +138,17 @@ pub struct MemoryInner {
     value: WebAssembly::Memory,
 }
 
-impl ToJs for Memory {
+impl ToStoredJs for Memory {
     type Repr = WebAssembly::Memory;
-    fn to_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Memory {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Memory {
         let memory = &store.memories[self.id];
 
         memory.value.clone()
     }
 }
 
-impl FromJs for Memory {
-    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+impl FromStoredJs for Memory {
+    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let memory: &WebAssembly::Memory = value.dyn_ref()?;
 
         Some(store.insert_memory(MemoryInner {
@@ -188,18 +188,18 @@ pub(crate) struct GlobalInner {
     value: WebAssembly::Global,
 }
 
-impl ToJs for Global {
+impl ToStoredJs for Global {
     type Repr = WebAssembly::Global;
 
-    fn to_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Global {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Global {
         let global = &store.globals[self.id];
 
         global.value.clone()
     }
 }
 
-impl FromJs for Global {
-    fn from_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+impl FromStoredJs for Global {
+    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let global: &WebAssembly::Global = value.dyn_ref()?;
 
         Some(store.insert_global(GlobalInner {
@@ -222,7 +222,7 @@ impl WasmGlobal<Engine> for Global {
         .unwrap();
         Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
 
-        let value = value.to_js(&ctx);
+        let value = value.to_stored_js(&ctx);
 
         let global = GlobalInner {
             value: WebAssembly::Global::new(&desc, &value).unwrap().into(),
