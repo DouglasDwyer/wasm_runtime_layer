@@ -497,24 +497,46 @@ pub trait AsContextMut<E: WasmEngine>: AsContext<E> {
     fn as_context_mut(&mut self) -> E::StoreContextMut<'_, Self::UserState>;
 }
 
-impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &T {
-    type UserState = T::UserState;
+impl<E, C> AsContext<E> for C
+where
+    C: crate::AsContext<Engine = E>,
+    E: WasmEngine,
+{
+    type UserState = C::UserState;
 
-    fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
-        (*self).as_context()
+    fn as_context(&self) -> <E as WasmEngine>::StoreContext<'_, Self::UserState> {
+        <Self as crate::AsContext>::as_context(self).inner
     }
 }
 
-impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &mut T {
-    type UserState = T::UserState;
-
-    fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
-        (**self).as_context()
+impl<E, C> AsContextMut<E> for C
+where
+    C: crate::AsContextMut<Engine = E>,
+    E: WasmEngine,
+{
+    fn as_context_mut(&mut self) -> <E as WasmEngine>::StoreContextMut<'_, Self::UserState> {
+        <Self as crate::AsContextMut>::as_context_mut(self).inner
     }
 }
 
-impl<T: AsContextMut<E>, E: WasmEngine> AsContextMut<E> for &mut T {
-    fn as_context_mut(&mut self) -> E::StoreContextMut<'_, Self::UserState> {
-        (*self).as_context_mut()
-    }
-}
+// impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &T {
+//     type UserState = T::UserState;
+
+//     fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
+//         (*self).as_context()
+//     }
+// }
+
+// impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &mut T {
+//     type UserState = T::UserState;
+
+//     fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
+//         (**self).as_context()
+//     }
+// }
+
+// impl<T: AsContextMut<E>, E: WasmEngine> AsContextMut<E> for &mut T {
+//     fn as_context_mut(&mut self) -> E::StoreContextMut<'_, Self::UserState> {
+//         (*self).as_context_mut()
+//     }
+// }

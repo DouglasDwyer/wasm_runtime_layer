@@ -70,6 +70,8 @@ use ref_cast::*;
 use smallvec::*;
 use std::any::*;
 use std::marker::*;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::sync::*;
 
 /// The default amount of arguments and return values for which to allocate
@@ -1187,6 +1189,29 @@ impl<T: Any + Clone + Send + Sync> AnyCloneBoxed for T {
         Box::new(self.clone())
     }
 }
+
+// /// A trait used to get shared access to a [`Store`].
+// pub trait AsContext {
+//     type Target<'a>: Deref<Target = <Self::Engine as WasmEngine>::StoreContext<'a, Self::UserState>>;
+//     /// The engine type associated with the context.
+//     type Engine: WasmEngine;
+
+//     /// The user state associated with the [`Store`], aka the `T` in `Store<T>`.
+//     type UserState: 'static;
+
+//     /// Returns the store context that this type provides access to.
+//     fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine>;
+// }
+
+// /// A trait used to get exclusive access to a [`Store`].
+// pub trait AsContextMut: AsContext {
+//     type TargetMut<'a>: DerefMut<
+//         Target = <Self::Engine as WasmEngine>::StoreContextMut<'a, Self::UserState>,
+//     >;
+
+//     /// Returns the store context that this type provides access to.
+//     fn as_context_mut(&mut self) -> TargetMut
+// }
 
 /// A trait used to get shared access to a [`Store`].
 pub trait AsContext {
