@@ -1,7 +1,7 @@
 // #![deny(warnings)]
 
 #![allow(unused_variables)]
-#![forbid(unsafe_code)]
+// #![forbid(unsafe_code)]
 // #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
@@ -673,7 +673,7 @@ impl<'a, T: 'a, E: WasmEngine> StoreContext<'a, T, E> {
 /// For more information, see [`Store`].
 pub struct StoreContextMut<'a, T: 'a, E: WasmEngine> {
     /// The backing implementation.
-    inner: E::StoreContextMut<'a, T>,
+    pub inner: E::StoreContextMut<'a, T>,
 }
 
 impl<'a, T: 'a, E: WasmEngine> StoreContextMut<'a, T, E> {

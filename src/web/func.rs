@@ -42,7 +42,7 @@ impl FromStoredJs for Func {
 }
 
 impl WasmFunc<Engine> for Func {
-    fn new<T: 'static>(
+    fn new<T>(
         mut ctx: impl AsContextMut<Engine, UserState = T>,
         ty: crate::FuncType,
         func: impl 'static
@@ -54,31 +54,60 @@ impl WasmFunc<Engine> for Func {
 
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
-        let mut store = ctx.store();
+        // Keep a reference to the store to calling context to reconstruct it later during export
+        // call.
+        //
+        // The allocated closure which uses this pointer is stored in the store itself, and as such
+        // dropping the store will also drop and prevent any further use of this pointer.
+        //
+        // The pointer itself is allocated on the stack and will *never* be moved during the entire
+        // lifetime of the store.
+        //
+        // See: [`crate::web::store::Store`] for more details of why this is done this way.
+        let store_ptr = ctx.as_ptr();
+
+        // Remove `T` from this pointer and untie the lifetime.
+        //
+        // Lifetime is enforced by the closured storage in the store, and Store is guaranteed to
+        // live as long as this closure
+        let store_ptr = store_ptr as *mut ();
+
         let mut host_args_ret = vec![Value::I32(0); ty.params_results.len()];
 
-        let closure: Closure<dyn FnMut(Array) -> JsValue> = Closure::new(move |args: Array| {
+        let closure: Closure<dyn FnMut(JsValue) -> JsValue> = Closure::new(move |args: JsValue| {
             tracing::info!(?ty, "call imported function");
-            let store: &mut StoreInner<T> = &mut *store.as_context_mut();
+            // Safety:
+            //
+            // This closure is stored inside the store.
+            //
+            // The closure itself is accessed through a raw pointer, and does not produce any
+            // reference to `StoreInner<T>`.
+            let store: &mut StoreInner<T> = unsafe { &mut *(store_ptr as *mut StoreInner<T>) };
+            let mut store = StoreContextMut::from_ref(store);
 
             let (arg_types, ret_types) = ty.params_results.split_at(ty.len_params);
             let (host_args, host_ret) = host_args_ret.split_at_mut(ty.len_params);
 
+            web_sys::console::log_1(&args);
             tracing::info!(?args, "called import");
+            // tracing::info!(length=?args.length(), "length");
+            // tracing::info!(args= ?args.iter().collect::<Vec<_>>(), "processing");
 
-            args.iter()
+            [args]
+                .into_iter()
+                .enumerate()
                 .zip(arg_types)
                 .zip(&mut *host_args)
-                .for_each(|((value, ty), arg)| {
-                    *arg = Value::from_js_typed(store, ty, value)
+                .for_each(|(((i, value), ty), arg)| {
+                    tracing::info!(i, ?value, ?ty, "convert_arg");
+                    *arg = Value::from_js_typed(&mut store, ty, value)
                         .expect("Failed to convert function argument")
                 });
 
+            tracing::info!(?host_args, "got arguments");
             assert_eq!(host_args.len(), ty.len_params);
 
-            tracing::info!(?host_args, "got arguments");
-
-            JsValue::UNDEFINED
+            Array::new().into()
         });
 
         let func = ctx.insert_func(FuncInner {

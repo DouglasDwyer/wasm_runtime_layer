@@ -19,35 +19,74 @@ use super::{
 ///
 /// Can be cheaply cloned
 pub struct Store<T> {
-    inner: Rc<RefCell<StoreInner<T>>>,
+    /// The internal store is kept behind a pointer.
+    ///
+    /// This is to allow referencing and reconstructing a calling context in exported functions,
+    /// where it is not possible to prove the correct lifetime and borrowing rules statically nor
+    /// dynamically using RefCells. This is because functions can be re-entrant with exclusive but
+    /// stacked calling contexts. [`std::cell::RefCell`] and [`std::cell::RefMut`] do not allow
+    /// for recursive usage by design (and it would be nigh impossible and quite expensive to enforce at runtime).
+    ///
+    /// The store is stored through a raw pointer, as using a `Pin<Box<T>>` would not be possible,
+    /// despite the memory location of the Box contents technically being pinned in memory. This is
+    /// because of the stacked borrows model.
+    ///
+    /// When the outer box is moved, it invalidates all tags in its borrow stack, even
+    /// though the memory location remains. This invalidates all references and raw pointers to `T`
+    /// created from the Box.
+    ///
+    /// See: <https://blog.nilstrieb.dev/posts/box-is-a-unique-type/> for more details.
+    ///
+    /// By using a box here, we would leave invalid pointers with revoked access permissions to the
+    /// memory location of `T`.
+    ///
+    /// This creates undefined behavior as the Rust compiler will incorrectly optimize register
+    /// accesses and memory loading and incorrect no-alias attributes.
+    ///
+    /// To circumvent this we can use a raw pointer obtained from unwrapping a Box.
+    ///
+    /// # Playground
+    ///
+    /// - `Pin<Box<T>>` solution (UB): https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=685c984584bc0ca1faa780ca292f406c
+    /// - raw pointer solution (sound): https://play.rust-lang.org/?version=stable&mode=release&edition=2021&gist=257841cb1675106d55c756ad59fde2fb
+    ///
+    /// You can use `Tools > Miri` to test the validity
+    inner: *mut StoreInner<T>,
 }
 
 impl<T> Store<T> {
-    pub(crate) fn from_inner(inner: Rc<RefCell<StoreInner<T>>>) -> Self {
-        Self { inner }
-    }
-
-    pub(crate) fn borrow(&mut self) -> Ref<'_, StoreInner<T>> {
-        self.inner.borrow()
-    }
-
-    pub(crate) fn borrow_mut(&mut self) -> RefMut<'_, StoreInner<T>> {
-        self.inner.borrow_mut()
-    }
-
-    pub(crate) fn get_mut(&mut self) -> StoreContextMut<T> {
-        StoreContextMut::from_store(self)
+    fn from_inner(inner: Box<StoreInner<T>>) -> Self {
+        Self {
+            inner: Box::into_raw(inner),
+        }
     }
 
     pub(crate) fn get(&self) -> StoreContext<T> {
-        StoreContext::from_store(self)
+        // Safety:
+        //
+        // A shared reference to the store signifies a non-mutable ownership, and is thus safe.
+        let mut inner = unsafe { &*self.inner };
+        StoreContext::from_ref(inner)
+    }
+
+    pub(crate) fn get_mut(&mut self) -> StoreContextMut<T> {
+        // Safety:
+        //
+        // &mut self
+        let mut inner = unsafe { &mut *self.inner };
+        StoreContextMut::from_ref(inner)
+    }
+
+    /// Returns a pointer to the inner store
+    pub(crate) fn as_ptr(&mut self) -> *mut StoreInner<T> {
+        self.inner
     }
 }
 
 impl<T> WasmStore<T, Engine> for Store<T> {
     fn new(engine: &Engine, data: T) -> Self {
         let _span = tracing::info_span!("Store::new").entered();
-        Self::from_inner(Rc::new(RefCell::new(StoreInner {
+        Self::from_inner(Box::new(StoreInner {
             engine: engine.clone(),
             instances: Slab::new(),
             funcs: Slab::new(),
@@ -56,7 +95,7 @@ impl<T> WasmStore<T, Engine> for Store<T> {
             memories: Slab::new(),
             drop_resources: Vec::new(),
             data,
-        })))
+        }))
     }
 
     fn engine(&self) -> &Engine {
@@ -86,67 +125,13 @@ impl<T> AsContext<Engine> for Store<T> {
 
 impl<T> AsContextMut<Engine> for Store<T> {
     fn as_context_mut(&mut self) -> StoreContextMut<T> {
-        StoreContextMut::from_store(&mut *self)
+        self.get_mut()
     }
 }
 
 impl<T: std::fmt::Debug> std::fmt::Debug for Store<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.inner.fmt(f)
-    }
-}
-
-impl<T> Clone for Store<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
-}
-
-/// TODO: consider moving this to compile time by modifying the AsContext(Mut) traits to return an
-/// associated type instead of a singular StoreContext
-///
-/// Alternatively, this could be solved using unsafe by storing a pointer to the data along
-/// with an Option<Ref> for keeping the guard alive.
-enum RcOrRef<'a, T> {
-    Rc(Ref<'a, T>),
-    Ref(&'a T),
-}
-
-impl<'a, T> Deref for RcOrRef<'a, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Rc(v) => &*v,
-            Self::Ref(v) => v,
-        }
-    }
-}
-
-enum RcOrRefMut<'a, T> {
-    Rc(RefMut<'a, T>),
-    Ref(&'a mut T),
-}
-
-impl<'a, T> Deref for RcOrRefMut<'a, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Rc(v) => &*v,
-            Self::Ref(v) => v,
-        }
-    }
-}
-
-impl<'a, T> DerefMut for RcOrRefMut<'a, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            Self::Rc(v) => &mut *v,
-            Self::Ref(v) => v,
-        }
     }
 }
 
@@ -216,16 +201,12 @@ impl<T> StoreInner<T> {
 /// Immutable context to the store
 pub struct StoreContext<'a, T: 'a> {
     /// The store
-    store: RcOrRef<'a, StoreInner<T>>,
-    orig: &'a Rc<RefCell<StoreInner<T>>>,
+    store: &'a StoreInner<T>,
 }
 
 impl<'a, T: 'a> StoreContext<'a, T> {
-    pub fn from_store(store: &'a Store<T>) -> Self {
-        Self {
-            store: RcOrRef::Rc(store.inner.borrow()),
-            orig: &store.inner,
-        }
+    pub fn from_ref(store: &'a StoreInner<T>) -> Self {
+        Self { store }
     }
 }
 
@@ -240,16 +221,16 @@ impl<'a, T> Deref for StoreContext<'a, T> {
 /// Mutable context to the store
 pub struct StoreContextMut<'a, T: 'a> {
     /// The store
-    store: RcOrRefMut<'a, StoreInner<T>>,
-    orig: &'a Rc<RefCell<StoreInner<T>>>,
+    store: &'a mut StoreInner<T>,
 }
 
 impl<'a, T: 'a> StoreContextMut<'a, T> {
-    pub fn from_store(store: &'a Store<T>) -> Self {
-        Self {
-            store: RcOrRefMut::Rc(store.inner.borrow_mut()),
-            orig: &store.inner,
-        }
+    pub fn as_ptr(&mut self) -> *mut StoreInner<T> {
+        self.store as *mut _
+    }
+
+    pub fn from_ref(store: &'a mut StoreInner<T>) -> Self {
+        Self { store }
     }
 }
 
@@ -281,10 +262,7 @@ impl<'a, T: 'a> AsContext<Engine> for StoreContext<'a, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<'_, T> {
-        StoreContext {
-            store: RcOrRef::Ref(&*self),
-            orig: self.orig,
-        }
+        StoreContext { store: self.store }
     }
 }
 
@@ -308,40 +286,12 @@ impl<'a, T: 'a> AsContext<Engine> for StoreContextMut<'a, T> {
     type UserState = T;
 
     fn as_context(&self) -> <Engine as WasmEngine>::StoreContext<'_, T> {
-        match &self.store {
-            RcOrRefMut::Rc(v) => StoreContext {
-                store: RcOrRef::Ref(&*v),
-                orig: self.orig,
-            },
-            RcOrRefMut::Ref(v) => StoreContext {
-                store: RcOrRef::Ref(&*v),
-                orig: self.orig,
-            },
-        }
+        StoreContext { store: self.store }
     }
 }
 
 impl<'a, T: 'a> AsContextMut<Engine> for StoreContextMut<'a, T> {
     fn as_context_mut(&mut self) -> StoreContextMut<'_, T> {
-        StoreContextMut {
-            store: RcOrRefMut::Ref(&mut *self.store),
-            orig: self.orig,
-        }
-    }
-}
-
-impl<'a, T> StoreContext<'a, T> {
-    pub fn store(&self) -> Store<T> {
-        Store {
-            inner: self.orig.clone(),
-        }
-    }
-}
-
-impl<'a, T> StoreContextMut<'a, T> {
-    pub fn store(&self) -> Store<T> {
-        Store {
-            inner: self.orig.clone(),
-        }
+        StoreContextMut { store: self.store }
     }
 }
