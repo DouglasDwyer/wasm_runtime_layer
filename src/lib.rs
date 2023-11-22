@@ -1219,7 +1219,7 @@ pub trait AsContext {
     type Engine: WasmEngine;
 
     /// The user state associated with the [`Store`], aka the `T` in `Store<T>`.
-    type UserState: 'static;
+    type UserState;
 
     /// Returns the store context that this type provides access to.
     fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine>;
@@ -1231,7 +1231,7 @@ pub trait AsContextMut: AsContext {
     fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine>;
 }
 
-impl<T: 'static, E: WasmEngine> AsContext for Store<T, E> {
+impl<T, E: WasmEngine> AsContext for Store<T, E> {
     type Engine = E;
 
     type UserState = T;
@@ -1243,7 +1243,7 @@ impl<T: 'static, E: WasmEngine> AsContext for Store<T, E> {
     }
 }
 
-impl<T: 'static, E: WasmEngine> AsContextMut for Store<T, E> {
+impl<T, E: WasmEngine> AsContextMut for Store<T, E> {
     fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine> {
         StoreContextMut {
             inner: crate::backend::AsContextMut::as_context_mut(&mut self.inner),
@@ -1277,7 +1277,7 @@ impl<T: AsContextMut> AsContextMut for &mut T {
     }
 }
 
-impl<'a, T: 'static, E: WasmEngine> AsContext for StoreContext<'a, T, E> {
+impl<'a, T: 'a, E: WasmEngine> AsContext for StoreContext<'a, T, E> {
     type Engine = E;
 
     type UserState = T;
@@ -1289,7 +1289,7 @@ impl<'a, T: 'static, E: WasmEngine> AsContext for StoreContext<'a, T, E> {
     }
 }
 
-impl<'a, T: 'static, E: WasmEngine> AsContext for StoreContextMut<'a, T, E> {
+impl<'a, T: 'a, E: WasmEngine> AsContext for StoreContextMut<'a, T, E> {
     type Engine = E;
 
     type UserState = T;
@@ -1301,7 +1301,7 @@ impl<'a, T: 'static, E: WasmEngine> AsContext for StoreContextMut<'a, T, E> {
     }
 }
 
-impl<'a, T: 'static, E: WasmEngine> AsContextMut for StoreContextMut<'a, T, E> {
+impl<'a, T: 'a, E: WasmEngine> AsContextMut for StoreContextMut<'a, T, E> {
     fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine> {
         StoreContextMut {
             inner: crate::backend::AsContextMut::as_context_mut(&mut self.inner),
