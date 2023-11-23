@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Context;
 use js_sys::{Array, Function};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -6,6 +8,7 @@ use web_sys::console;
 use crate::{
     backend::{AsContext, AsContextMut, Value, WasmFunc},
     web::{DropResource, JsErrorMsg},
+    FuncType,
 };
 
 use super::{
@@ -23,6 +26,7 @@ pub struct Func {
 #[derive(Debug)]
 pub(crate) struct FuncInner {
     pub(crate) func: Function,
+    ty: FuncType,
 }
 
 impl ToStoredJs for Func {
@@ -37,14 +41,20 @@ impl FromStoredJs for Func {
     fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let func: Function = value.dyn_into().ok()?;
 
-        Some(store.insert_func(FuncInner { func }))
+        Some(store.insert_func(FuncInner {
+            func,
+            ty: FuncType {
+                len_params: 0,
+                params_results: Arc::from([]),
+            },
+        }))
     }
 }
 
 impl WasmFunc<Engine> for Func {
     fn new<T>(
         mut ctx: impl AsContextMut<Engine, UserState = T>,
-        ty: crate::FuncType,
+        ty: FuncType,
         func: impl 'static
             + Send
             + Sync
@@ -73,9 +83,10 @@ impl WasmFunc<Engine> for Func {
         let store_ptr = store_ptr as *mut ();
 
         let mut host_args_ret = vec![Value::I32(0); ty.params_results.len()];
+        let ty2 = ty.clone();
 
         let closure: Closure<dyn FnMut(JsValue) -> JsValue> = Closure::new(move |args: JsValue| {
-            tracing::info!(?ty, "call imported function");
+            tracing::info!(?ty, ?args, "call imported function");
             // Safety:
             //
             // This closure is stored inside the store.
@@ -88,7 +99,6 @@ impl WasmFunc<Engine> for Func {
             let (arg_types, ret_types) = ty.params_results.split_at(ty.len_params);
             let (host_args, host_ret) = host_args_ret.split_at_mut(ty.len_params);
 
-            web_sys::console::log_1(&args);
             tracing::info!(?args, "called import");
             // tracing::info!(length=?args.length(), "length");
             // tracing::info!(args= ?args.iter().collect::<Vec<_>>(), "processing");
@@ -112,6 +122,7 @@ impl WasmFunc<Engine> for Func {
 
         let func = ctx.insert_func(FuncInner {
             func: closure.as_ref().unchecked_ref::<Function>().clone(),
+            ty: ty2,
         });
 
         tracing::debug!(id = func.id, "func");
@@ -120,8 +131,8 @@ impl WasmFunc<Engine> for Func {
         func
     }
 
-    fn ty(&self, ctx: impl AsContext<Engine>) -> crate::FuncType {
-        todo!()
+    fn ty(&self, ctx: impl AsContext<Engine>) -> FuncType {
+        ctx.as_context().funcs[self.id].ty.clone()
     }
 
     fn call<T>(

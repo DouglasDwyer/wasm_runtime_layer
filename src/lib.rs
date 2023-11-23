@@ -628,20 +628,20 @@ impl<T, E: WasmEngine> Store<T, E> {
         Engine::<E>::ref_cast(self.inner.engine())
     }
 
-    // /// Returns a shared reference to the user provided data owned by this [`Store`].
-    // pub fn data(&self) -> &T {
-    //     self.inner.data()
-    // }
+    /// Returns a shared reference to the user provided data owned by this [`Store`].
+    pub fn data(&self) -> &T {
+        self.inner.data()
+    }
 
-    // /// Returns an exclusive reference to the user provided data owned by this [`Store`].
-    // pub fn data_mut(&mut self) -> &mut T {
-    //     self.inner.data_mut()
-    // }
+    /// Returns an exclusive reference to the user provided data owned by this [`Store`].
+    pub fn data_mut(&mut self) -> &mut T {
+        self.inner.data_mut()
+    }
 
-    // /// Consumes `self` and returns its user provided data.
-    // pub fn into_data(self) -> T {
-    //     self.inner.into_data()
-    // }
+    /// Consumes `self` and returns its user provided data.
+    pub fn into_data(self) -> T {
+        self.inner.into_data()
+    }
 }
 
 /// A temporary handle to a [`&Store<T>`][`Store`].

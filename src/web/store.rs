@@ -1,5 +1,6 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
+    mem,
     ops::{Deref, DerefMut},
     rc::Rc,
 };
@@ -65,7 +66,7 @@ impl<T> Store<T> {
         // Safety:
         //
         // A shared reference to the store signifies a non-mutable ownership, and is thus safe.
-        let mut inner = unsafe { &*self.inner };
+        let inner = unsafe { &*self.inner };
         StoreContext::from_ref(inner)
     }
 
@@ -73,13 +74,19 @@ impl<T> Store<T> {
         // Safety:
         //
         // &mut self
-        let mut inner = unsafe { &mut *self.inner };
+        let inner = unsafe { &mut *self.inner };
         StoreContextMut::from_ref(inner)
     }
 
     /// Returns a pointer to the inner store
     pub(crate) fn as_ptr(&mut self) -> *mut StoreInner<T> {
         self.inner
+    }
+}
+
+impl<T> Drop for Store<T> {
+    fn drop(&mut self) {
+        unsafe { drop(Box::from_raw(self.inner)) }
     }
 }
 
@@ -99,20 +106,31 @@ impl<T> WasmStore<T, Engine> for Store<T> {
     }
 
     fn engine(&self) -> &Engine {
-        unimplemented!()
+        &self.get().store.engine
     }
 
-    // fn data(&self) -> &T {
-    //     unimplemented!()
-    // }
+    fn data(&self) -> &T {
+        &self.get().store.data
+    }
 
-    // fn data_mut(&mut self) -> &mut T {
-    //     unimplemented!()
-    // }
+    fn data_mut(&mut self) -> &mut T {
+        &mut self.get_mut().store.data
+    }
 
-    // fn into_data(self) -> T {
-    //     todo!()
-    // }
+    fn into_data(self) -> T {
+        // Safety:
+        //
+        // Ownership of `self` signifies that no guest stack is currently active
+        let ptr = unsafe { Box::from_raw(self.inner) };
+
+        // Don't execute drop for `Store`. This impl deallocates the whole box, which we don't
+        // want.
+        //
+        // The box will be deallocated at the end of this scope
+        mem::forget(self);
+
+        ptr.data
+    }
 }
 
 impl<T> AsContext<Engine> for Store<T> {
