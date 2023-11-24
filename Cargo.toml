@@ -30,5 +30,5 @@ wabt = "0.10.0"
 
 [features]
 backend_wasmi = [ "wasmi" ]
-backend_wasmtime = [ "wasmtime" ]
+backend_wasmtime = [ "wasmtime", "tracing" ]
 backend_web = [ "wasm-bindgen", "js-sys", "web-sys", "tracing", "slab" ]
