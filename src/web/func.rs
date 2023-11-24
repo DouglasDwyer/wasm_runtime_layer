@@ -36,16 +36,18 @@ impl ToStoredJs for Func {
     }
 }
 
-impl FromStoredJs for Func {
-    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+impl Func {
+    pub fn from_exported_function<T>(
+        store: &mut StoreInner<T>,
+        value: JsValue,
+        signature: FuncType,
+    ) -> Option<Self> {
         let func: Function = value.dyn_into().ok()?;
 
         Some(store.insert_func(FuncInner {
             func,
-            ty: FuncType {
-                len_params: 0,
-                params_results: Arc::from([]),
-            },
+            // TODO: we don't really know what the exported function's signature is
+            ty: signature,
         }))
     }
 }

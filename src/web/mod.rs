@@ -1,5 +1,6 @@
 pub(crate) mod conversion;
 pub(crate) mod func;
+pub(crate) mod module;
 mod store;
 pub(crate) mod table;
 
@@ -15,6 +16,7 @@ use std::{
     error::Error,
     fmt::Display,
     rc::Rc,
+    sync::Arc,
 };
 
 use slab::Slab;
@@ -160,6 +162,7 @@ impl FromStoredJs for Memory {
 #[derive(Debug)]
 pub(crate) struct ModuleInner {
     pub(crate) module: js_sys::WebAssembly::Module,
+    pub(crate) parsed: Arc<module::ParsedModule>,
 }
 
 #[derive(Debug, Clone)]

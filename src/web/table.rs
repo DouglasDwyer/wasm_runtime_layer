@@ -50,8 +50,9 @@ impl FromStoredJs for Table {
                     Value::FuncRef(None)
                 } else {
                     Value::FuncRef(Some(
-                        Func::from_stored_js(store, value.into())
-                            .expect("table value is not a function"),
+                        todo!(),
+                        // Func::from_stored_js(store, value.into())
+                        //     .expect("table value is not a function"),
                     ))
                 }
             })

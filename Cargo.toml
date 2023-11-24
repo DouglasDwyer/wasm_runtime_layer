@@ -22,7 +22,8 @@ slab = { version = "0.4", optional = true }
 
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
-web-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", features = ["Clipboard"], optional = true }
+wasmparser = { version = "0.118", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 wabt = "0.10.0"
@@ -31,4 +32,4 @@ wabt = "0.10.0"
 [features]
 backend_wasmi = [ "wasmi" ]
 backend_wasmtime = [ "wasmtime", "tracing" ]
-backend_web = [ "wasm-bindgen", "js-sys", "web-sys", "tracing", "slab" ]
+backend_web = [ "wasm-bindgen", "js-sys", "web-sys", "tracing", "slab", "wasmparser" ]

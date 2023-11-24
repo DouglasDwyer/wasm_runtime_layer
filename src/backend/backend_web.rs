@@ -15,6 +15,7 @@ use crate::{
     backend::Extern,
     web::{
         conversion::{FromJs, FromStoredJs, ToJs, ToStoredJs},
+        module::{self, ParsedModule},
         Engine, Func, Global, Import, Instance, InstanceInner, JsErrorMsg, Memory, Module,
         ModuleInner, Store, StoreContext, StoreContextMut, StoreInner, Table,
     },
@@ -53,26 +54,29 @@ impl WasmInstance<Engine> for Instance {
         tracing::info!("Instance::new");
         let mut store: &mut StoreInner<_> = &mut *store.as_context_mut();
 
-        let instance = {
+        let instance;
+        let parsed;
+        {
             let mut engine = store.engine.borrow_mut();
             tracing::info!(?module.id, "get module");
             let module = &mut engine.modules[module.id];
+            parsed = module.parsed.clone();
 
-            let imports_object = process_imports(store, imports);
+            let imports_object = create_imports_object(store, imports);
 
             tracing::info!(?imports_object, "instantiate module");
             // TODO: async instantiation, possibly through a `.ready().await` call on the returned
             // module
             // let instance = WebAssembly::instantiate_module(&module.module, &imports);
-            WebAssembly::Instance::new(&module.module, &imports_object)
+            instance = WebAssembly::Instance::new(&module.module, &imports_object)
                 .map_err(JsErrorMsg::from)
-                .with_context(|| format!("Failed to instantiate module"))?
+                .with_context(|| format!("Failed to instantiate module"))?;
+
+            tracing::info!(?instance, "created instance");
         };
 
-        tracing::info!(?instance, "created instance");
-
-        let exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
-        let exports = process_exports(&mut store, exports)?;
+        let js_exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
+        let exports = process_exports(&mut store, js_exports, &parsed)?;
 
         let instance = InstanceInner { instance, exports };
 
@@ -111,7 +115,7 @@ impl WasmInstance<Engine> for Instance {
     }
 }
 
-fn process_imports<T>(store: &StoreInner<T>, imports: &super::Imports<Engine>) -> Object {
+fn create_imports_object<T>(store: &StoreInner<T>, imports: &super::Imports<Engine>) -> Object {
     let _span = tracing::info_span!("process_imports").entered();
 
     let imports = imports
@@ -150,6 +154,7 @@ fn process_imports<T>(store: &StoreInner<T>, imports: &super::Imports<Engine>) -
 fn process_exports<T>(
     store: &mut StoreInner<T>,
     exports: JsValue,
+    parsed: &ParsedModule,
 ) -> anyhow::Result<HashMap<String, Extern<Engine>>> {
     let _span = tracing::info_span!("process_exports", ?exports).entered();
     if !exports.is_object() {
@@ -179,6 +184,8 @@ fn process_exports<T>(
 
             let ty = value.js_typeof();
 
+            let signature = parsed.exports.get(&name).expect("export signature").clone();
+
             let ext = match &value
                 .js_typeof()
                 .as_string()
@@ -186,14 +193,25 @@ fn process_exports<T>(
             {
                 "function" => {
                     tracing::info!("function");
-                    let func = Func::from_stored_js(store, value).unwrap();
+
+                    let func = Func::from_exported_function(
+                        store,
+                        value,
+                        signature.try_into_func().unwrap(),
+                    )
+                    .unwrap();
 
                     Extern::Func(func)
                 }
                 "object" => {
                     if value.is_instance_of::<js_sys::Function>() {
                         tracing::info!("function");
-                        let func = Func::from_stored_js(store, value).unwrap();
+                        let func = Func::from_exported_function(
+                            store,
+                            value,
+                            signature.try_into_func().unwrap(),
+                        )
+                        .unwrap();
 
                         Extern::Func(func)
                     } else if value.is_instance_of::<WebAssembly::Table>() {
@@ -282,6 +300,8 @@ impl WasmModule<Engine> for Module {
             .read_to_end(&mut buf)
             .context("Failed to read module bytes")?;
 
+        let parsed = module::parse_module(&buf)?;
+
         let module = WebAssembly::Module::new(&Uint8Array::from(buf.as_slice()).into())
             .map_err(JsErrorMsg::from)?;
 
@@ -291,22 +311,30 @@ impl WasmModule<Engine> for Module {
         let imports: Vec<_> = imports
             .into_iter()
             .map(|import| {
+                tracing::info!(?import);
                 let module = Reflect::get(&import, &"module".into()).unwrap();
                 let name = Reflect::get(&import, &"name".into()).unwrap();
                 let kind = Reflect::get(&import, &"kind".into()).unwrap();
 
                 Import {
                     module: module.as_string().expect("module is string").into(),
-                    name: name.as_string().expect("name is string").into(),
-                    kind: ExternType::from_js_extern_kind(
+                    kind: ExternType::from_import(
                         kind.as_string().expect("kind is string").as_str(),
+                        name.as_string().expect("name is string").as_str(),
+                        &parsed,
                     )
                     .expect("invalid kind"),
+                    name: name.as_string().expect("name is string").into(),
                 }
             })
             .collect();
 
-        let module = ModuleInner { module };
+        tracing::info!(?imports, "module imports");
+
+        let module = ModuleInner {
+            module,
+            parsed: Arc::new(parsed),
+        };
 
         let module = engine.borrow_mut().insert_module(module, imports);
 
@@ -369,10 +397,8 @@ impl FromStoredJs for Value<Engine> {
             "boolean" => Value::I32(bool::from_stored_js(store, value).unwrap() as i32),
             "null" => Value::I32(0),
             "function" => {
-                // TODO: this will not depuplicate function definitions
-                let func = Func::from_stored_js(store, value.clone()).unwrap();
-
-                Value::FuncRef(Some(func))
+                tracing::error!("conversion to a function outside of a module not permitted");
+                return None;
             }
             // An instance of a WebAssembly.* class or null
             "object" => {
@@ -381,10 +407,10 @@ impl FromStoredJs for Value<Engine> {
                     if value.is_null() {
                         Value::FuncRef(None)
                     } else {
-                        let func = Func::from_stored_js(store, value.clone())
-                            .expect("failed to convert to a function");
-
-                        Value::FuncRef(Some(func))
+                        tracing::error!(
+                            "conversion to a function outside of a module not permitted"
+                        );
+                        return None;
                     }
                 } else {
                     tracing::error!(?value, "Unsupported value type");
@@ -412,7 +438,9 @@ impl ExternType {
         }
     }
 
-    pub fn from_js_extern_kind(kind: &str) -> Option<Self> {
+    pub fn from_import(kind: &str, name: &str, parsed: &ParsedModule) -> Option<Self> {
+        let signature = parsed.imports.get(name)?;
+
         match kind {
             "global" => Some(ExternType::Global(GlobalType {
                 content: crate::ValueType::I32,
@@ -427,10 +455,7 @@ impl ExternType {
                 initial: 0,
                 maximum: None,
             })),
-            "function" => Some(ExternType::Func(crate::FuncType {
-                len_params: 0,
-                params_results: Arc::from([]),
-            })),
+            "function" => Some(ExternType::Func(signature.clone().try_into_func().ok()?)),
             _ => {
                 tracing::error!(?kind, "unknown import kind");
                 None
@@ -510,7 +535,7 @@ impl Value<Engine> {
         match ty {
             ValueType::I32 => Some(Value::I32(i32::from_js(value)?)),
             ValueType::I64 => todo!(),
-            ValueType::F32 => todo!(),
+            ValueType::F32 => Some(Value::F32(f32::from_js(value)?)),
             ValueType::F64 => todo!(),
             ValueType::FuncRef => todo!(),
             ValueType::ExternRef => todo!(),

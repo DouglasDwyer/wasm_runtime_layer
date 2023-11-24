@@ -64,7 +64,7 @@ pub mod backend;
 pub mod web;
 
 use crate::backend::*;
-use anyhow::*;
+use anyhow::{Context, Result};
 use fxhash::*;
 use ref_cast::*;
 use smallvec::*;
@@ -325,6 +325,22 @@ impl ExternType {
         match self {
             Self::Func(ty) => Some(ty),
             _ => None,
+        }
+    }
+
+    pub fn as_func(&self) -> Option<&FuncType> {
+        if let Self::Func(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn try_into_func(self) -> std::result::Result<FuncType, Self> {
+        if let Self::Func(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
         }
     }
 }
