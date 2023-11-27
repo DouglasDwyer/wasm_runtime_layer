@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use wasmparser::{RefType, WasmFuncType, WasmModuleResources};
+use wasmparser::{RefType, SectionLimitedIntoIterWithOffsets, WasmFuncType, WasmModuleResources};
 
 use crate::{backend::Extern, ExternType, FuncType, GlobalType, MemoryType, TableType, ValueType};
 
@@ -70,18 +70,21 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
 
                     let ty = match ty.types() {
                         [subtype] => match &subtype.composite_type {
-                            wasmparser::CompositeType::Func(func_type) => FuncType::new(
-                                func_type.params().iter().map(ValueType::from),
-                                func_type.results().iter().map(ValueType::from),
-                            ),
+                            wasmparser::CompositeType::Func(func_type) => {
+                                FuncType::new(
+                                    func_type.params().iter().map(ValueType::from),
+                                    func_type.results().iter().map(ValueType::from),
+                                )
+                            }
                             _ => unreachable!(),
                         },
                         _ => unimplemented!(),
                     };
 
-                    tracing::info!(?ty, "ty");
                     types.push(ty);
                 }
+                tracing::info!("pushed {} types", types.len());
+                tracing::debug!("\n{}", types.iter().enumerate().map(|(i, v)| format!("{i:>4}: {v:?}")).collect::<Vec<_>>().join("\n"));
             }
             wasmparser::Payload::FunctionSection(section) => {
                 for type_index in section {
@@ -89,9 +92,11 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
 
                     let ty = &types[type_index as usize];
 
-                    tracing::info!(?ty, type_index, "function type");
                     functions.push(ty.clone());
                 }
+
+                tracing::info!("pushed {} functions", functions.len());
+                tracing::debug!("\n{}", functions.iter().enumerate().map(|(i, v)| format!("{i:>4}: {v:?}")).collect::<Vec<_>>().join("\n"));
             }
             wasmparser::Payload::TableSection(section) => {
                 for table in section {
@@ -127,13 +132,22 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     });
                 }
             }
+            wasmparser::Payload::TagSection(section) => {
+                for tag in section {
+                    let tag = tag?;
+
+                    tracing::info!(?tag, "tag");
+                }
+            }
             wasmparser::Payload::ImportSection(section) => {
                 for import in section {
                     let import = import?;
                     let ty = match import.ty {
                         wasmparser::TypeRef::Func(index) => {
                             tracing::info!(?index, "found function index");
-                            ExternType::Func(types[index as usize].clone())
+                            let sig = types[index as usize].clone();
+                            functions.push(sig.clone());
+                            ExternType::Func(sig)
                         }
                         wasmparser::TypeRef::Table(_) => todo!(),
                         wasmparser::TypeRef::Memory(_) => todo!(),
@@ -142,14 +156,7 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     };
 
                     tracing::info!(module = import.module, name = import.name, ?ty, "imports");
-                    imports.insert((import.name.to_string()), ty);
-                }
-            }
-            wasmparser::Payload::TagSection(section) => {
-                for tag in section {
-                    let tag = tag?;
-
-                    tracing::info!(?tag, "tag");
+                    imports.insert(import.name.to_string(), ty);
                 }
             }
             wasmparser::Payload::ExportSection(section) => {
@@ -158,7 +165,7 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     let index = export.index as usize;
                     let ty = match export.kind {
                         wasmparser::ExternalKind::Func => {
-                            tracing::info!(?index, "found exported function index");
+                            tracing::info!(?export.name, ?index, f=?functions[index], "found exported function index");
                             ExternType::Func(functions[index].clone())
                         }
                         wasmparser::ExternalKind::Table => ExternType::Table(tables[index]),

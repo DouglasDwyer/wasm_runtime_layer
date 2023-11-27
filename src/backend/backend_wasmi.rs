@@ -48,6 +48,7 @@ impl WasmExternRef<wasmi::Engine> for wasmi::ExternRef {
 
 impl WasmFunc<wasmi::Engine> for wasmi::Func {
     fn new<T>(
+        _name: &str,
         mut ctx: impl AsContextMut<wasmi::Engine, UserState = T>,
         ty: FuncType,
         func: impl 'static

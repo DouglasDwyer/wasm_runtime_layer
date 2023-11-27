@@ -215,7 +215,7 @@ impl WasmFunc<Engine> for Func {
             [] => {}
             // single
             &[ty] => {
-                results[1] = Value::from_js_typed(&mut ctx, &ty, res)
+                results[0] = Value::from_js_typed(&mut ctx, &ty, res)
                     .context("Failed to convert return value")?;
             }
             // multi-value
