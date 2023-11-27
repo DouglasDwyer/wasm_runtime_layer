@@ -195,6 +195,7 @@ fn process_exports<T>(
                     tracing::info!("function");
 
                     let func = Func::from_exported_function(
+                        &name,
                         store,
                         value,
                         signature.try_into_func().unwrap(),
@@ -207,6 +208,7 @@ fn process_exports<T>(
                     if value.is_instance_of::<js_sys::Function>() {
                         tracing::info!("function");
                         let func = Func::from_exported_function(
+                            &name,
                             store,
                             value,
                             signature.try_into_func().unwrap(),

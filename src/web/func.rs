@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::Context;
 use js_sys::{Array, Function};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -10,10 +8,7 @@ use crate::{
     FuncType,
 };
 
-use super::{
-    conversion::{FromStoredJs, ToStoredJs},
-    Engine, StoreContextMut, StoreInner,
-};
+use super::{conversion::ToStoredJs, Engine, StoreContextMut, StoreInner};
 
 /// A bound function
 #[derive(Debug, Clone)]
@@ -26,6 +21,7 @@ pub struct Func {
 pub(crate) struct FuncInner {
     pub(crate) func: Function,
     ty: FuncType,
+    name: String,
 }
 
 impl ToStoredJs for Func {
@@ -38,16 +34,19 @@ impl ToStoredJs for Func {
 
 impl Func {
     pub fn from_exported_function<T>(
+        name: &str,
         store: &mut StoreInner<T>,
         value: JsValue,
         signature: FuncType,
     ) -> Option<Self> {
         let func: Function = value.dyn_into().ok()?;
 
+        tracing::info!(?name, ?signature, "exported function with signature");
         Some(store.insert_func(FuncInner {
             func,
             // TODO: we don't really know what the exported function's signature is
             ty: signature,
+            name: format!("guest.{name}"),
         }))
     }
 }
@@ -60,7 +59,8 @@ macro_rules! to_ty {
 
 macro_rules! func_wrapper {
     ($store: ident, $func_ty: ident, $func: ident, $($idx: tt => $ident: ident),*) => {{
-        let closure: Closure<dyn FnMut($(to_ty!($ident)),*) -> JsValue> = Closure::new(move |$($ident: JsValue),*| {
+        let ty = $func_ty.clone();
+        let closure: Closure<dyn FnMut($(to_ty!($ident)),*) -> Result<JsValue, wasm_bindgen::JsError>> = Closure::new(move |$($ident: JsValue),*| {
             // Safety:
             //
             // This closure is stored inside the store.
@@ -71,19 +71,18 @@ macro_rules! func_wrapper {
             #[allow(unused_mut)]
             let mut store = StoreContextMut::from_ref(store);
 
-            let (arg_types, ret_types) = $func_ty.params_results.split_at($func_ty.len_params);
+            let (arg_types, ret_types) = ty.params_results.split_at(ty.len_params);
 
-            tracing::info!(?$func_ty, ?arg_types, "call");
+            tracing::info!(?ty, ?arg_types, "call");
             let args = [
                 $(
                     (Value::from_js_typed(&mut store, &arg_types[$idx], $ident)).expect("Failed to convert argument"),
                 )*
             ];
-            tracing::info!(?args, "processed arguments");
 
-            $func(store, &args);
+            let res = $func(store, &args);
 
-            JsValue::UNDEFINED
+            res.map(Into::into).map_err(|v| wasm_bindgen::JsError::new(&format!("{v:?}")))
         });
 
         let func = closure.as_ref().unchecked_ref::<Function>().clone();
@@ -95,6 +94,7 @@ macro_rules! func_wrapper {
 
 impl WasmFunc<Engine> for Func {
     fn new<T>(
+        name: &str,
         mut ctx: impl AsContextMut<Engine, UserState = T>,
         ty: FuncType,
         func: impl 'static
@@ -102,6 +102,8 @@ impl WasmFunc<Engine> for Func {
             + Sync
             + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> anyhow::Result<()>,
     ) -> Self {
+        let name = name.to_string();
+
         let _span = tracing::info_span!("Func::new").entered();
 
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
@@ -125,34 +127,32 @@ impl WasmFunc<Engine> for Func {
         let store_ptr = store_ptr as *mut ();
 
         // let mut host_args_ret = vec![Value::I32(0); ty.params_results.len()];
-        let ty2 = ty.clone();
 
-        let func = move |store, args: &[Value<Engine>]| {
-            // let store: &mut StoreInner<T> = unsafe { &mut *(store_ptr as *mut StoreInner<T>) };
-            // let mut store = StoreContextMut::from_ref(store);
+        let mut res = vec![Value::I32(0); ty.results().len()];
 
-            // let (arg_types, ret_types) = ty.params_results.split_at(ty.len_params);
-            // let (host_args, host_ret) = host_args_ret.split_at_mut(ty.len_params);
+        let mut func = {
+            let name = name.clone();
 
-            tracing::info!(?args, "called import");
-            // tracing::info!(length=?args.length(), "length");
-            // tracing::info!(args= ?args.iter().collect::<Vec<_>>(), "processing");
+            move |mut store: StoreContextMut<T>, args: &[Value<Engine>]| {
+                let span = tracing::info_span!("call_host", name, ?args);
+                span.in_scope(|| match func(store.as_context_mut(), args, &mut res) {
+                    Ok(v) => {
+                        tracing::debug!(?res, "result");
+                        Ok(v)
+                    }
+                    Err(err) => {
+                        tracing::error!("{err:?}");
+                        Err(err)
+                    }
+                })?;
 
-            // args.into_iter()
-            //     .cloned()
-            //     .enumerate()
-            //     .zip(arg_types)
-            //     .zip(&mut *host_args)
-            //     .for_each(|(((i, value), ty), arg)| {
-            //         tracing::info!(i, ?value, ?ty, "convert_arg");
-            //         *arg = Value::from_js_typed(&mut store, ty, value)
-            //             .expect("Failed to convert function argument")
-            //     });
+                let results = res
+                    .iter()
+                    .map(|v| v.to_stored_js(&&*store))
+                    .collect::<Array>();
 
-            // tracing::info!(?host_args, "got arguments");
-            // assert_eq!(host_args.len(), ty.len_params);
-
-            JsValue::UNDEFINED
+                anyhow::Ok(results)
+            }
         };
 
         tracing::info!(?ty, "wrapping function");
@@ -175,43 +175,7 @@ impl WasmFunc<Engine> for Func {
             }
         };
 
-        // let closure: Closure<dyn FnMut(JsValue, JsValue, JsValue, JsValue) -> JsValue> =
-        //     Closure::new(move |a: JsValue, b: JsValue, c: JsValue, d: JsValue| {
-        //         let args = [a, b, c, d];
-        //         tracing::info!(?ty, ?args, "call imported function");
-        //         // Safety:
-        //         //
-        //         // This closure is stored inside the store.
-        //         //
-        //         // The closure itself is accessed through a raw pointer, and does not produce any
-        //         // reference to `StoreInner<T>`.
-        //         let store: &mut StoreInner<T> = unsafe { &mut *(store_ptr as *mut StoreInner<T>) };
-        //         let mut store = StoreContextMut::from_ref(store);
-
-        //         let (arg_types, ret_types) = ty.params_results.split_at(ty.len_params);
-        //         let (host_args, host_ret) = host_args_ret.split_at_mut(ty.len_params);
-
-        //         tracing::info!(?args, "called import");
-        //         // tracing::info!(length=?args.length(), "length");
-        //         // tracing::info!(args= ?args.iter().collect::<Vec<_>>(), "processing");
-
-        //         args.into_iter()
-        //             .enumerate()
-        //             .zip(arg_types)
-        //             .zip(&mut *host_args)
-        //             .for_each(|(((i, value), ty), arg)| {
-        //                 tracing::info!(i, ?value, ?ty, "convert_arg");
-        //                 *arg = Value::from_js_typed(&mut store, ty, value)
-        //                     .expect("Failed to convert function argument")
-        //             });
-
-        //         tracing::info!(?host_args, "got arguments");
-        //         assert_eq!(host_args.len(), ty.len_params);
-
-        //         Array::new().into()
-        //     });
-
-        let func = ctx.insert_func(FuncInner { func, ty: ty2 });
+        let func = ctx.insert_func(FuncInner { func, ty, name });
 
         tracing::debug!(id = func.id, "func");
         ctx.insert_drop_resource(DropResource::new(resource));
@@ -231,17 +195,34 @@ impl WasmFunc<Engine> for Func {
     ) -> anyhow::Result<()> {
         tracing::info!(id = self.id, ?args, ?results, "call from host");
 
-        // This is to support re-entrant function calls which each acquire the store
-        let func = {
-            let ctx: StoreContextMut<_> = ctx.as_context_mut();
-            ctx.funcs[self.id].func.clone()
-        };
+        let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
+        let inner: &FuncInner = &ctx.funcs[self.id];
 
-        tracing::info!(?func, "function");
+        let _span = tracing::info_span!("call_guest", name = inner.name).entered();
 
-        func.apply(&JsValue::UNDEFINED, &Array::new())
+        let res = inner
+            .func
+            .apply(&JsValue::UNDEFINED, &Array::new())
             .map_err(JsErrorMsg::from)
             .context("Guest function threw an error")?;
+
+        tracing::debug!(?res);
+
+        // https://webassembly.github.io/spec/js-api/#exported-function-exotic-objects
+        assert_eq!(inner.ty.results().len(), results.len());
+        match inner.ty.results() {
+            // void
+            [] => {}
+            // single
+            &[ty] => {
+                results[1] = Value::from_js_typed(&mut ctx, &ty, res)
+                    .context("Failed to convert return value")?;
+            }
+            // multi-value
+            _ => {
+                todo!()
+            }
+        }
 
         Ok(())
     }
