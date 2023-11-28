@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
-use wasmparser::{RefType, SectionLimitedIntoIterWithOffsets, WasmFuncType, WasmModuleResources};
+use wasmparser::RefType;
 
-use crate::{backend::Extern, ExternType, FuncType, GlobalType, MemoryType, TableType, ValueType};
-
-enum ImportType {}
+use crate::{ExternType, FuncType, GlobalType, MemoryType, TableType, ValueType};
 
 impl From<&wasmparser::ValType> for ValueType {
     fn from(value: &wasmparser::ValType) -> Self {
@@ -27,6 +25,16 @@ impl From<&RefType> for ValueType {
             Self::ExternRef
         } else {
             unimplemented!("unsupported reference type {value:?}")
+        }
+    }
+}
+
+impl From<&wasmparser::TableType> for TableType {
+    fn from(value: &wasmparser::TableType) -> Self {
+        TableType {
+            element: (&value.element_type).into(),
+            min: value.initial,
+            max: value.maximum,
         }
     }
 }
@@ -102,11 +110,7 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                 for table in section {
                     let table = table?;
 
-                    tables.push(TableType {
-                        element: (&table.ty.element_type).into(),
-                        min: table.ty.initial,
-                        max: table.ty.maximum,
-                    });
+                    tables.push((&table.ty).into());
                 }
             }
             wasmparser::Payload::MemorySection(section) => {
@@ -149,7 +153,11 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                             functions.push(sig.clone());
                             ExternType::Func(sig)
                         }
-                        wasmparser::TypeRef::Table(_) => todo!(),
+                        wasmparser::TypeRef::Table(ty) => {
+                            // functions.push(sig.clone());
+                            tables.push((&ty).into());
+                            ExternType::Table((&ty).into())
+                        },
                         wasmparser::TypeRef::Memory(_) => todo!(),
                         wasmparser::TypeRef::Global(_) => todo!(),
                         wasmparser::TypeRef::Tag(_) => todo!(),

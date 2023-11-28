@@ -41,7 +41,6 @@ impl Func {
     ) -> Option<Self> {
         let func: Function = value.dyn_into().ok()?;
 
-        tracing::info!(?name, ?signature, "exported function with signature");
         Some(store.insert_func(FuncInner {
             func,
             // TODO: we don't really know what the exported function's signature is
@@ -60,7 +59,7 @@ macro_rules! to_ty {
 macro_rules! func_wrapper {
     ($store: ident, $func_ty: ident, $func: ident, $($idx: tt => $ident: ident),*) => {{
         let ty = $func_ty.clone();
-        let closure: Closure<dyn FnMut($(to_ty!($ident)),*) -> Result<JsValue, wasm_bindgen::JsError>> = Closure::new(move |$($ident: JsValue),*| {
+        let closure: Closure<dyn FnMut($(to_ty!($ident)),*) -> JsValue> = Closure::new(move |$($ident: JsValue),*| {
             // Safety:
             //
             // This closure is stored inside the store.
@@ -73,16 +72,19 @@ macro_rules! func_wrapper {
 
             let (arg_types, ret_types) = ty.params_results.split_at(ty.len_params);
 
-            tracing::info!(?ty, ?arg_types, "call");
             let args = [
                 $(
                     (Value::from_js_typed(&mut store, &arg_types[$idx], $ident)).expect("Failed to convert argument"),
                 )*
             ];
 
-            let res = $func(store, &args);
-
-            res.map(Into::into).map_err(|v| wasm_bindgen::JsError::new(&format!("{v:?}")))
+            match $func(store, &args) {
+                Ok(v) => { v.into() }
+                Err(err) => {
+                    tracing::error!("{err:?}");
+                    return JsValue::UNDEFINED;
+                }
+            }
         });
 
         let func = closure.as_ref().unchecked_ref::<Function>().clone();
@@ -104,7 +106,7 @@ impl WasmFunc<Engine> for Func {
     ) -> Self {
         let name = name.to_string();
 
-        let _span = tracing::info_span!("Func::new").entered();
+        let _span = tracing::debug_span!("Func::new").entered();
 
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
@@ -134,7 +136,7 @@ impl WasmFunc<Engine> for Func {
             let name = name.clone();
 
             move |mut store: StoreContextMut<T>, args: &[Value<Engine>]| {
-                let span = tracing::info_span!("call_host", name, ?args);
+                let span = tracing::debug_span!("call_host", name, ?args);
                 span.in_scope(|| match func(store.as_context_mut(), args, &mut res) {
                     Ok(v) => {
                         tracing::debug!(?res, "result");
@@ -155,7 +157,6 @@ impl WasmFunc<Engine> for Func {
             }
         };
 
-        tracing::info!(?ty, "wrapping function");
         let (resource, func) = match ty.len_params {
             0 => func_wrapper!(store_ptr, ty, func,),
             1 => func_wrapper!(store_ptr, ty, func, 0 => a),
@@ -193,20 +194,20 @@ impl WasmFunc<Engine> for Func {
         args: &[Value<Engine>],
         results: &mut [Value<Engine>],
     ) -> anyhow::Result<()> {
-        tracing::info!(id = self.id, ?args, ?results, "call from host");
-
-        let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
+        let mut ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let inner: &FuncInner = &ctx.funcs[self.id];
 
-        let _span = tracing::info_span!("call_guest", name = inner.name).entered();
+        let _span = tracing::debug_span!("call_guest", ?args, name = inner.name).entered();
+
+        let args = args.iter().map(|v| v.to_stored_js(&ctx)).collect::<Array>();
 
         let res = inner
             .func
-            .apply(&JsValue::UNDEFINED, &Array::new())
+            .apply(&JsValue::UNDEFINED, &args)
             .map_err(JsErrorMsg::from)
             .context("Guest function threw an error")?;
 
-        tracing::debug!(?res);
+        tracing::debug!(?res,ty=?inner.ty);
 
         // https://webassembly.github.io/spec/js-api/#exported-function-exotic-objects
         assert_eq!(inner.ty.results().len(), results.len());
@@ -220,6 +221,7 @@ impl WasmFunc<Engine> for Func {
             }
             // multi-value
             _ => {
+                tracing::error!("multi-value returns are not supported");
                 todo!()
             }
         }

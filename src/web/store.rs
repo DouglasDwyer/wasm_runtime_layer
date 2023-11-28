@@ -12,8 +12,8 @@ use crate::backend::{
 };
 
 use super::{
-    func::FuncInner, table::TableInner, DropResource, Engine, Func, Global, GlobalInner, Instance,
-    InstanceInner, Memory, MemoryInner, Table,
+    func::FuncInner, memory::MemoryInner, table::TableInner, DropResource, Engine, Func, Global,
+    GlobalInner, Instance, InstanceInner, Memory, Table,
 };
 
 /// Owns all the data for the wasm module

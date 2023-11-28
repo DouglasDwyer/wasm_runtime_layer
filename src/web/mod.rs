@@ -1,10 +1,12 @@
 pub(crate) mod conversion;
 pub(crate) mod func;
+pub mod memory;
 pub(crate) mod module;
 mod store;
 pub(crate) mod table;
 
 pub use func::Func;
+pub use memory::Memory;
 pub use store::{Store, StoreContext, StoreContextMut, StoreInner};
 pub use table::Table;
 
@@ -128,35 +130,6 @@ pub(crate) struct InstanceInner {
 #[derive(Debug, Clone)]
 pub struct Instance {
     pub(crate) id: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct Memory {
-    id: usize,
-}
-
-#[derive(Debug)]
-pub struct MemoryInner {
-    value: WebAssembly::Memory,
-}
-
-impl ToStoredJs for Memory {
-    type Repr = WebAssembly::Memory;
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Memory {
-        let memory = &store.memories[self.id];
-
-        memory.value.clone()
-    }
-}
-
-impl FromStoredJs for Memory {
-    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
-        let memory: &WebAssembly::Memory = value.dyn_ref()?;
-
-        Some(store.insert_memory(MemoryInner {
-            value: memory.clone(),
-        }))
-    }
 }
 
 #[derive(Debug)]

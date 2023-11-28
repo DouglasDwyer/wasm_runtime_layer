@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use js_sys::{JsString, Object, Reflect, Uint8Array, WebAssembly};
+use js_sys::{DataView, JsString, Object, Reflect, Uint8Array, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 
 use super::{
@@ -255,42 +255,6 @@ impl WasmExternRef<Engine> for ExternRef {
         &self,
         store: <Engine as WasmEngine>::StoreContext<'a, S>,
     ) -> anyhow::Result<Option<&'a T>> {
-        todo!()
-    }
-}
-
-impl WasmMemory<Engine> for Memory {
-    fn new(ctx: impl AsContextMut<Engine>, ty: crate::MemoryType) -> anyhow::Result<Self> {
-        todo!()
-    }
-
-    fn ty(&self, ctx: impl AsContext<Engine>) -> crate::MemoryType {
-        todo!()
-    }
-
-    fn grow(&self, ctx: impl AsContextMut<Engine>, additional: u32) -> anyhow::Result<u32> {
-        todo!()
-    }
-
-    fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
-        todo!()
-    }
-
-    fn read(
-        &self,
-        ctx: impl AsContext<Engine>,
-        offset: usize,
-        buffer: &mut [u8],
-    ) -> anyhow::Result<()> {
-        todo!()
-    }
-
-    fn write(
-        &self,
-        ctx: impl AsContextMut<Engine>,
-        offset: usize,
-        buffer: &[u8],
-    ) -> anyhow::Result<()> {
         todo!()
     }
 }
