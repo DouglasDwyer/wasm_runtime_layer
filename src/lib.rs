@@ -64,7 +64,7 @@ pub mod backend;
 pub mod web;
 
 use crate::backend::*;
-use anyhow::{Context, Result};
+use eyre::{Context, Result};
 use fxhash::*;
 use ref_cast::*;
 use smallvec::*;

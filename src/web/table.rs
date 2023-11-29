@@ -1,4 +1,4 @@
-use anyhow::Context;
+use eyre::Context;
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 
@@ -114,7 +114,7 @@ impl WasmTable<Engine> for Table {
         mut ctx: impl AsContextMut<Engine>,
         ty: TableType,
         init: Value<Engine>,
-    ) -> anyhow::Result<Self> {
+    ) -> eyre::Result<Self> {
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
         let table = TableInner {
@@ -140,7 +140,7 @@ impl WasmTable<Engine> for Table {
         mut ctx: impl AsContextMut<Engine>,
         delta: u32,
         init: Value<Engine>,
-    ) -> anyhow::Result<u32> {
+    ) -> eyre::Result<u32> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let table = &mut ctx.tables[self.id];
 
@@ -169,7 +169,7 @@ impl WasmTable<Engine> for Table {
         mut ctx: impl AsContextMut<Engine>,
         index: u32,
         value: Value<Engine>,
-    ) -> anyhow::Result<()> {
+    ) -> eyre::Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         // RA breaks on this and sees the wrong impl of `value.get`
         //
@@ -180,7 +180,7 @@ impl WasmTable<Engine> for Table {
 
         *values
             .get_mut(index as usize)
-            .ok_or_else(|| anyhow::anyhow!("invalid index"))? = value;
+            .ok_or_else(|| eyre::eyre!("invalid index"))? = value;
 
         Ok(())
     }

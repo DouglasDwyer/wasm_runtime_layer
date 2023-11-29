@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{bail, Context};
+use eyre::{bail, Context};
 use js_sys::{DataView, JsString, Object, Reflect, Uint8Array, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 
@@ -49,7 +49,7 @@ impl WasmInstance<Engine> for Instance {
         mut store: impl super::AsContextMut<Engine>,
         module: &Module,
         imports: &super::Imports<Engine>,
-    ) -> anyhow::Result<Self> {
+    ) -> eyre::Result<Self> {
         let _span = tracing::info_span!("Instance::new").entered();
         tracing::info!("Instance::new");
         let mut store: &mut StoreInner<_> = &mut *store.as_context_mut();
@@ -155,7 +155,7 @@ fn process_exports<T>(
     store: &mut StoreInner<T>,
     exports: JsValue,
     parsed: &ParsedModule,
-) -> anyhow::Result<HashMap<String, Extern<Engine>>> {
+) -> eyre::Result<HashMap<String, Extern<Engine>>> {
     let _span = tracing::info_span!("process_exports", ?exports).entered();
     if !exports.is_object() {
         bail!(
@@ -254,13 +254,13 @@ impl WasmExternRef<Engine> for ExternRef {
     fn downcast<'a, T: 'static, S: 'a>(
         &self,
         store: <Engine as WasmEngine>::StoreContext<'a, S>,
-    ) -> anyhow::Result<Option<&'a T>> {
+    ) -> eyre::Result<Option<&'a T>> {
         todo!()
     }
 }
 
 impl WasmModule<Engine> for Module {
-    fn new(engine: &Engine, mut stream: impl std::io::Read) -> anyhow::Result<Self> {
+    fn new(engine: &Engine, mut stream: impl std::io::Read) -> eyre::Result<Self> {
         let mut buf = Vec::new();
         stream
             .read_to_end(&mut buf)

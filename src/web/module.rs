@@ -50,7 +50,7 @@ pub struct ParsedModule {
     globals: Vec<GlobalType>,
 }
 
-pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
+pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
     tracing::debug!("parsing module\n{bytes:?}");
     let parser = wasmparser::Parser::new(0);
 
@@ -212,7 +212,7 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
             wasmparser::Payload::End(_) => {}
         }
 
-        anyhow::Ok(())
+        Ok(()) as eyre::Result<_>
     })?;
 
     tracing::info!(?imports, ?exports, "imports");
