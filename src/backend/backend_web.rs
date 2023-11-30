@@ -6,6 +6,7 @@ use std::{
 use eyre::{bail, Context};
 use js_sys::{DataView, JsString, Object, Reflect, Uint8Array, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
+use web_sys::console;
 
 use super::{
     AsContext, AsContextMut, Export, TableType, Value, WasmEngine, WasmExternRef, WasmInstance,
@@ -56,15 +57,17 @@ impl WasmInstance<Engine> for Instance {
 
         let instance;
         let parsed;
+        let imports_object;
+
         {
             let mut engine = store.engine.borrow_mut();
             tracing::info!(?module.id, "get module");
             let module = &mut engine.modules[module.id];
             parsed = module.parsed.clone();
 
-            let imports_object = create_imports_object(store, imports);
+            imports_object = create_imports_object(store, imports);
 
-            tracing::info!(?imports_object, "instantiate module");
+            tracing::info!(?imports_object, ?imports, "instantiate module");
             // TODO: async instantiation, possibly through a `.ready().await` call on the returned
             // module
             // let instance = WebAssembly::instantiate_module(&module.module, &imports);
@@ -76,6 +79,8 @@ impl WasmInstance<Engine> for Instance {
         };
 
         let js_exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
+        web_sys::console::log_1(&imports_object);
+        web_sys::console::log_1(&js_exports);
         let exports = process_exports(&mut store, js_exports, &parsed)?;
 
         let instance = InstanceInner { instance, exports };
@@ -370,14 +375,13 @@ impl FromStoredJs for Value<Engine> {
             "object" => {
                 if value.is_instance_of::<js_sys::Function>() {
                     tracing::info!("function");
-                    if value.is_null() {
-                        Value::FuncRef(None)
-                    } else {
-                        tracing::error!(
-                            "conversion to a function outside of a module not permitted"
-                        );
-                        return None;
-                    }
+                    tracing::error!("conversion to a function outside of a module not permitted");
+                    return None;
+                    // if value.is_null() {
+                    //     Value::FuncRef(None)
+                    // } else {
+                    //     return None;
+                    // }
                 } else {
                     tracing::error!(?value, "Unsupported value type");
                     return None;

@@ -50,6 +50,15 @@ pub struct ParsedModule {
     globals: Vec<GlobalType>,
 }
 
+pub fn fmt_items<T: std::fmt::Debug>(items: impl IntoIterator<Item = T>) -> String {
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(i, v)| format!("{i:>4}: {v:?}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
     tracing::debug!("parsing module\n{bytes:?}");
     let parser = wasmparser::Parser::new(0);
@@ -64,6 +73,7 @@ pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
     let mut tables = Vec::new();
     // let mut tags = Vec::new();
     let mut globals = Vec::new();
+    let mut elements = Vec::new();
 
     parser.parse_all(bytes).try_for_each(|payload| {
         match payload? {
@@ -91,8 +101,8 @@ pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
 
                     types.push(ty);
                 }
-                tracing::info!("pushed {} types", types.len());
-                tracing::debug!("\n{}", types.iter().enumerate().map(|(i, v)| format!("{i:>4}: {v:?}")).collect::<Vec<_>>().join("\n"));
+                // tracing::info!("pushed {} types", types.len());
+                tracing::debug!("\n{}", fmt_items(&types));
             }
             wasmparser::Payload::FunctionSection(section) => {
                 for type_index in section {
@@ -103,8 +113,8 @@ pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
                     functions.push(ty.clone());
                 }
 
-                tracing::info!("pushed {} functions", functions.len());
-                tracing::debug!("\n{}", functions.iter().enumerate().map(|(i, v)| format!("{i:>4}: {v:?}")).collect::<Vec<_>>().join("\n"));
+                // tracing::info!("pushed {} functions", functions.len());
+                tracing::debug!("\n{}", fmt_items(&functions));
             }
             wasmparser::Payload::TableSection(section) => {
                 for table in section {
@@ -148,7 +158,6 @@ pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
                     let import = import?;
                     let ty = match import.ty {
                         wasmparser::TypeRef::Func(index) => {
-                            tracing::info!(?index, "found function index");
                             let sig = types[index as usize].clone();
                             functions.push(sig.clone());
                             ExternType::Func(sig)
@@ -163,9 +172,10 @@ pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
                         wasmparser::TypeRef::Tag(_) => todo!(),
                     };
 
-                    tracing::info!(module = import.module, name = import.name, ?ty, "imports");
+                    // tracing::info!(module = import.module, name = import.name, ?ty, "imports");
                     imports.insert(import.name.to_string(), ty);
                 }
+                tracing::debug!("imports: \n{}", fmt_items(&imports));
             }
             wasmparser::Payload::ExportSection(section) => {
                 for export in section {
@@ -182,12 +192,18 @@ pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
                         wasmparser::ExternalKind::Tag => todo!(),
                     };
 
-                    tracing::info!(name = export.name, ?ty, "export");
+                    // tracing::info!(name = export.name, ?ty, "export");
                     exports.insert(export.name.to_string(), ty);
                 }
+                tracing::debug!("exports \n{}", fmt_items(&exports));
             }
             wasmparser::Payload::StartSection { func, range } => {}
-            wasmparser::Payload::ElementSection(_) => {}
+            wasmparser::Payload::ElementSection(section) => {
+                for (element) in section {
+                    let element = element?;
+                    tracing::debug!("element");
+                }
+            }
             wasmparser::Payload::DataCountSection { count, range } => {}
             wasmparser::Payload::DataSection(_) => {}
             wasmparser::Payload::CodeSectionStart { count, range, size } => {}

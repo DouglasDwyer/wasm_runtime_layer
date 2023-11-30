@@ -135,7 +135,7 @@ impl WasmFunc<Engine> for Func {
         let mut func = {
             let name = name.clone();
 
-            move |mut store: StoreContextMut<T>, args: &[Value<Engine>]| -> eyre::Result<Array> {
+            move |mut store: StoreContextMut<T>, args: &[Value<Engine>]| -> eyre::Result<JsValue> {
                 let span = tracing::debug_span!("call_host", name, ?args);
                 span.in_scope(|| match func(store.as_context_mut(), args, &mut res) {
                     Ok(v) => {
@@ -148,10 +148,15 @@ impl WasmFunc<Engine> for Func {
                     }
                 })?;
 
-                let results = res
-                    .iter()
-                    .map(|v| v.to_stored_js(&&*store))
-                    .collect::<Array>();
+                let results = match &res[..] {
+                    [] => JsValue::UNDEFINED,
+                    [res] => res.to_stored_js(&&*store),
+                    res => res
+                        .iter()
+                        .map(|v| v.to_stored_js(&&*store))
+                        .collect::<Array>()
+                        .into(),
+                };
 
                 Ok(results) as eyre::Result<_>
             }

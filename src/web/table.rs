@@ -1,6 +1,7 @@
 use eyre::Context;
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
+use web_sys::console;
 
 use crate::{
     backend::{AsContext, AsContextMut, Value, WasmTable},
@@ -27,7 +28,7 @@ impl std::fmt::Debug for TableInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TableInner")
             .field("ty", &self.ty)
-            .field("values", &self.values.len())
+            .field("values", &self.values)
             .finish_non_exhaustive()
     }
 }
@@ -35,6 +36,7 @@ impl std::fmt::Debug for TableInner {
 impl FromStoredJs for Table {
     fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
         let _span = tracing::info_span!("Table::from_js", ?value).entered();
+        console::log_1(&value);
         let table = value.dyn_ref::<WebAssembly::Table>()?;
 
         // let mut ty = crate::ValueType::FuncRef;
@@ -58,14 +60,18 @@ impl FromStoredJs for Table {
             })
             .collect();
 
-        Some(store.insert_table(TableInner {
+        let inner = TableInner {
             ty: TableType {
                 element: ValueType::FuncRef,
                 min: values.len() as _,
                 max: Some(values.len() as _),
             },
             values,
-        }))
+        };
+
+        tracing::info!(?inner, "created table from js");
+
+        Some(store.insert_table(inner))
     }
 }
 
@@ -73,24 +79,27 @@ impl ToStoredJs for Table {
     type Repr = WebAssembly::Table;
 
     fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Table {
-        let table = &store.tables[self.id];
+        let inner = &store.tables[self.id];
+
+        assert_eq!(inner.ty.min, inner.values.len() as u32);
+        let _span = tracing::info_span!("Table::to_stored_js", id=?self.id, ?inner).entered();
         let desc = Object::new();
 
-        Reflect::set(&desc, &"element".into(), &table.ty.element.to_js().into()).unwrap();
+        Reflect::set(&desc, &"element".into(), &inner.ty.element.to_js().into()).unwrap();
 
-        Reflect::set(&desc, &"initial".into(), &table.ty.min.into()).unwrap();
+        Reflect::set(&desc, &"initial".into(), &inner.ty.min.into()).unwrap();
 
-        if let Some(max) = table.ty.max {
+        if let Some(max) = inner.ty.max {
             Reflect::set(&desc, &"maximum".into(), &max.into()).unwrap();
         }
 
-        tracing::info!(?table, ?desc, "Table::to_js");
+        tracing::info!(?inner, ?desc, "Table::to_js");
         let res = WebAssembly::Table::new(&desc)
             .map_err(JsErrorMsg::from)
-            .context("Failed to create table")
+            .context("Failed to create inner")
             .unwrap();
 
-        for (i, value) in table.values.iter().enumerate() {
+        for (i, value) in inner.values.iter().enumerate() {
             let value = value.to_stored_js(&store);
             res.set(
                 i as u32,
@@ -115,6 +124,7 @@ impl WasmTable<Engine> for Table {
         ty: TableType,
         init: Value<Engine>,
     ) -> eyre::Result<Self> {
+        let _span = tracing::info_span!("Table::new", ?ty, ?init).entered();
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
         let table = TableInner {

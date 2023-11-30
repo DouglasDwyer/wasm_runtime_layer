@@ -755,7 +755,7 @@ impl<E: WasmEngine> From<&Value> for crate::backend::Value<E> {
             Value::I64(i64) => Self::I64(*i64),
             Value::F32(f32) => Self::F32(*f32),
             Value::F64(f64) => Self::F64(*f64),
-            Value::FuncRef(None) => Self::FuncRef(None),
+            Value::FuncRef(None) => unreachable!(),
             Value::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
             Value::ExternRef(None) => Self::ExternRef(None),
             Value::ExternRef(Some(extern_ref)) => {
