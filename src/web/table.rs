@@ -20,7 +20,8 @@ pub struct Table {
 }
 
 pub(crate) struct TableInner {
-    values: Vec<Value<Engine>>,
+    table: WebAssembly::Table,
+    // values: Vec<Value<Engine>>,
     ty: TableType,
 }
 
@@ -28,46 +29,45 @@ impl std::fmt::Debug for TableInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TableInner")
             .field("ty", &self.ty)
-            .field("values", &self.values)
+            .field("inner", &self.table)
             .finish_non_exhaustive()
     }
 }
 
-impl FromStoredJs for Table {
-    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+impl Table {
+    pub(crate) fn from_stored_js<T>(
+        store: &mut StoreInner<T>,
+        value: JsValue,
+        ty: TableType,
+    ) -> Option<Self> {
         let _span = tracing::info_span!("Table::from_js", ?value).entered();
         console::log_1(&value);
-        let table = value.dyn_ref::<WebAssembly::Table>()?;
+        let table = value.dyn_into::<WebAssembly::Table>().ok()?;
 
         // let mut ty = crate::ValueType::FuncRef;
+        assert!(table.length() >= ty.min);
+        assert_eq!(ty.element, ValueType::FuncRef);
 
-        let values: Vec<_> = (0..table.length())
-            .map(|i| {
-                let value = table.get(i).unwrap();
+        // let values: Vec<_> = (0..table.length())
+        //     .map(|i| {
+        //         let value = table.get(i).unwrap();
 
-                // TODO: allow the api to accept table of ExternRef and not just Function.
-                //
-                // See: <https://github.com/rustwasm/wasm-bindgen/issues/3708>
-                if value.is_null() {
-                    Value::FuncRef(None)
-                } else {
-                    Value::FuncRef(Some(
-                        todo!(),
-                        // Func::from_stored_js(store, value.into())
-                        //     .expect("table value is not a function"),
-                    ))
-                }
-            })
-            .collect();
+        //         // TODO: allow the api to accept table of ExternRef and not just Function.
+        //         //
+        //         // See: <https://github.com/rustwasm/wasm-bindgen/issues/3708>
+        //         if value.is_null() {
+        //             Value::FuncRef(None)
+        //         } else {
+        //             Value::FuncRef(Some(
+        //                 todo!(),
+        //                 // Func::from_stored_js(store, value.into())
+        //                 //     .expect("table value is not a function"),
+        //             ))
+        //         }
+        //     })
+        //     .collect();
 
-        let inner = TableInner {
-            ty: TableType {
-                element: ValueType::FuncRef,
-                min: values.len() as _,
-                max: Some(values.len() as _),
-            },
-            values,
-        };
+        let inner = TableInner { ty, table };
 
         tracing::info!(?inner, "created table from js");
 
@@ -80,41 +80,7 @@ impl ToStoredJs for Table {
 
     fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Table {
         let inner = &store.tables[self.id];
-
-        assert_eq!(inner.ty.min, inner.values.len() as u32);
-        let _span = tracing::info_span!("Table::to_stored_js", id=?self.id, ?inner).entered();
-        let desc = Object::new();
-
-        Reflect::set(&desc, &"element".into(), &inner.ty.element.to_js().into()).unwrap();
-
-        Reflect::set(&desc, &"initial".into(), &inner.ty.min.into()).unwrap();
-
-        if let Some(max) = inner.ty.max {
-            Reflect::set(&desc, &"maximum".into(), &max.into()).unwrap();
-        }
-
-        tracing::info!(?inner, ?desc, "Table::to_js");
-        let res = WebAssembly::Table::new(&desc)
-            .map_err(JsErrorMsg::from)
-            .context("Failed to create inner")
-            .unwrap();
-
-        for (i, value) in inner.values.iter().enumerate() {
-            let value = value.to_stored_js(&store);
-            res.set(
-                i as u32,
-                &value
-                    // Unchecked here to allow null functions.
-                    // `Table::set` should accept any JsValue according to MDN, but it currently
-                    // only accepts `Function`.
-                    //
-                    // See: <https://github.com/rustwasm/wasm-bindgen/issues/3708>
-                    .unchecked_into(),
-            )
-            .unwrap();
-        }
-
-        res
+        inner.table.clone()
     }
 }
 
@@ -127,9 +93,27 @@ impl WasmTable<Engine> for Table {
         let _span = tracing::info_span!("Table::new", ?ty, ?init).entered();
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
+        let desc = Object::new();
+        Reflect::set(
+            &desc,
+            &"element".into(),
+            &ty.element.to_js_descriptor().into(),
+        );
+        Reflect::set(&desc, &"initial".into(), &ty.min.into());
+        if let Some(max) = ty.max {
+            Reflect::set(&desc, &"initial".into(), &max.into());
+        }
+
+        let table = WebAssembly::Table::new(&desc).map_err(JsErrorMsg::from)?;
+
+        for i in 0..ty.min {
+            table.set(i, init.to_stored_js(&ctx).unchecked_ref());
+        }
+
         let table = TableInner {
-            values: std::iter::repeat(init).take(ty.min as usize).collect(),
+            // values: std::iter::repeat(init).take(ty.min as usize).collect(),
             ty,
+            table,
         };
 
         let table = ctx.insert_table(table);
@@ -142,7 +126,7 @@ impl WasmTable<Engine> for Table {
     }
     /// Returns the current size of the table.
     fn size(&self, ctx: impl AsContext<Engine>) -> u32 {
-        ctx.as_context().tables[self.id].values.len() as _
+        ctx.as_context().tables[self.id].table.length()
     }
     /// Grows the table by the given amount of elements.
     fn grow(
@@ -152,26 +136,35 @@ impl WasmTable<Engine> for Table {
         init: Value<Engine>,
     ) -> eyre::Result<u32> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
-        let table = &mut ctx.tables[self.id];
+        let init = init.to_stored_js(&ctx);
+        let init = init.unchecked_ref();
 
-        let old_size = table.values.len() as _;
-        table
-            .values
-            .extend(std::iter::repeat(init).take(delta as _));
+        let inner = &mut ctx.tables[self.id];
+        let old_len = inner.table.grow(delta).map_err(JsErrorMsg::from)?;
 
-        Ok(old_size)
+        for i in old_len..(old_len + delta) {
+            inner.table.set(i, init);
+        }
+
+        // let old_size = table.values.len() as _;
+        // table
+        //     .values
+        //     .extend(std::iter::repeat(init).take(delta as _));
+
+        Ok(old_len)
     }
     /// Returns the table element value at `index`.
     fn get(&self, ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
         let ctx: &StoreInner<_> = &*ctx.as_context();
+        todo!()
         // RA breaks on this and sees the wrong impl of `value.get`
         //
         // Explicitely telling it that this is a slice of Value<Engine> causes it to see the
         // slice::get method rather than the WasmTable::get function, which shouldn't happen and is
         // a bug since &[]` does not implement `WasmTable`, but alas...
-        let values: &[Value<Engine>] = &ctx.tables[self.id].values;
+        // let values: &[Value<Engine>] = &ctx.tables[self.id].table;
 
-        values.get(index as usize).cloned()
+        // values.get(index as usize).cloned()
     }
     /// Sets the value of this table at `index`.
     fn set(
@@ -186,11 +179,15 @@ impl WasmTable<Engine> for Table {
         // Explicitely telling it that this is a slice of Value<Engine> causes it to see the
         // slice::get method rather than the WasmTable::get function, which shouldn't happen and is
         // a bug since &[]` does not implement `WasmTable`, but alas...
-        let values: &mut [Value<Engine>] = &mut ctx.tables[self.id].values;
+        let value = value.to_stored_js(ctx);
 
-        *values
-            .get_mut(index as usize)
-            .ok_or_else(|| eyre::eyre!("invalid index"))? = value;
+        let inner: &mut TableInner = &mut ctx.tables[self.id];
+
+        inner
+            .table
+            .set(index, value.unchecked_ref())
+            .map_err(JsErrorMsg::from)
+            .wrap_err("Invalid index")?;
 
         Ok(())
     }

@@ -4,6 +4,7 @@ pub mod memory;
 pub(crate) mod module;
 mod store;
 pub(crate) mod table;
+// mod element;
 
 pub use func::Func;
 pub use memory::Memory;

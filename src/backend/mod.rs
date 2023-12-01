@@ -326,7 +326,8 @@ impl<E: WasmEngine> std::fmt::Debug for Imports<E> {
         }
 
         f.debug_struct("Imports")
-            .field("map", &SecretMap::new(self.map.len()))
+            // .field("map", &SecretMap::new(self.map.len()))
+            .field("map", &self.map.keys().collect::<Vec<_>>())
             .finish()
     }
 }

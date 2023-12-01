@@ -51,7 +51,7 @@ impl WasmInstance<Engine> for Instance {
         module: &Module,
         imports: &super::Imports<Engine>,
     ) -> eyre::Result<Self> {
-        let _span = tracing::info_span!("Instance::new").entered();
+        let _span = tracing::info_span!("Instance::new", ?imports, ?module).entered();
         tracing::info!("Instance::new");
         let mut store: &mut StoreInner<_> = &mut *store.as_context_mut();
 
@@ -121,7 +121,7 @@ impl WasmInstance<Engine> for Instance {
 }
 
 fn create_imports_object<T>(store: &StoreInner<T>, imports: &super::Imports<Engine>) -> Object {
-    let _span = tracing::info_span!("process_imports").entered();
+    let _span = tracing::debug_span!("process_imports").entered();
 
     let imports = imports
         .into_iter()
@@ -211,7 +211,6 @@ fn process_exports<T>(
                 }
                 "object" => {
                     if value.is_instance_of::<js_sys::Function>() {
-                        tracing::info!("function");
                         let func = Func::from_exported_function(
                             &name,
                             store,
@@ -222,8 +221,12 @@ fn process_exports<T>(
 
                         Extern::Func(func)
                     } else if value.is_instance_of::<WebAssembly::Table>() {
-                        tracing::info!(?value, "export table");
-                        let table = Table::from_stored_js(store, value).unwrap();
+                        let table = Table::from_stored_js(
+                            store,
+                            value,
+                            signature.try_into_table().unwrap(),
+                        )
+                        .unwrap();
 
                         Extern::Table(table)
                     } else if value.is_instance_of::<WebAssembly::Memory>() {
@@ -437,8 +440,6 @@ impl ExternType {
 impl ToStoredJs for Extern<Engine> {
     type Repr = JsValue;
     fn to_stored_js<T>(&self, store: &StoreInner<T>) -> JsValue {
-        let _span = tracing::info_span!("Extern::to_stored_js", ?self).entered();
-
         match self {
             Extern::Global(v) => v.to_stored_js(store).into(),
             Extern::Table(v) => v.to_stored_js(store).into(),

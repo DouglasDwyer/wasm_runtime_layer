@@ -343,6 +343,14 @@ impl ExternType {
             Err(self)
         }
     }
+
+    pub fn try_into_table(self) -> Result<TableType, Self> {
+        if let Self::Table(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
 }
 
 /// A descriptor for an exported WebAssembly value of a [`Module`].

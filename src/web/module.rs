@@ -73,7 +73,7 @@ pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
     let mut tables = Vec::new();
     // let mut tags = Vec::new();
     let mut globals = Vec::new();
-    let mut elements = Vec::new();
+    // let mut elements = Vec::new();
 
     parser.parse_all(bytes).try_for_each(|payload| {
         match payload? {
@@ -200,8 +200,22 @@ pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
             wasmparser::Payload::StartSection { func, range } => {}
             wasmparser::Payload::ElementSection(section) => {
                 for (element) in section {
-                    let element = element?;
-                    tracing::debug!("element");
+                    let element  = element?;
+                    match element.kind {
+                        wasmparser::ElementKind::Passive => tracing::debug!("passive"),
+                        wasmparser::ElementKind::Active { table_index, offset_expr } => tracing::debug!("active" ),
+                        wasmparser::ElementKind::Declared => tracing::debug!("declared"),
+                    }
+
+                    // tracing::debug!("element");
+                    // match element.items {
+                    //     wasmparser::ElementItems::Functions(v) => {
+                    //         for v in v {}
+
+                    //         todo!("element functions")
+                    //     },
+                    //     wasmparser::ElementItems::Expressions(_, _) => todo!("element expr"),
+                    // }
                 }
             }
             wasmparser::Payload::DataCountSection { count, range } => {}
