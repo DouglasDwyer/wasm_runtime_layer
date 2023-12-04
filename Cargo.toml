@@ -10,7 +10,7 @@ Compatibility interface for WASM runtimes.
 """
 
 [dependencies]
-eyre = "0.6"
+anyhow = { version = "1.0.71", default-features = false, features = [ "std" ] }
 fxhash = { version = "0.2.1", default-features = false }
 ref-cast = { version = "1.0.19", default-features = false }
 smallvec = { version = "1.11.0", default-features = false }

@@ -1,4 +1,4 @@
-use eyre::Context;
+use anyhow::Context;
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::console;
@@ -89,7 +89,7 @@ impl WasmTable<Engine> for Table {
         mut ctx: impl AsContextMut<Engine>,
         ty: TableType,
         init: Value<Engine>,
-    ) -> eyre::Result<Self> {
+    ) -> anyhow::Result<Self> {
         let _span = tracing::info_span!("Table::new", ?ty, ?init).entered();
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
@@ -134,7 +134,7 @@ impl WasmTable<Engine> for Table {
         mut ctx: impl AsContextMut<Engine>,
         delta: u32,
         init: Value<Engine>,
-    ) -> eyre::Result<u32> {
+    ) -> anyhow::Result<u32> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let init = init.to_stored_js(&ctx);
         let init = init.unchecked_ref();
@@ -172,7 +172,7 @@ impl WasmTable<Engine> for Table {
         mut ctx: impl AsContextMut<Engine>,
         index: u32,
         value: Value<Engine>,
-    ) -> eyre::Result<()> {
+    ) -> anyhow::Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         // RA breaks on this and sees the wrong impl of `value.get`
         //
@@ -187,7 +187,7 @@ impl WasmTable<Engine> for Table {
             .table
             .set(index, value.unchecked_ref())
             .map_err(JsErrorMsg::from)
-            .wrap_err("Invalid index")?;
+            .context("Invalid index")?;
 
         Ok(())
     }

@@ -59,7 +59,7 @@ pub fn fmt_items<T: std::fmt::Debug>(items: impl IntoIterator<Item = T>) -> Stri
         .join("\n")
 }
 
-pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
+pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
     tracing::debug!("parsing module\n{bytes:?}");
     let parser = wasmparser::Parser::new(0);
 
@@ -242,7 +242,7 @@ pub fn parse_module(bytes: &[u8]) -> eyre::Result<ParsedModule> {
             wasmparser::Payload::End(_) => {}
         }
 
-        Ok(()) as eyre::Result<_>
+        anyhow::Ok(())
     })?;
 
     tracing::info!(?imports, ?exports, "imports");

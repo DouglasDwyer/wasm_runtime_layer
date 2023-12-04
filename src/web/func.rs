@@ -1,4 +1,4 @@
-use eyre::{Context, ContextCompat};
+use anyhow::Context;
 use js_sys::{Array, Function};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 
@@ -102,7 +102,7 @@ impl WasmFunc<Engine> for Func {
         func: impl 'static
             + Send
             + Sync
-            + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> eyre::Result<()>,
+            + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> anyhow::Result<()>,
     ) -> Self {
         let name = name.to_string();
 
@@ -135,7 +135,7 @@ impl WasmFunc<Engine> for Func {
         let mut func = {
             let name = name.clone();
 
-            move |mut store: StoreContextMut<T>, args: &[Value<Engine>]| -> eyre::Result<JsValue> {
+            move |mut store: StoreContextMut<T>, args: &[Value<Engine>]| {
                 let span = tracing::debug_span!("call_host", name, ?args);
                 span.in_scope(|| match func(store.as_context_mut(), args, &mut res) {
                     Ok(v) => {
@@ -158,7 +158,7 @@ impl WasmFunc<Engine> for Func {
                         .into(),
                 };
 
-                Ok(results) as eyre::Result<_>
+                anyhow::Ok(results)
             }
         };
 
@@ -198,12 +198,11 @@ impl WasmFunc<Engine> for Func {
         mut ctx: impl AsContextMut<Engine>,
         args: &[Value<Engine>],
         results: &mut [Value<Engine>],
-    ) -> eyre::Result<()> {
+    ) -> anyhow::Result<()> {
         let mut ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let inner: &FuncInner = &ctx.funcs[self.id];
 
-        let name = &inner.name;
-        let _span = tracing::debug_span!("call_guest", ?args, name).entered();
+        let _span = tracing::debug_span!("call_guest", ?args, name = inner.name).entered();
 
         let args = args.iter().map(|v| v.to_stored_js(&ctx)).collect::<Array>();
 
@@ -211,8 +210,7 @@ impl WasmFunc<Engine> for Func {
             .func
             .apply(&JsValue::UNDEFINED, &args)
             .map_err(JsErrorMsg::from)
-            .wrap_err_with(|| eyre::eyre!("Failed to call guest function {name}"))
-            .unwrap();
+            .context("Guest function threw an error")?;
 
         tracing::debug!(?res,ty=?inner.ty);
 
@@ -224,7 +222,7 @@ impl WasmFunc<Engine> for Func {
             // single
             &[ty] => {
                 results[0] = Value::from_js_typed(&mut ctx, &ty, res)
-                    .wrap_err("Failed to convert return value")?;
+                    .context("Failed to convert return value")?;
             }
             // multi-value
             _ => {

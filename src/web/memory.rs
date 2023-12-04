@@ -47,7 +47,7 @@ impl FromStoredJs for Memory {
 }
 
 impl WasmMemory<Engine> for Memory {
-    fn new(mut ctx: impl AsContextMut<Engine>, ty: crate::MemoryType) -> eyre::Result<Self> {
+    fn new(mut ctx: impl AsContextMut<Engine>, ty: crate::MemoryType) -> anyhow::Result<Self> {
         let desc = Object::new();
         Reflect::set(&desc, &"intial".into(), &ty.initial.into()).unwrap();
         if let Some(maximum) = ty.maximum {
@@ -65,7 +65,7 @@ impl WasmMemory<Engine> for Memory {
         todo!()
     }
 
-    fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> eyre::Result<u32> {
+    fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> anyhow::Result<u32> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
 
         let inner = &mut ctx.memories[self.id];
@@ -81,7 +81,7 @@ impl WasmMemory<Engine> for Memory {
         ctx: impl AsContext<Engine>,
         offset: usize,
         buffer: &mut [u8],
-    ) -> eyre::Result<()> {
+    ) -> anyhow::Result<()> {
         let ctx: &StoreInner<_> = &*ctx.as_context();
         let memory = &ctx.memories[self.id];
 
@@ -97,7 +97,7 @@ impl WasmMemory<Engine> for Memory {
         mut ctx: impl AsContextMut<Engine>,
         offset: usize,
         buffer: &[u8],
-    ) -> eyre::Result<()> {
+    ) -> anyhow::Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
 
         let inner = &mut ctx.memories[self.id];

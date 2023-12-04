@@ -549,9 +549,9 @@ impl From<ExternType> for wasmi::ExternType {
     }
 }
 
-/// Represents a `wasmi` error derived from `eyre`.
+/// Represents a `wasmi` error derived from `anyhow`.
 #[derive(Debug)]
-struct HostError(eyre::Error);
+struct HostError(anyhow::Error);
 
 impl std::fmt::Display for HostError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

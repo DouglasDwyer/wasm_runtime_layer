@@ -213,7 +213,7 @@ impl WasmGlobal<Engine> for Global {
         todo!()
     }
 
-    fn set(&self, ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> eyre::Result<()> {
+    fn set(&self, ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> anyhow::Result<()> {
         todo!()
     }
 

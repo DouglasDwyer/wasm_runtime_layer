@@ -72,8 +72,7 @@ impl WasmFunc<wasmtime::Engine> for wasmtime::Func {
                     wasmtime::AsContextMut::as_context_mut(&mut caller),
                     &input,
                     &mut output,
-                )
-                .unwrap();
+                )?;
 
                 for (i, result) in output.iter().enumerate() {
                     results[i] = result.into();
@@ -100,8 +99,7 @@ impl WasmFunc<wasmtime::Engine> for wasmtime::Func {
         let mut output = ArgumentVec::with_capacity(results.len());
         output.extend(results.iter().map(Into::into));
 
-        self.call(ctx.as_context_mut(), &input[..], &mut output[..])
-            .unwrap();
+        self.call(ctx.as_context_mut(), &input[..], &mut output[..])?;
 
         for (i, result) in output.iter().enumerate() {
             results[i] = result.into();
@@ -169,12 +167,10 @@ impl WasmInstance<wasmtime::Engine> for InstanceData {
         let mut linker = wasmtime::Linker::new(store.as_context().engine());
 
         for ((module, name), imp) in imports {
-            linker
-                .define(store.as_context(), &module, &name, imp)
-                .unwrap();
+            linker.define(store.as_context(), &module, &name, imp)?;
         }
 
-        let res = linker.instantiate(store.as_context_mut(), module).unwrap();
+        let res = linker.instantiate(store.as_context_mut(), module)?;
         let exports = Arc::new(
             res.exports(store.as_context_mut())
                 .map(|x| {
@@ -261,7 +257,7 @@ impl WasmModule<wasmtime::Engine> for wasmtime::Module {
     fn new(engine: &wasmtime::Engine, mut stream: impl std::io::Read) -> Result<Self> {
         let mut buf = Vec::default();
         stream.read_to_end(&mut buf)?;
-        Ok(wasmtime::Module::from_binary(engine, &buf).unwrap())
+        Ok(wasmtime::Module::from_binary(engine, &buf)?)
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
