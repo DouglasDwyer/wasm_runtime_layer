@@ -1,8 +1,6 @@
 use std::{
-    cell::{Ref, RefCell, RefMut},
     mem,
     ops::{Deref, DerefMut},
-    rc::Rc,
 };
 
 use slab::Slab;
@@ -19,6 +17,11 @@ use super::{
 /// Owns all the data for the wasm module
 ///
 /// Can be cheaply cloned
+///
+/// The data is retained through the lifetime of the store, and no GC will collect data from
+/// no-longer used modules. It is as such recommended to have the stores lifetime correspond to its
+/// modules, and not repeatedly create and drop modules within an existing store, but rather create
+/// a new store for it, to avoid unbounded memory use.
 pub struct Store<T> {
     /// The internal store is kept behind a pointer.
     ///
@@ -56,12 +59,14 @@ pub struct Store<T> {
 }
 
 impl<T> Store<T> {
+    /// Creates a new store from the inner box
     fn from_inner(inner: Box<StoreInner<T>>) -> Self {
         Self {
             inner: Box::into_raw(inner),
         }
     }
 
+    /// Returns a borrow of the store
     pub(crate) fn get(&self) -> StoreContext<T> {
         // Safety:
         //
@@ -70,17 +75,13 @@ impl<T> Store<T> {
         StoreContext::from_ref(inner)
     }
 
+    /// Returns a mutable borrow of the store
     pub(crate) fn get_mut(&mut self) -> StoreContextMut<T> {
         // Safety:
         //
         // &mut self
         let inner = unsafe { &mut *self.inner };
         StoreContextMut::from_ref(inner)
-    }
-
-    /// Returns a pointer to the inner store
-    pub(crate) fn as_ptr(&mut self) -> *mut StoreInner<T> {
-        self.inner
     }
 }
 
@@ -155,14 +156,19 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Store<T> {
 
 #[derive(Debug)]
 pub struct StoreInner<T> {
+    /// The engine used
     pub(crate) engine: Engine,
-    // Instances are not Send + Sync
+    /// Instances are not Send + Sync
     pub(crate) instances: Slab<InstanceInner>,
-    // Modules are not Send + Sync
+    /// Modules are not Send + Sync
     pub(crate) funcs: Slab<FuncInner>,
+    /// Globals
     pub(crate) globals: Slab<GlobalInner>,
+    /// Tables
     pub(crate) tables: Slab<TableInner>,
+    /// Guest memories
     pub(crate) memories: Slab<MemoryInner>,
+    /// The user data
     pub(crate) data: T,
 
     /// **Note**: append ONLY. No resource must be dropped or removed from this vector as long as
@@ -174,6 +180,7 @@ pub struct StoreInner<T> {
 }
 
 impl<T> StoreInner<T> {
+    /// Inserts a new function and returns its id
     pub(crate) fn insert_func(&mut self, func: FuncInner) -> Func {
         tracing::info!(?func, "insert_func");
         Func {
@@ -181,18 +188,21 @@ impl<T> StoreInner<T> {
         }
     }
 
+    /// Inserts a new global and returns its id
     pub(crate) fn insert_global(&mut self, global: GlobalInner) -> Global {
         Global {
             id: self.globals.insert(global),
         }
     }
 
+    /// Inserts a new table and returns its id
     pub(crate) fn insert_table(&mut self, table: TableInner) -> Table {
         Table {
             id: self.tables.insert(table),
         }
     }
 
+    /// Inserts a new instance and returns its id
     pub(crate) fn insert_instance(&mut self, instance: InstanceInner) -> Instance {
         tracing::info!(?instance, "insert_instance");
 
@@ -201,6 +211,7 @@ impl<T> StoreInner<T> {
         }
     }
 
+    /// Inserts a new guest memory and returns its id
     pub(crate) fn insert_memory(&mut self, memory: MemoryInner) -> Memory {
         tracing::info!(?memory, "insert_memory");
 
@@ -232,7 +243,7 @@ impl<'a, T> Deref for StoreContext<'a, T> {
     type Target = StoreInner<T>;
 
     fn deref(&self) -> &Self::Target {
-        &*self.store
+        self.store
     }
 }
 

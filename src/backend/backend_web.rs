@@ -4,13 +4,11 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use js_sys::{DataView, JsString, Object, Reflect, Uint8Array, WebAssembly};
+use js_sys::{JsString, Object, Reflect, Uint8Array, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::console;
 
 use super::{
-    AsContext, AsContextMut, Export, TableType, Value, WasmEngine, WasmExternRef, WasmInstance,
-    WasmMemory, WasmModule,
+    AsContextMut, Export, TableType, Value, WasmEngine, WasmExternRef, WasmInstance, WasmModule,
 };
 use crate::{
     backend::Extern,
@@ -53,7 +51,7 @@ impl WasmInstance<Engine> for Instance {
     ) -> anyhow::Result<Self> {
         let _span = tracing::info_span!("Instance::new", ?imports, ?module).entered();
         tracing::info!("Instance::new");
-        let mut store: &mut StoreInner<_> = &mut *store.as_context_mut();
+        let store: &mut StoreInner<_> = &mut *store.as_context_mut();
 
         let instance;
         let parsed;
@@ -73,15 +71,15 @@ impl WasmInstance<Engine> for Instance {
             // let instance = WebAssembly::instantiate_module(&module.module, &imports);
             instance = WebAssembly::Instance::new(&module.module, &imports_object)
                 .map_err(JsErrorMsg::from)
-                .with_context(|| format!("Failed to instantiate module"))?;
+                .with_context(|| "Failed to instantiate module")?;
 
             tracing::info!(?instance, "created instance");
         };
 
+        let _span = tracing::info_span!("get_exports").entered();
+
         let js_exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
-        web_sys::console::log_1(&imports_object);
-        web_sys::console::log_1(&js_exports);
-        let exports = process_exports(&mut store, js_exports, &parsed)?;
+        let exports = process_exports(store, js_exports, &parsed)?;
 
         let instance = InstanceInner { instance, exports };
 
@@ -120,6 +118,7 @@ impl WasmInstance<Engine> for Instance {
     }
 }
 
+/// Creates the js import map
 fn create_imports_object<T>(store: &StoreInner<T>, imports: &super::Imports<Engine>) -> Object {
     let _span = tracing::debug_span!("process_imports").entered();
 
@@ -144,13 +143,13 @@ fn create_imports_object<T>(store: &StoreInner<T>, imports: &super::Imports<Engi
             let obj = Object::new();
 
             for (name, value) in imports {
-                Reflect::set(&obj, &name, value).unwrap();
+                Reflect::set(&obj, name, value).unwrap();
             }
 
             (module, obj)
         })
         .fold(Object::new(), |acc, (m, imports)| {
-            Reflect::set(&acc, &(&*m).into(), &imports).unwrap();
+            Reflect::set(&acc, &(m).into(), &imports).unwrap();
             acc
         })
 }
@@ -183,7 +182,7 @@ fn process_exports<T>(
                 .as_string()
                 .expect("name is string");
 
-            let value: JsValue = Reflect::get_u32(&entry, 1).unwrap().into();
+            let value: JsValue = Reflect::get_u32(&entry, 1).unwrap();
 
             let _span = tracing::info_span!("process_export", ?name, ?value).entered();
 
@@ -252,6 +251,7 @@ fn process_exports<T>(
 }
 
 #[derive(Debug, Clone)]
+/// Extern host reference type
 pub struct ExternRef {}
 
 impl WasmExternRef<Engine> for ExternRef {
@@ -291,14 +291,14 @@ impl WasmModule<Engine> for Module {
                 let kind = Reflect::get(&import, &"kind".into()).unwrap();
 
                 Import {
-                    module: module.as_string().expect("module is string").into(),
+                    module: module.as_string().expect("module is string"),
                     kind: ExternType::from_import(
                         kind.as_string().expect("kind is string").as_str(),
                         name.as_string().expect("name is string").as_str(),
                         &parsed,
                     )
                     .expect("invalid kind"),
-                    name: name.as_string().expect("name is string").into(),
+                    name: name.as_string().expect("name is string"),
                 }
             })
             .collect();
@@ -411,7 +411,10 @@ impl ExternType {
         }
     }
 
-    pub fn from_import(kind: &str, name: &str, parsed: &ParsedModule) -> Option<Self> {
+    /// Creates an extern type from the given import.
+    ///
+    /// Uses the parsed module to infer the signature of an inferred function
+    pub(crate) fn from_import(kind: &str, name: &str, parsed: &ParsedModule) -> Option<Self> {
         let signature = parsed.imports.get(name)?;
 
         match kind {
@@ -450,7 +453,10 @@ impl ToStoredJs for Extern<Engine> {
 }
 
 impl ValueType {
-    pub(crate) fn to_js_descriptor(&self) -> &str {
+    /// Converts this type into the canonical ABI kind
+    ///
+    /// See: <https://webassembly.github.io/spec/js-api/#globals>
+    pub(crate) fn as_js_descriptor(&self) -> &str {
         match self {
             Self::I32 => "i32",
             Self::I64 => "i64",
@@ -459,7 +465,6 @@ impl ValueType {
             Self::FuncRef => "anyfunc",
             Self::ExternRef => "externref",
         }
-        .into()
     }
 }
 
@@ -469,7 +474,7 @@ impl ToJs for ValueType {
     ///
     /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
     fn to_js(&self) -> JsString {
-        self.to_js_descriptor().into()
+        self.as_js_descriptor().into()
     }
 }
 
@@ -498,6 +503,7 @@ impl FromJs for ValueType {
 }
 
 impl Value<Engine> {
+    /// Convert the JsValue into a Value of the supplied type
     pub(crate) fn from_js_typed<T>(
         store: &mut StoreInner<T>,
         ty: &ValueType,
@@ -510,6 +516,18 @@ impl Value<Engine> {
             ValueType::F64 => todo!(),
             ValueType::FuncRef => todo!(),
             ValueType::ExternRef => todo!(),
+        }
+    }
+
+    /// Convert a value to its type
+    pub(crate) fn ty(&self) -> ValueType {
+        match self {
+            Value::I32(_) => ValueType::I32,
+            Value::I64(_) => ValueType::I64,
+            Value::F32(_) => ValueType::F32,
+            Value::F64(_) => ValueType::F64,
+            Value::FuncRef(_) => ValueType::FuncRef,
+            Value::ExternRef(_) => ValueType::ExternRef,
         }
     }
 }

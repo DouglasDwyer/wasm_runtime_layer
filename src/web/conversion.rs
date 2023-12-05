@@ -68,6 +68,7 @@ where
     }
 }
 
+/// Generate conversion from numeral types to and from JavaScript
 macro_rules! conv_number {
     ($ty: ty) => {
         impl ToJs for $ty {
@@ -119,7 +120,7 @@ impl FromJs for bool {
     where
         Self: Sized,
     {
-        Some(value.as_bool()?)
+        value.as_bool()
     }
 }
 

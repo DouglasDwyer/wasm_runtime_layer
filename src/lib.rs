@@ -64,14 +64,12 @@ pub mod backend;
 pub mod web;
 
 use crate::backend::*;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use fxhash::*;
 use ref_cast::*;
 use smallvec::*;
 use std::any::*;
 use std::marker::*;
-use std::ops::Deref;
-use std::ops::DerefMut;
 use std::sync::*;
 
 /// The default amount of arguments and return values for which to allocate

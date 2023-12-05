@@ -13,14 +13,18 @@ use super::{conversion::ToStoredJs, Engine, StoreContextMut, StoreInner};
 /// A bound function
 #[derive(Debug, Clone)]
 pub struct Func {
+    /// Index
     pub(crate) id: usize,
 }
 
 /// Internal represenation of [`Func`]
 #[derive(Debug)]
 pub(crate) struct FuncInner {
+    /// The inner Js function
     pub(crate) func: Function,
+    /// The function signature
     ty: FuncType,
+    /// Debug label
     name: String,
 }
 
@@ -50,12 +54,14 @@ impl Func {
     }
 }
 
+/// Converst any repeated argument to `JsValue`
 macro_rules! to_ty {
     ($v: ident) => {
         JsValue
     };
 }
 
+/// Creates a variable argument wrapper around a host function
 macro_rules! func_wrapper {
     ($store: ident, $func_ty: ident, $func: ident, $($idx: tt => $ident: ident),*) => {{
         let ty = $func_ty.clone();
@@ -150,10 +156,10 @@ impl WasmFunc<Engine> for Func {
 
                 let results = match &res[..] {
                     [] => JsValue::UNDEFINED,
-                    [res] => res.to_stored_js(&&*store),
+                    [res] => res.to_stored_js(&*store),
                     res => res
                         .iter()
-                        .map(|v| v.to_stored_js(&&*store))
+                        .map(|v| v.to_stored_js(&*store))
                         .collect::<Array>()
                         .into(),
                 };
@@ -199,12 +205,12 @@ impl WasmFunc<Engine> for Func {
         args: &[Value<Engine>],
         results: &mut [Value<Engine>],
     ) -> anyhow::Result<()> {
-        let mut ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
+        let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let inner: &FuncInner = &ctx.funcs[self.id];
 
         let _span = tracing::debug_span!("call_guest", ?args, name = inner.name).entered();
 
-        let args = args.iter().map(|v| v.to_stored_js(&ctx)).collect::<Array>();
+        let args = args.iter().map(|v| v.to_stored_js(ctx)).collect::<Array>();
 
         let res = inner
             .func
@@ -221,7 +227,7 @@ impl WasmFunc<Engine> for Func {
             [] => {}
             // single
             &[ty] => {
-                results[0] = Value::from_js_typed(&mut ctx, &ty, res)
+                results[0] = Value::from_js_typed(ctx, &ty, res)
                     .context("Failed to convert return value")?;
             }
             // multi-value

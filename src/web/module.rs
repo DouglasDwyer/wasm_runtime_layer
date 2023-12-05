@@ -40,27 +40,16 @@ impl From<&wasmparser::TableType> for TableType {
 }
 
 #[derive(Debug)]
-pub struct ParsedModule {
-    pub imports: HashMap<String, ExternType>,
-    pub exports: HashMap<String, ExternType>,
-    types: Vec<FuncType>,
-    functions: Vec<FuncType>,
-    memories: Vec<MemoryType>,
-    tables: Vec<TableType>,
-    globals: Vec<GlobalType>,
+/// A parsed core module with imports and exports
+pub(crate) struct ParsedModule {
+    /// Import signatures
+    pub(crate) imports: HashMap<String, ExternType>,
+    /// Export signatures
+    pub(crate) exports: HashMap<String, ExternType>,
 }
 
-pub fn fmt_items<T: std::fmt::Debug>(items: impl IntoIterator<Item = T>) -> String {
-    items
-        .into_iter()
-        .enumerate()
-        .map(|(i, v)| format!("{i:>4}: {v:?}"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
-    tracing::debug!("parsing module\n{bytes:?}");
+/// Parses a module from bytes and extracts import and export signatures
+pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
     let parser = wasmparser::Parser::new(0);
 
     let mut imports = HashMap::new();
@@ -71,9 +60,7 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
     let mut functions = Vec::new();
     let mut memories = Vec::new();
     let mut tables = Vec::new();
-    // let mut tags = Vec::new();
     let mut globals = Vec::new();
-    // let mut elements = Vec::new();
 
     parser.parse_all(bytes).try_for_each(|payload| {
         match payload? {
@@ -101,8 +88,6 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
 
                     types.push(ty);
                 }
-                // tracing::info!("pushed {} types", types.len());
-                tracing::debug!("\n{}", fmt_items(&types));
             }
             wasmparser::Payload::FunctionSection(section) => {
                 for type_index in section {
@@ -112,9 +97,6 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
 
                     functions.push(ty.clone());
                 }
-
-                // tracing::info!("pushed {} functions", functions.len());
-                tracing::debug!("\n{}", fmt_items(&functions));
             }
             wasmparser::Payload::TableSection(section) => {
                 for table in section {
@@ -172,10 +154,8 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                         wasmparser::TypeRef::Tag(_) => todo!(),
                     };
 
-                    // tracing::info!(module = import.module, name = import.name, ?ty, "imports");
                     imports.insert(import.name.to_string(), ty);
                 }
-                tracing::debug!("imports: \n{}", fmt_items(&imports));
             }
             wasmparser::Payload::ExportSection(section) => {
                 for export in section {
@@ -192,30 +172,18 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                         wasmparser::ExternalKind::Tag => todo!(),
                     };
 
-                    // tracing::info!(name = export.name, ?ty, "export");
                     exports.insert(export.name.to_string(), ty);
                 }
-                tracing::debug!("exports \n{}", fmt_items(&exports));
             }
             wasmparser::Payload::StartSection { func, range } => {}
             wasmparser::Payload::ElementSection(section) => {
-                for (element) in section {
+                for element in section {
                     let element  = element?;
                     match element.kind {
                         wasmparser::ElementKind::Passive => tracing::debug!("passive"),
                         wasmparser::ElementKind::Active { table_index, offset_expr } => tracing::debug!("active" ),
                         wasmparser::ElementKind::Declared => tracing::debug!("declared"),
                     }
-
-                    // tracing::debug!("element");
-                    // match element.items {
-                    //     wasmparser::ElementItems::Functions(v) => {
-                    //         for v in v {}
-
-                    //         todo!("element functions")
-                    //     },
-                    //     wasmparser::ElementItems::Expressions(_, _) => todo!("element expr"),
-                    // }
                 }
             }
             wasmparser::Payload::DataCountSection { count, range } => {}
@@ -250,10 +218,10 @@ pub fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
     Ok(ParsedModule {
         imports,
         exports,
-        types,
-        functions,
-        memories,
-        tables,
-        globals,
+        // types,
+        // functions,
+        // memories,
+        // tables,
+        // globals,
     })
 }
