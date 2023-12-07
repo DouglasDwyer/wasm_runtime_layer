@@ -1,7 +1,6 @@
 use anyhow::Context;
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::console;
 
 use crate::{
     backend::{AsContext, AsContextMut, Value, WasmTable},

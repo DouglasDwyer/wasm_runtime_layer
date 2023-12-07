@@ -69,6 +69,7 @@ use fxhash::*;
 use ref_cast::*;
 use smallvec::*;
 use std::any::*;
+use std::fmt::Display;
 use std::marker::*;
 use std::sync::*;
 
@@ -94,6 +95,19 @@ pub enum ValueType {
     FuncRef,
     /// An optional external reference.
     ExternRef,
+}
+
+impl Display for ValueType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueType::I32 => write!(f, "i32"),
+            ValueType::I64 => write!(f, "i64"),
+            ValueType::F32 => write!(f, "f32"),
+            ValueType::F64 => write!(f, "f64"),
+            ValueType::FuncRef => write!(f, "funcref"),
+            ValueType::ExternRef => write!(f, "externref"),
+        }
+    }
 }
 
 /// The type of a global variable.
@@ -224,6 +238,39 @@ impl std::fmt::Debug for FuncType {
             .field("params", &self.params())
             .field("results", &self.results())
             .finish()
+    }
+}
+
+impl Display for FuncType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let params = self.params();
+        let results = self.results();
+
+        let mut first = true;
+
+        write!(f, "func(")?;
+        for param in params {
+            if !first {
+                write!(f, ", ")?;
+            } else {
+                first = false;
+            }
+            write!(f, "{param}")?;
+        }
+
+        let mut first = true;
+
+        write!(f, ")")?;
+        for result in results {
+            if !first {
+                first = false;
+                write!(f, ", ")?;
+            } else {
+                write!(f, " -> ")?;
+            }
+            write!(f, "{result}")?;
+        }
+        Ok(())
     }
 }
 

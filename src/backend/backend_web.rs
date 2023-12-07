@@ -160,7 +160,7 @@ fn process_exports<T>(
     exports: JsValue,
     parsed: &ParsedModule,
 ) -> anyhow::Result<HashMap<String, Extern<Engine>>> {
-    let _span = tracing::info_span!("process_exports", ?exports).entered();
+    let _span = tracing::debug_span!("process_exports", ?exports).entered();
     if !exports.is_object() {
         bail!(
             "WebAssembly exports must be an object, got '{:?}' instead",
@@ -184,7 +184,7 @@ fn process_exports<T>(
 
             let value: JsValue = Reflect::get_u32(&entry, 1).unwrap();
 
-            let _span = tracing::info_span!("process_export", ?name, ?value).entered();
+            let _span = tracing::debug_span!("process_export", ?name, ?value).entered();
 
             let ty = value.js_typeof();
 
@@ -196,8 +196,6 @@ fn process_exports<T>(
                 .expect("typeof returns a string")[..]
             {
                 "function" => {
-                    tracing::info!("function");
-
                     let func = Func::from_exported_function(
                         &name,
                         store,

@@ -75,12 +75,10 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
 
                     let ty = match ty.types() {
                         [subtype] => match &subtype.composite_type {
-                            wasmparser::CompositeType::Func(func_type) => {
-                                FuncType::new(
-                                    func_type.params().iter().map(ValueType::from),
-                                    func_type.results().iter().map(ValueType::from),
-                                )
-                            }
+                            wasmparser::CompositeType::Func(func_type) => FuncType::new(
+                                func_type.params().iter().map(ValueType::from),
+                                func_type.results().iter().map(ValueType::from),
+                            ),
                             _ => unreachable!(),
                         },
                         _ => unimplemented!(),
@@ -148,7 +146,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                             // functions.push(sig.clone());
                             tables.push((&ty).into());
                             ExternType::Table((&ty).into())
-                        },
+                        }
                         wasmparser::TypeRef::Memory(_) => todo!(),
                         wasmparser::TypeRef::Global(_) => todo!(),
                         wasmparser::TypeRef::Tag(_) => todo!(),
@@ -163,7 +161,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     let index = export.index as usize;
                     let ty = match export.kind {
                         wasmparser::ExternalKind::Func => {
-                            tracing::info!(?export.name, ?index, f=?functions[index], "found exported function index");
+                            // tracing::info!(?export.name, ?index, f=?functions[index],   "found exported function index");
                             ExternType::Func(functions[index].clone())
                         }
                         wasmparser::ExternalKind::Table => ExternType::Table(tables[index]),
@@ -178,10 +176,13 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
             wasmparser::Payload::StartSection { func, range } => {}
             wasmparser::Payload::ElementSection(section) => {
                 for element in section {
-                    let element  = element?;
+                    let element = element?;
                     match element.kind {
                         wasmparser::ElementKind::Passive => tracing::debug!("passive"),
-                        wasmparser::ElementKind::Active { table_index, offset_expr } => tracing::debug!("active" ),
+                        wasmparser::ElementKind::Active {
+                            table_index,
+                            offset_expr,
+                        } => tracing::debug!("active"),
                         wasmparser::ElementKind::Declared => tracing::debug!("declared"),
                     }
                 }

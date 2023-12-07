@@ -207,8 +207,9 @@ impl WasmFunc<Engine> for Func {
     ) -> anyhow::Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let inner: &FuncInner = &ctx.funcs[self.id];
+        let ty = inner.ty.clone();
 
-        let _span = tracing::debug_span!("call_guest", ?args, name = inner.name).entered();
+        let _span = tracing::debug_span!("call_guest", ?args, name = inner.name, %ty).entered();
 
         let args = args.iter().map(|v| v.to_stored_js(ctx)).collect::<Array>();
 
@@ -221,8 +222,8 @@ impl WasmFunc<Engine> for Func {
         tracing::debug!(?res,ty=?inner.ty);
 
         // https://webassembly.github.io/spec/js-api/#exported-function-exotic-objects
-        assert_eq!(inner.ty.results().len(), results.len());
-        match inner.ty.results() {
+        assert_eq!(ty.results().len(), results.len());
+        match ty.results() {
             // void
             [] => {}
             // single
@@ -231,9 +232,18 @@ impl WasmFunc<Engine> for Func {
                     .context("Failed to convert return value")?;
             }
             // multi-value
-            _ => {
-                tracing::error!("multi-value returns are not supported");
-                todo!()
+            tys => {
+                for ((src, ty), dst) in res
+                    .dyn_into::<Array>()
+                    .map_err(JsErrorMsg::from)
+                    .context("Failed to convert return value to array")?
+                    .iter()
+                    .zip(tys)
+                    .zip(results)
+                {
+                    *dst = Value::from_js_typed(ctx, ty, src.clone())
+                        .context("Failed to convert return value")?;
+                }
             }
         }
 

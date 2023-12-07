@@ -182,7 +182,6 @@ pub struct StoreInner<T> {
 impl<T> StoreInner<T> {
     /// Inserts a new function and returns its id
     pub(crate) fn insert_func(&mut self, func: FuncInner) -> Func {
-        tracing::info!(?func, "insert_func");
         Func {
             id: self.funcs.insert(func),
         }
@@ -204,8 +203,6 @@ impl<T> StoreInner<T> {
 
     /// Inserts a new instance and returns its id
     pub(crate) fn insert_instance(&mut self, instance: InstanceInner) -> Instance {
-        tracing::info!(?instance, "insert_instance");
-
         Instance {
             id: self.instances.insert(instance),
         }
@@ -213,8 +210,6 @@ impl<T> StoreInner<T> {
 
     /// Inserts a new guest memory and returns its id
     pub(crate) fn insert_memory(&mut self, memory: MemoryInner) -> Memory {
-        tracing::info!(?memory, "insert_memory");
-
         Memory {
             id: self.memories.insert(memory),
         }
