@@ -9,17 +9,22 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
+/// WebAssembly memory
 pub struct Memory {
+    /// The id of the memory in the store
     pub id: usize,
 }
 
 #[derive(Debug)]
-pub struct MemoryInner {
+/// Holds the inner state of the memory
+pub(crate) struct MemoryInner {
+    /// The memory value
     pub value: WebAssembly::Memory,
 }
 
 impl MemoryInner {
-    pub fn as_uint8array(&self, offset: u32, len: u32) -> Uint8Array {
+    /// Returns a `Uint8Array` view of the memory
+    pub(crate) fn as_uint8array(&self, offset: u32, len: u32) -> Uint8Array {
         let buffer = self.value.buffer();
         let buffer = buffer.dyn_ref::<ArrayBuffer>().unwrap();
 

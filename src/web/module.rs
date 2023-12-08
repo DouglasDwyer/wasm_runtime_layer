@@ -130,7 +130,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                 for tag in section {
                     let tag = tag?;
 
-                    tracing::info!(?tag, "tag");
+                    tracing::trace!(?tag, "tag");
                 }
             }
             wasmparser::Payload::ImportSection(section) => {
@@ -161,7 +161,6 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     let index = export.index as usize;
                     let ty = match export.kind {
                         wasmparser::ExternalKind::Func => {
-                            // tracing::info!(?export.name, ?index, f=?functions[index],   "found exported function index");
                             ExternType::Func(functions[index].clone())
                         }
                         wasmparser::ExternalKind::Table => ExternType::Table(tables[index]),
@@ -214,15 +213,5 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
         anyhow::Ok(())
     })?;
 
-    tracing::info!(?imports, ?exports, "imports");
-
-    Ok(ParsedModule {
-        imports,
-        exports,
-        // types,
-        // functions,
-        // memories,
-        // tables,
-        // globals,
-    })
+    Ok(ParsedModule { imports, exports })
 }

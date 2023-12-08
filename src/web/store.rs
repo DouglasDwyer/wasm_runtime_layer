@@ -155,6 +155,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Store<T> {
 }
 
 #[derive(Debug)]
+/// Holds the inner state of the store
 pub struct StoreInner<T> {
     /// The engine used
     pub(crate) engine: Engine,
@@ -229,6 +230,7 @@ pub struct StoreContext<'a, T: 'a> {
 }
 
 impl<'a, T: 'a> StoreContext<'a, T> {
+    /// Provides a store context from a reference
     pub fn from_ref(store: &'a StoreInner<T>) -> Self {
         Self { store }
     }
@@ -249,11 +251,13 @@ pub struct StoreContextMut<'a, T: 'a> {
 }
 
 impl<'a, T: 'a> StoreContextMut<'a, T> {
-    pub fn as_ptr(&mut self) -> *mut StoreInner<T> {
+    /// Returns a pointer to the inner store
+    pub(crate) fn as_ptr(&mut self) -> *mut StoreInner<T> {
         self.store as *mut _
     }
 
-    pub fn from_ref(store: &'a mut StoreInner<T>) -> Self {
+    /// Provides a mutable store context from a reference
+    pub(crate) fn from_ref(store: &'a mut StoreInner<T>) -> Self {
         Self { store }
     }
 }

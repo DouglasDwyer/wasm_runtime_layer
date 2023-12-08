@@ -49,8 +49,7 @@ impl WasmInstance<Engine> for Instance {
         module: &Module,
         imports: &super::Imports<Engine>,
     ) -> anyhow::Result<Self> {
-        let _span = tracing::info_span!("Instance::new", ?imports, ?module).entered();
-        tracing::info!("Instance::new");
+        let _span = tracing::debug_span!("Instance::new").entered();
         let store: &mut StoreInner<_> = &mut *store.as_context_mut();
 
         let instance;
@@ -59,24 +58,20 @@ impl WasmInstance<Engine> for Instance {
 
         {
             let mut engine = store.engine.borrow_mut();
-            tracing::info!(?module.id, "get module");
             let module = &mut engine.modules[module.id];
             parsed = module.parsed.clone();
 
             imports_object = create_imports_object(store, imports);
 
-            tracing::info!(?imports_object, ?imports, "instantiate module");
             // TODO: async instantiation, possibly through a `.ready().await` call on the returned
             // module
             // let instance = WebAssembly::instantiate_module(&module.module, &imports);
             instance = WebAssembly::Instance::new(&module.module, &imports_object)
                 .map_err(JsErrorMsg::from)
                 .with_context(|| "Failed to instantiate module")?;
-
-            tracing::info!(?instance, "created instance");
         };
 
-        let _span = tracing::info_span!("get_exports").entered();
+        let _span = tracing::debug_span!("get_exports").entered();
 
         let js_exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
         let exports = process_exports(store, js_exports, &parsed)?;
@@ -125,10 +120,10 @@ fn create_imports_object<T>(store: &StoreInner<T>, imports: &super::Imports<Engi
     let imports = imports
         .into_iter()
         .map(|((module, name), imp)| {
-            tracing::debug!(?module, ?name, ?imp, "import");
+            tracing::trace!(?module, ?name, ?imp, "import");
             let js = imp.to_stored_js(store);
 
-            tracing::debug!(module, name, "export");
+            tracing::trace!(module, name, "export");
 
             (module, (JsString::from(&*name), js))
         })
@@ -154,7 +149,7 @@ fn create_imports_object<T>(store: &StoreInner<T>, imports: &super::Imports<Engi
         })
 }
 
-/// Processes a wasm module's exports into a rust side hashmap
+/// Processes a wasm module's exports into a hashmap
 fn process_exports<T>(
     store: &mut StoreInner<T>,
     exports: JsValue,
@@ -184,7 +179,7 @@ fn process_exports<T>(
 
             let value: JsValue = Reflect::get_u32(&entry, 1).unwrap();
 
-            let _span = tracing::debug_span!("process_export", ?name, ?value).entered();
+            let _span = tracing::trace_span!("process_export", ?name, ?value).entered();
 
             let ty = value.js_typeof();
 
@@ -231,7 +226,12 @@ fn process_exports<T>(
 
                         Extern::Memory(memory)
                     } else if value.is_instance_of::<WebAssembly::Global>() {
-                        let global = Global::from_stored_js(store, value).unwrap();
+                        let global = Global::from_exported_global(
+                            store,
+                            value,
+                            signature.try_into_global().unwrap(),
+                        )
+                        .unwrap();
 
                         Extern::Global(global)
                     } else {
@@ -283,7 +283,6 @@ impl WasmModule<Engine> for Module {
         let imports: Vec<_> = imports
             .into_iter()
             .map(|import| {
-                tracing::info!(?import);
                 let module = Reflect::get(&import, &"module".into()).unwrap();
                 let name = Reflect::get(&import, &"name".into()).unwrap();
                 let kind = Reflect::get(&import, &"kind".into()).unwrap();
@@ -301,16 +300,12 @@ impl WasmModule<Engine> for Module {
             })
             .collect();
 
-        tracing::info!(?imports, "module imports");
-
         let module = ModuleInner {
             module,
             parsed: Arc::new(parsed),
         };
 
         let module = engine.borrow_mut().insert_module(module, imports);
-
-        tracing::info!(?module, "created module");
 
         Ok(module)
     }
@@ -357,7 +352,6 @@ impl FromStoredJs for Value<Engine> {
     ///
     /// Returns `None` if the value can not be represented
     fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
-        tracing::info!(?value, "from_js_value");
         let ty = &*value
             .js_typeof()
             .as_string()
@@ -375,14 +369,8 @@ impl FromStoredJs for Value<Engine> {
             // An instance of a WebAssembly.* class or null
             "object" => {
                 if value.is_instance_of::<js_sys::Function>() {
-                    tracing::info!("function");
                     tracing::error!("conversion to a function outside of a module not permitted");
                     return None;
-                    // if value.is_null() {
-                    //     Value::FuncRef(None)
-                    // } else {
-                    //     return None;
-                    // }
                 } else {
                     tracing::error!(?value, "Unsupported value type");
                     return None;
@@ -509,11 +497,15 @@ impl Value<Engine> {
     ) -> Option<Value<Engine>> {
         match ty {
             ValueType::I32 => Some(Value::I32(i32::from_js(value)?)),
-            ValueType::I64 => todo!(),
+            ValueType::I64 => Some(Value::I64(i64::from_js(value)?)),
             ValueType::F32 => Some(Value::F32(f32::from_js(value)?)),
-            ValueType::F64 => todo!(),
-            ValueType::FuncRef => todo!(),
-            ValueType::ExternRef => todo!(),
+            ValueType::F64 => Some(Value::F64(f64::from_js(value)?)),
+            ValueType::FuncRef | ValueType::ExternRef => {
+                tracing::error!(
+                    "conversion to a function or extern outside of a module not permitted"
+                );
+                None
+            }
         }
     }
 

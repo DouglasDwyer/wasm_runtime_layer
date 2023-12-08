@@ -37,6 +37,7 @@ impl ToStoredJs for Func {
 }
 
 impl Func {
+    /// Creates a new function from a JS value
     pub fn from_exported_function<T>(
         name: &str,
         store: &mut StoreInner<T>,

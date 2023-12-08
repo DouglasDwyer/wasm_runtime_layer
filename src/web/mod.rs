@@ -37,7 +37,7 @@ use crate::{
     ExternType, GlobalType,
 };
 
-use self::conversion::{FromStoredJs, ToStoredJs};
+use self::conversion::ToStoredJs;
 
 /// Helper to convert a `JsValue` into a proper error, as well as making it `Send` + `Sync`
 #[derive(Debug, Clone)]
@@ -200,6 +200,8 @@ pub struct Global {
 pub(crate) struct GlobalInner {
     /// The global value
     value: WebAssembly::Global,
+    /// The global type
+    ty: GlobalType,
 }
 
 impl ToStoredJs for Global {
@@ -212,12 +214,18 @@ impl ToStoredJs for Global {
     }
 }
 
-impl FromStoredJs for Global {
-    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+impl Global {
+    /// Creates a new global from a JS value
+    pub(crate) fn from_exported_global<T>(
+        store: &mut StoreInner<T>,
+        value: JsValue,
+        signature: GlobalType,
+    ) -> Option<Self> {
         let global: &WebAssembly::Global = value.dyn_ref()?;
 
         Some(store.insert_global(GlobalInner {
             value: global.clone(),
+            ty: signature,
         }))
     }
 }
@@ -225,6 +233,8 @@ impl FromStoredJs for Global {
 impl WasmGlobal<Engine> for Global {
     fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
         let mut ctx = ctx.as_context_mut();
+
+        let ty = GlobalType::new(value.ty(), mutable);
 
         let desc = Object::new();
 
@@ -240,21 +250,43 @@ impl WasmGlobal<Engine> for Global {
 
         let global = GlobalInner {
             value: WebAssembly::Global::new(&desc, &value).unwrap(),
+            ty,
         };
 
         ctx.insert_global(global)
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> GlobalType {
-        tracing::info!("Global::ty");
-        todo!()
+        ctx.as_context().globals[self.id].ty
     }
 
-    fn set(&self, ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> anyhow::Result<()> {
-        todo!()
+    fn set(
+        &self,
+        mut ctx: impl AsContextMut<Engine>,
+        new_value: Value<Engine>,
+    ) -> anyhow::Result<()> {
+        let store: &mut StoreInner<_> = &mut ctx.as_context_mut();
+
+        let value = &new_value.to_stored_js(store);
+
+        let inner = &mut store.globals[self.id];
+
+        if !inner.ty.mutable {
+            return Err(anyhow::anyhow!("Global is not mutable"));
+        }
+
+        inner.value.set_value(value);
+
+        Ok(())
     }
 
-    fn get(&self, ctx: impl AsContextMut<Engine>) -> Value<Engine> {
-        todo!()
+    fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Value<Engine> {
+        let store: &mut StoreInner<_> = &mut ctx.as_context_mut();
+        let inner = &mut store.globals[self.id];
+
+        let ty = inner.ty;
+        let value = inner.value.value();
+
+        Value::from_js_typed(store, &ty.content, value).unwrap()
     }
 }

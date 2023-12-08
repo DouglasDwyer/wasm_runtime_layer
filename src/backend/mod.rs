@@ -509,25 +509,3 @@ where
         <Self as crate::AsContextMut>::as_context_mut(self).inner
     }
 }
-
-// impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &T {
-//     type UserState = T::UserState;
-
-//     fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
-//         (*self).as_context()
-//     }
-// }
-
-// impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &mut T {
-//     type UserState = T::UserState;
-
-//     fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
-//         (**self).as_context()
-//     }
-// }
-
-// impl<T: AsContextMut<E>, E: WasmEngine> AsContextMut<E> for &mut T {
-//     fn as_context_mut(&mut self) -> E::StoreContextMut<'_, Self::UserState> {
-//         (*self).as_context_mut()
-//     }
-// }

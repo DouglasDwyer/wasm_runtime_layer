@@ -56,7 +56,6 @@ impl WasmFunc<wasmtime::Engine> for wasmtime::Func {
                 &mut [Value<wasmtime::Engine>],
             ) -> Result<()>,
     ) -> Self {
-        tracing::info!(?ty, "Func::new");
         wasmtime::Func::new(
             ctx.as_context_mut(),
             ty.into(),

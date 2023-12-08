@@ -10,12 +10,13 @@ use crate::{
 use super::{conversion::ToStoredJs, Engine, JsErrorMsg, StoreContextMut, StoreInner};
 
 #[derive(Debug, Clone)]
+/// WebAssembly table
 pub struct Table {
     /// The id of the table in the store
     pub(crate) id: usize,
 }
 
-/// Contains the WebAssembly table
+/// Holds the inner WebAssembly table
 pub(crate) struct TableInner {
     /// Table reference
     table: WebAssembly::Table,
@@ -39,15 +40,13 @@ impl Table {
         value: JsValue,
         ty: TableType,
     ) -> Option<Self> {
-        let _span = tracing::info_span!("Table::from_js", ?value).entered();
+        let _span = tracing::trace_span!("Table::from_js", ?value).entered();
         let table = value.dyn_into::<WebAssembly::Table>().ok()?;
 
         assert!(table.length() >= ty.min);
         assert_eq!(ty.element, ValueType::FuncRef);
 
         let inner = TableInner { ty, table };
-
-        tracing::info!(?inner, "created table from js");
 
         Some(store.insert_table(inner))
     }

@@ -1,8 +1,6 @@
-// #![deny(warnings)]
-
+#![deny(warnings)]
 #![allow(unused_variables)]
-// #![forbid(unsafe_code)]
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
 //! `wasm_runtime_layer` creates a thin abstraction over WebAssembly runtimes, allowing for backend-agnostic host code. The interface is based upon the `wasmtime` and `wasmi` crates, but may be implemented for any runtime.
@@ -60,6 +58,7 @@
 /// Provides traits for implementing runtime backends.
 pub mod backend;
 
+/// Provides a backend targeting the browser's WebAssembly API
 #[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
 pub mod web;
 
@@ -373,14 +372,7 @@ impl ExternType {
         }
     }
 
-    pub fn as_func(&self) -> Option<&FuncType> {
-        if let Self::Func(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-
+    /// Return the underlying [`FuncType`] if the types match
     pub fn try_into_func(self) -> std::result::Result<FuncType, Self> {
         if let Self::Func(v) = self {
             Ok(v)
@@ -389,8 +381,18 @@ impl ExternType {
         }
     }
 
+    /// Return the underlying [`TableType`] if the types match
     pub fn try_into_table(self) -> Result<TableType, Self> {
         if let Self::Table(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    /// Return the underlying [`GlobalType`] if the types match
+    pub fn try_into_global(self) -> Result<GlobalType, Self> {
+        if let Self::Global(v) = self {
             Ok(v)
         } else {
             Err(self)
@@ -808,7 +810,7 @@ impl<E: WasmEngine> From<&Value> for crate::backend::Value<E> {
             Value::I64(i64) => Self::I64(*i64),
             Value::F32(f32) => Self::F32(*f32),
             Value::F64(f64) => Self::F64(*f64),
-            Value::FuncRef(None) => unreachable!(),
+            Value::FuncRef(None) => Self::FuncRef(None),
             Value::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
             Value::ExternRef(None) => Self::ExternRef(None),
             Value::ExternRef(Some(extern_ref)) => {
@@ -1258,29 +1260,6 @@ impl<T: Any + Clone + Send + Sync> AnyCloneBoxed for T {
         Box::new(self.clone())
     }
 }
-
-// /// A trait used to get shared access to a [`Store`].
-// pub trait AsContext {
-//     type Target<'a>: Deref<Target = <Self::Engine as WasmEngine>::StoreContext<'a, Self::UserState>>;
-//     /// The engine type associated with the context.
-//     type Engine: WasmEngine;
-
-//     /// The user state associated with the [`Store`], aka the `T` in `Store<T>`.
-//     type UserState: 'static;
-
-//     /// Returns the store context that this type provides access to.
-//     fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine>;
-// }
-
-// /// A trait used to get exclusive access to a [`Store`].
-// pub trait AsContextMut: AsContext {
-//     type TargetMut<'a>: DerefMut<
-//         Target = <Self::Engine as WasmEngine>::StoreContextMut<'a, Self::UserState>,
-//     >;
-
-//     /// Returns the store context that this type provides access to.
-//     fn as_context_mut(&mut self) -> TargetMut
-// }
 
 /// A trait used to get shared access to a [`Store`].
 pub trait AsContext {
