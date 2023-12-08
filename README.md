@@ -53,4 +53,23 @@ assert_eq!(result[0], Value::I32(43));
 
 **backend_wasmtime** - Implements the `WasmEngine` trait for `wasmtime::Engine` instances.
 
+**backend_web** - Implement a wasm engine targeting the browser's WebAssembly API on `wasm32-unknown-unknown` targets.
+
 Contributions for additional backend implementations are welcome!
+
+## Testing
+
+To run the tests for wasmi and wasmtime, run:
+
+```sh
+cargo test --all-features
+```
+
+For the *wasm32* target, you can use the slower interpreter *wasmi*, or the native JIT accelerated browser backend.
+
+To test the backends, you need to install [`wasm-pack`](https://github.com/rustwasm/wasm-pack).
+
+You can then run:
+```sh
+wasm-pack test --node --features backend_wasmi,backend_web
+```

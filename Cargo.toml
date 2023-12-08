@@ -25,11 +25,15 @@ js-sys = { version = "0.3", optional = true }
 web-sys = { version = "0.3", features = ["Clipboard"], optional = true }
 wasmparser = { version = "0.118", default-features = false, optional = true }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-wabt = "0.10.0"
+[dev-dependencies]
+wat = "1.0"
+wasm-bindgen-test = "0.3"
 # wasm_runtime_layer = { path = ".", features = [ "backend_wasmi" ] }
 
 [features]
 backend_wasmi = [ "wasmi" ]
 backend_wasmtime = [ "wasmtime", "tracing" ]
 backend_web = [ "wasm-bindgen", "js-sys", "web-sys", "tracing", "slab", "wasmparser" ]
+
+[package.metadata."docs.rs"]
+all-features = true

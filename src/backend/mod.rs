@@ -12,8 +12,8 @@ mod backend_wasmi;
 /// The backend which provides support for the `wasmtime` runtime.
 mod backend_wasmtime;
 
-#[cfg(feature = "backend_web")]
-/// The backend which integrates with the the web browsers WebAssembly runtime.
+#[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
+/// The backend which integrates with the web browser's WebAssembly API.
 mod backend_web;
 
 /// Runtime representation of a value.

@@ -20,12 +20,12 @@
 //! let mut store = Store::new(&engine, ());
 //!
 //! // 2. Create modules and instances, similar to other runtimes
-//! let module_bin = wabt::wat2wasm(
+//! let module_bin = wat::parse_str(
 //!     r#"
 //! (module
 //! (type $t0 (func (param i32) (result i32)))
 //! (func $add_one (export "add_one") (type $t0) (param $p0 i32) (result i32)
-//!     get_local $p0
+//!     local.get $p0
 //!     i32.const 1
 //!     i32.add))
 //! "#,
@@ -60,7 +60,7 @@
 /// Provides traits for implementing runtime backends.
 pub mod backend;
 
-#[cfg(feature = "backend_web")]
+#[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
 pub mod web;
 
 use crate::backend::*;
@@ -1379,30 +1379,51 @@ impl<'a, T: 'a, E: WasmEngine> AsContextMut for StoreContextMut<'a, T, E> {
 }
 
 #[cfg(test)]
-#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use crate::*;
 
     #[test]
-    fn add_one() {
+    #[cfg(all(feature = "backend_wasmtime", not(target_arch = "wasm32")))]
+    fn test_wasmtime() {
         // 1. Instantiate a runtime
         let engine = Engine::new(wasmi::Engine::default());
-        let mut store = Store::new(&engine, ());
+        add_one(&engine)
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    #[cfg(feature = "backend_wasmi")]
+    fn test_wasmi() {
+        // 1. Instantiate a runtime
+        let engine = Engine::new(wasmi::Engine::default());
+        add_one(&engine)
+    }
+
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    #[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
+    fn test_web() {
+        // 1. Instantiate a runtime
+        let engine = Engine::new(web::Engine::default());
+        add_one(&engine)
+    }
+
+    fn add_one(engine: &Engine<impl WasmEngine>) {
+        let mut store = Store::new(engine, ());
 
         // 2. Create modules and instances, similar to other runtimes
-        let module_bin = wabt::wat2wasm(
+        let module_bin = wat::parse_str(
             r#"
         (module
         (type $t0 (func (param i32) (result i32)))
         (func $add_one (export "add_one") (type $t0) (param $p0 i32) (result i32)
-            get_local $p0
+            local.get $p0
             i32.const 1
             i32.add))
         "#,
         )
         .unwrap();
 
-        let module = Module::new(&engine, std::io::Cursor::new(&module_bin)).unwrap();
+        let module = Module::new(engine, std::io::Cursor::new(&module_bin)).unwrap();
         let instance = Instance::new(&mut store, &module, &crate::Imports::default()).unwrap();
 
         let add_one = instance
