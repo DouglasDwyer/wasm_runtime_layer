@@ -2,6 +2,7 @@
 pub(crate) mod conversion;
 /// Functions
 pub(crate) mod func;
+mod instance;
 /// Memories
 pub mod memory;
 /// WebAssembly modules
@@ -13,6 +14,7 @@ pub(crate) mod table;
 // mod element;
 
 pub use func::Func;
+pub use instance::Instance;
 pub use memory::Memory;
 pub use store::{Store, StoreContext, StoreContextMut, StoreInner};
 pub use table::Table;
@@ -21,7 +23,6 @@ use wasm_bindgen::{JsCast, JsValue};
 
 use std::{
     cell::{RefCell, RefMut},
-    collections::HashMap,
     error::Error,
     fmt::Display,
     rc::Rc,
@@ -136,25 +137,6 @@ impl EngineInner {
             imports,
         }
     }
-}
-
-/// Holds the inner state of the instance
-///
-/// Not *Send* + *Sync*, as all other Js values.
-#[derive(Debug)]
-pub(crate) struct InstanceInner {
-    /// The inner instance
-    #[allow(dead_code)]
-    pub(crate) instance: WebAssembly::Instance,
-    /// The exports of the instance
-    pub(crate) exports: HashMap<String, Extern<Engine>>,
-}
-
-/// A WebAssembly Instance.
-#[derive(Debug, Clone)]
-pub struct Instance {
-    /// The id of the instance
-    pub(crate) id: usize,
 }
 
 /// A WebAssembly Module.
