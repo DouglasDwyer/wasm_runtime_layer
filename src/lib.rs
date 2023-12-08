@@ -881,7 +881,6 @@ pub struct Func {
 impl Func {
     /// Creates a new [`Func`] with the given arguments.
     pub fn new<C: AsContextMut>(
-        name: &str,
         mut ctx: C,
         ty: FuncType,
         func: impl 'static
@@ -890,7 +889,6 @@ impl Func {
             + Fn(StoreContextMut<'_, C::UserState, C::Engine>, &[Value], &mut [Value]) -> Result<()>,
     ) -> Self {
         let raw_func = <<C::Engine as WasmEngine>::Func as WasmFunc<C::Engine>>::new(
-            name,
             ctx.as_context_mut().inner,
             ty,
             move |ctx, args, results| {

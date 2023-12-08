@@ -25,7 +25,7 @@ pub(crate) struct FuncInner {
     /// The function signature
     ty: FuncType,
     /// Debug label
-    name: String,
+    name: Option<String>,
 }
 
 impl ToStoredJs for Func {
@@ -49,7 +49,7 @@ impl Func {
             func,
             // TODO: we don't really know what the exported function's signature is
             ty: signature,
-            name: format!("guest.{name}"),
+            name: Some(format!("guest.{name}")),
         }))
     }
 }
@@ -102,7 +102,6 @@ macro_rules! func_wrapper {
 
 impl WasmFunc<Engine> for Func {
     fn new<T>(
-        name: &str,
         mut ctx: impl AsContextMut<Engine, UserState = T>,
         ty: FuncType,
         func: impl 'static
@@ -110,8 +109,6 @@ impl WasmFunc<Engine> for Func {
             + Sync
             + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> anyhow::Result<()>,
     ) -> Self {
-        let name = name.to_string();
-
         let _span = tracing::debug_span!("Func::new").entered();
 
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
@@ -139,10 +136,8 @@ impl WasmFunc<Engine> for Func {
         let mut res = vec![Value::I32(0); ty.results().len()];
 
         let mut func = {
-            let name = name.clone();
-
             move |mut store: StoreContextMut<T>, args: &[Value<Engine>]| {
-                let span = tracing::debug_span!("call_host", name, ?args);
+                let span = tracing::debug_span!("call_host", ?args);
                 span.in_scope(|| match func(store.as_context_mut(), args, &mut res) {
                     Ok(v) => {
                         tracing::debug!(?res, "result");
@@ -187,7 +182,11 @@ impl WasmFunc<Engine> for Func {
             }
         };
 
-        let func = ctx.insert_func(FuncInner { func, ty, name });
+        let func = ctx.insert_func(FuncInner {
+            func,
+            ty,
+            name: None,
+        });
 
         tracing::debug!(id = func.id, "func");
         ctx.insert_drop_resource(DropResource::new(resource));

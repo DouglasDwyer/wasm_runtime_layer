@@ -45,7 +45,6 @@ impl WasmExternRef<wasmtime::Engine> for wasmtime::ExternRef {
 
 impl WasmFunc<wasmtime::Engine> for wasmtime::Func {
     fn new<T>(
-        _name: &str,
         mut ctx: impl AsContextMut<wasmtime::Engine, UserState = T>,
         ty: FuncType,
         func: impl 'static

@@ -355,8 +355,6 @@ pub trait WasmExternRef<E: WasmEngine>: Clone + Sized + Send + Sync {
 pub trait WasmFunc<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new function with the given arguments.
     fn new<T>(
-        // The function name, used for debug purposes
-        name: &str,
         ctx: impl AsContextMut<E, UserState = T>,
         ty: FuncType,
         func: impl 'static
