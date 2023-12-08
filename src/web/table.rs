@@ -139,7 +139,7 @@ impl WasmTable<Engine> for Table {
     }
 
     /// Returns the table element value at `index`.
-    fn get(&self, ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
+    fn get(&self, _: impl AsContextMut<Engine>, _: u32) -> Option<Value<Engine>> {
         // It is not possible to determine the type or signature of the value.
         //
         // To enable this we would need to cache and intern a unique id for each value to be able

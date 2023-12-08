@@ -2,6 +2,7 @@
 pub(crate) mod conversion;
 /// Functions
 pub(crate) mod func;
+/// Instances
 mod instance;
 /// Memories
 pub mod memory;
@@ -16,6 +17,7 @@ pub(crate) mod table;
 pub use func::Func;
 pub use instance::Instance;
 pub use memory::Memory;
+pub use module::Module;
 pub use store::{Store, StoreContext, StoreContextMut, StoreInner};
 pub use table::Table;
 
@@ -34,11 +36,14 @@ use slab::Slab;
 use js_sys::{JsString, Object, Reflect, WebAssembly};
 
 use crate::{
-    backend::{AsContext, AsContextMut, Extern, Value, WasmGlobal},
-    ExternType, GlobalType,
+    backend::{AsContext, AsContextMut, Value, WasmGlobal},
+    GlobalType,
 };
 
-use self::conversion::ToStoredJs;
+use self::{
+    conversion::ToStoredJs,
+    module::{ModuleInner, ParsedModule},
+};
 
 /// Helper to convert a `JsValue` into a proper error, as well as making it `Send` + `Sync`
 #[derive(Debug, Clone)]
@@ -131,41 +136,12 @@ pub(crate) struct EngineInner {
 
 impl EngineInner {
     /// Inserts a new module into the engine
-    pub fn insert_module(&mut self, module: ModuleInner, imports: Vec<Import>) -> Module {
+    pub fn insert_module(&mut self, module: ModuleInner, parsed: Arc<ParsedModule>) -> Module {
         Module {
             id: self.modules.insert(module),
-            imports,
+            parsed,
         }
     }
-}
-
-/// A WebAssembly Module.
-#[derive(Debug)]
-pub(crate) struct ModuleInner {
-    /// The inner module
-    pub(crate) module: js_sys::WebAssembly::Module,
-    /// The parsed module, containing import and export signatures
-    pub(crate) parsed: Arc<module::ParsedModule>,
-}
-
-#[derive(Debug, Clone)]
-/// Describes an import
-pub(crate) struct Import {
-    /// The module in question
-    pub(crate) module: String,
-    /// The import identifier
-    pub(crate) name: String,
-    /// The imported type, complete with signature
-    pub(crate) kind: ExternType,
-}
-
-#[derive(Debug, Clone)]
-/// A WebAssembly Module.
-pub struct Module {
-    /// The id of the module
-    pub(crate) id: usize,
-    /// The imports of the module
-    pub(crate) imports: Vec<Import>,
 }
 
 /// A global variable accesible as an import or export in a module

@@ -1,19 +1,15 @@
-use std::sync::Arc;
-
-use anyhow::Context;
-use js_sys::{JsString, Reflect, Uint8Array, WebAssembly};
+use js_sys::JsString;
 use wasm_bindgen::{JsCast, JsValue};
 
-use super::{AsContextMut, TableType, Value, WasmEngine, WasmExternRef, WasmModule};
+use super::{AsContextMut, Value, WasmEngine, WasmExternRef};
 use crate::{
     backend::Extern,
     web::{
         conversion::{FromJs, FromStoredJs, ToJs, ToStoredJs},
-        module::{self, ParsedModule},
-        Engine, Func, Global, Import, Instance, JsErrorMsg, Memory, Module, ModuleInner, Store,
-        StoreContext, StoreContextMut, StoreInner, Table,
+        Engine, Func, Global, Instance, Memory, Module, Store, StoreContext, StoreContextMut,
+        StoreInner, Table,
     },
-    ExternType, GlobalType, ImportType, MemoryType, ValueType,
+    ValueType,
 };
 
 impl WasmEngine for Engine {
@@ -36,85 +32,6 @@ impl WasmEngine for Engine {
     type StoreContextMut<'a, T: 'a> = StoreContextMut<'a, T>;
 
     type Table = Table;
-}
-
-#[derive(Debug, Clone)]
-/// Extern host reference type
-pub struct ExternRef {}
-
-impl WasmExternRef<Engine> for ExternRef {
-    fn new<T: 'static + Send + Sync>(ctx: impl AsContextMut<Engine>, object: Option<T>) -> Self {
-        todo!()
-    }
-
-    fn downcast<'a, T: 'static, S: 'a>(
-        &self,
-        store: <Engine as WasmEngine>::StoreContext<'a, S>,
-    ) -> anyhow::Result<Option<&'a T>> {
-        todo!()
-    }
-}
-
-impl WasmModule<Engine> for Module {
-    fn new(engine: &Engine, mut stream: impl std::io::Read) -> anyhow::Result<Self> {
-        let mut buf = Vec::new();
-        stream
-            .read_to_end(&mut buf)
-            .context("Failed to read module bytes")?;
-
-        let parsed = module::parse_module(&buf)?;
-
-        let module = WebAssembly::Module::new(&Uint8Array::from(buf.as_slice()).into())
-            .map_err(JsErrorMsg::from)?;
-
-        let imports = WebAssembly::Module::imports(&module);
-
-        // https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Module/imports
-        let imports: Vec<_> = imports
-            .into_iter()
-            .map(|import| {
-                let module = Reflect::get(&import, &"module".into()).unwrap();
-                let name = Reflect::get(&import, &"name".into()).unwrap();
-                let kind = Reflect::get(&import, &"kind".into()).unwrap();
-
-                Import {
-                    module: module.as_string().expect("module is string"),
-                    kind: ExternType::from_import(
-                        kind.as_string().expect("kind is string").as_str(),
-                        name.as_string().expect("name is string").as_str(),
-                        &parsed,
-                    )
-                    .expect("invalid kind"),
-                    name: name.as_string().expect("name is string"),
-                }
-            })
-            .collect();
-
-        let module = ModuleInner {
-            module,
-            parsed: Arc::new(parsed),
-        };
-
-        let module = engine.borrow_mut().insert_module(module, imports);
-
-        Ok(module)
-    }
-
-    fn exports(&self) -> Box<dyn '_ + Iterator<Item = crate::ExportType<'_>>> {
-        todo!()
-    }
-
-    fn get_export(&self, name: &str) -> Option<crate::ExternType> {
-        todo!()
-    }
-
-    fn imports(&self) -> Box<dyn '_ + Iterator<Item = ImportType<'_>>> {
-        Box::new(self.imports.iter().map(|v| ImportType {
-            module: &v.module,
-            name: &v.name,
-            ty: v.kind.clone(),
-        }))
-    }
 }
 
 /// A table of references
@@ -167,7 +84,7 @@ impl FromStoredJs for Value<Engine> {
                 }
             }
             v => {
-                tracing::error!(?ty, ?value, "Unknown value primitive type");
+                tracing::error!(?ty, ?v, "Unknown value primitive type");
                 return None;
             }
         };
@@ -176,43 +93,20 @@ impl FromStoredJs for Value<Engine> {
     }
 }
 
-impl ExternType {
-    /// See: <https://webassembly.github.io/spec/js-api/#dom-moduleimportdescriptor-kind>
-    pub fn to_js_extern_kind(&self) -> &str {
-        match self {
-            ExternType::Global(_) => "global",
-            ExternType::Table(_) => "table",
-            ExternType::Memory(_) => "memory",
-            ExternType::Func(_) => "function",
-        }
+#[derive(Debug, Clone)]
+/// Extern host reference type
+pub struct ExternRef {}
+
+impl WasmExternRef<Engine> for ExternRef {
+    fn new<T: 'static + Send + Sync>(_: impl AsContextMut<Engine>, _: Option<T>) -> Self {
+        unimplemented!("ExternRef is not supported in the web backend")
     }
 
-    /// Creates an extern type from the given import.
-    ///
-    /// Uses the parsed module to infer the signature of an inferred function
-    pub(crate) fn from_import(kind: &str, name: &str, parsed: &ParsedModule) -> Option<Self> {
-        let signature = parsed.imports.get(name)?;
-
-        match kind {
-            "global" => Some(ExternType::Global(GlobalType {
-                content: crate::ValueType::I32,
-                mutable: true,
-            })),
-            "table" => Some(ExternType::Table(TableType {
-                element: ValueType::I32,
-                min: 0,
-                max: None,
-            })),
-            "memory" => Some(ExternType::Memory(MemoryType {
-                initial: 0,
-                maximum: None,
-            })),
-            "function" => Some(ExternType::Func(signature.clone().try_into_func().ok()?)),
-            _ => {
-                tracing::error!(?kind, "unknown import kind");
-                None
-            }
-        }
+    fn downcast<'a, T: 'static, S: 'a>(
+        &self,
+        _: <Engine as WasmEngine>::StoreContext<'a, S>,
+    ) -> anyhow::Result<Option<&'a T>> {
+        unimplemented!()
     }
 }
 
@@ -281,7 +175,7 @@ impl FromJs for ValueType {
 impl Value<Engine> {
     /// Convert the JsValue into a Value of the supplied type
     pub(crate) fn from_js_typed<T>(
-        store: &mut StoreInner<T>,
+        _: &mut StoreInner<T>,
         ty: &ValueType,
         value: JsValue,
     ) -> Option<Value<Engine>> {

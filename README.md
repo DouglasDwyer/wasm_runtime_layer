@@ -2,7 +2,6 @@
 
 [![Crates.io](https://img.shields.io/crates/v/wasm_runtime_layer.svg)](https://crates.io/crates/wasm_runtime_layer)
 [![Docs.rs](https://docs.rs/wasm_runtime_layer/badge.svg)](https://docs.rs/wasm_runtime_layer)
-[![Unsafe Forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 
 `wasm_runtime_layer` creates a thin abstraction over WebAssembly runtimes, allowing for backend-agnostic host code. The interface is based upon the `wasmtime` and `wasmi` crates, but may be implemented for any runtime.
 
@@ -18,12 +17,12 @@ let engine = Engine::new(wasmi::Engine::default());
 let mut store = Store::new(&engine, ());
 
 // 2. Create modules and instances, similar to other runtimes
-let module_bin = wabt::wat2wasm(
+let module_bin = wat::parse_str(
     r#"
 (module
 (type $t0 (func (param i32) (result i32)))
 (func $add_one (export "add_one") (type $t0) (param $p0 i32) (result i32)
-    get_local $p0
+    local.get $p0
     i32.const 1
     i32.add))
 "#,

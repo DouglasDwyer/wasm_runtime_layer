@@ -1,8 +1,87 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
+use anyhow::Context;
+use js_sys::{Uint8Array, WebAssembly};
 use wasmparser::RefType;
 
-use crate::{ExternType, FuncType, GlobalType, MemoryType, TableType, ValueType};
+use crate::{
+    backend::WasmModule, ExternType, FuncType, GlobalType, ImportType, MemoryType, TableType,
+    ValueType,
+};
+
+use super::{Engine, JsErrorMsg};
+
+#[derive(Debug, Clone)]
+/// A WebAssembly Module.
+pub struct Module {
+    /// The id of the module
+    pub(crate) id: usize,
+    /// The imports of the module
+    pub(crate) parsed: Arc<ParsedModule>,
+}
+
+/// A WebAssembly Module.
+#[derive(Debug)]
+pub(crate) struct ModuleInner {
+    /// The inner module
+    pub(crate) module: js_sys::WebAssembly::Module,
+    /// The parsed module, containing import and export signatures
+    pub(crate) parsed: Arc<ParsedModule>,
+}
+
+impl WasmModule<Engine> for Module {
+    fn new(engine: &Engine, mut stream: impl std::io::Read) -> anyhow::Result<Self> {
+        let mut buf = Vec::new();
+        stream
+            .read_to_end(&mut buf)
+            .context("Failed to read module bytes")?;
+
+        let parsed = parse_module(&buf)?;
+
+        let module = WebAssembly::Module::new(&Uint8Array::from(buf.as_slice()).into())
+            .map_err(JsErrorMsg::from)?;
+
+        let parsed = Arc::new(parsed);
+
+        let module = ModuleInner {
+            module,
+            parsed: parsed.clone(),
+        };
+
+        let module = engine.borrow_mut().insert_module(module, parsed);
+
+        Ok(module)
+    }
+
+    fn exports(&self) -> Box<dyn '_ + Iterator<Item = crate::ExportType<'_>>> {
+        Box::new(
+            self.parsed
+                .exports
+                .iter()
+                .map(|(name, ty)| crate::ExportType {
+                    name: name.as_str(),
+                    ty: ty.clone(),
+                }),
+        )
+    }
+
+    fn get_export(&self, name: &str) -> Option<ExternType> {
+        self.parsed.exports.get(name).cloned()
+    }
+
+    fn imports(&self) -> Box<dyn '_ + Iterator<Item = ImportType<'_>>> {
+        Box::new(
+            self.parsed
+                .imports
+                .iter()
+                .map(|((module, name), kind)| ImportType {
+                    module,
+                    name,
+                    ty: kind.clone(),
+                }),
+        )
+    }
+}
 
 impl From<&wasmparser::ValType> for ValueType {
     fn from(value: &wasmparser::ValType) -> Self {
@@ -43,7 +122,7 @@ impl From<&wasmparser::TableType> for TableType {
 /// A parsed core module with imports and exports
 pub(crate) struct ParsedModule {
     /// Import signatures
-    pub(crate) imports: HashMap<String, ExternType>,
+    pub(crate) imports: HashMap<(String, String), ExternType>,
     /// Export signatures
     pub(crate) exports: HashMap<String, ExternType>,
 }
@@ -64,11 +143,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
 
     parser.parse_all(bytes).try_for_each(|payload| {
         match payload? {
-            wasmparser::Payload::Version {
-                num,
-                encoding,
-                range,
-            } => {}
+            wasmparser::Payload::Version { .. } => {}
             wasmparser::Payload::TypeSection(section) => {
                 for ty in section {
                     let ty = ty?;
@@ -152,7 +227,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                         wasmparser::TypeRef::Tag(_) => todo!(),
                     };
 
-                    imports.insert(import.name.to_string(), ty);
+                    imports.insert((import.module.to_string(), import.name.to_string()), ty);
                 }
             }
             wasmparser::Payload::ExportSection(section) => {
@@ -172,41 +247,34 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     exports.insert(export.name.to_string(), ty);
                 }
             }
-            wasmparser::Payload::StartSection { func, range } => {}
+            wasmparser::Payload::StartSection { .. } => {}
             wasmparser::Payload::ElementSection(section) => {
                 for element in section {
                     let element = element?;
                     match element.kind {
                         wasmparser::ElementKind::Passive => tracing::debug!("passive"),
-                        wasmparser::ElementKind::Active {
-                            table_index,
-                            offset_expr,
-                        } => tracing::debug!("active"),
+                        wasmparser::ElementKind::Active { .. } => tracing::debug!("active"),
                         wasmparser::ElementKind::Declared => tracing::debug!("declared"),
                     }
                 }
             }
-            wasmparser::Payload::DataCountSection { count, range } => {}
+            wasmparser::Payload::DataCountSection { .. } => {}
             wasmparser::Payload::DataSection(_) => {}
-            wasmparser::Payload::CodeSectionStart { count, range, size } => {}
+            wasmparser::Payload::CodeSectionStart { .. } => {}
             wasmparser::Payload::CodeSectionEntry(_) => {}
-            wasmparser::Payload::ModuleSection { parser, range } => {}
+            wasmparser::Payload::ModuleSection { .. } => {}
             wasmparser::Payload::InstanceSection(_) => {}
             wasmparser::Payload::CoreTypeSection(_) => {}
-            wasmparser::Payload::ComponentSection { parser, range } => {}
+            wasmparser::Payload::ComponentSection { .. } => {}
             wasmparser::Payload::ComponentInstanceSection(_) => {}
             wasmparser::Payload::ComponentAliasSection(_) => {}
             wasmparser::Payload::ComponentTypeSection(_) => {}
             wasmparser::Payload::ComponentCanonicalSection(_) => {}
-            wasmparser::Payload::ComponentStartSection { start, range } => {}
+            wasmparser::Payload::ComponentStartSection { .. } => {}
             wasmparser::Payload::ComponentImportSection(_) => {}
             wasmparser::Payload::ComponentExportSection(_) => {}
             wasmparser::Payload::CustomSection(_) => {}
-            wasmparser::Payload::UnknownSection {
-                id,
-                contents,
-                range,
-            } => {}
+            wasmparser::Payload::UnknownSection { .. } => {}
             wasmparser::Payload::End(_) => {}
         }
 

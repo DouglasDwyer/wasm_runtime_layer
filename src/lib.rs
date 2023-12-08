@@ -1,5 +1,4 @@
 #![deny(warnings)]
-#![allow(unused_variables)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
@@ -393,6 +392,15 @@ impl ExternType {
     /// Return the underlying [`GlobalType`] if the types match
     pub fn try_into_global(self) -> Result<GlobalType, Self> {
         if let Self::Global(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    /// Return the underlying [`MemoryType`] if the types match
+    pub fn try_into_memory(self) -> Result<MemoryType, Self> {
+        if let Self::Memory(v) = self {
             Ok(v)
         } else {
             Err(self)

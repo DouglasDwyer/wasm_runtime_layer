@@ -77,11 +77,11 @@ macro_rules! func_wrapper {
             #[allow(unused_mut)]
             let mut store = StoreContextMut::from_ref(store);
 
-            let (arg_types, ret_types) = ty.params_results.split_at(ty.len_params);
+            let _arg_types = &ty.params_results[..ty.len_params];
 
             let args = [
                 $(
-                    (Value::from_js_typed(&mut store, &arg_types[$idx], $ident)).expect("Failed to convert argument"),
+                    (Value::from_js_typed(&mut store, &_arg_types[$idx], $ident)).expect("Failed to convert argument"),
                 )*
             ];
 

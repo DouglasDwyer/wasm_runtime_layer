@@ -6,10 +6,7 @@ use wasm_bindgen::{JsCast, JsValue};
 
 use crate::{
     backend::{Export, Extern, Imports, WasmInstance},
-    web::{
-        conversion::{FromStoredJs, ToStoredJs},
-        Func, Global, Memory, Table,
-    },
+    web::{conversion::ToStoredJs, Func, Global, Memory, Table},
 };
 
 use super::{module::ParsedModule, Engine, JsErrorMsg, Module, StoreInner};
@@ -97,7 +94,7 @@ impl WasmInstance<Engine> for Instance {
         &self,
         store: impl super::AsContext<Engine>,
         name: &str,
-    ) -> Option<super::Extern<Engine>> {
+    ) -> Option<Extern<Engine>> {
         let instance: &InstanceInner = &store.as_context().instances[self.id];
         instance.exports.get(name).cloned()
     }
@@ -155,7 +152,6 @@ fn process_exports<T>(
 
     let exports: Object = exports.into();
     let names = Object::get_own_property_names(&exports);
-    let len = names.length();
 
     tracing::debug!(?names, ?exports);
 
@@ -170,8 +166,6 @@ fn process_exports<T>(
             let value: JsValue = Reflect::get_u32(&entry, 1).unwrap();
 
             let _span = tracing::trace_span!("process_export", ?name, ?value).entered();
-
-            let ty = value.js_typeof();
 
             let signature = parsed.exports.get(&name).expect("export signature").clone();
 
@@ -212,7 +206,12 @@ fn process_exports<T>(
 
                         Extern::Table(table)
                     } else if value.is_instance_of::<WebAssembly::Memory>() {
-                        let memory = Memory::from_stored_js(store, value).unwrap();
+                        let memory = Memory::from_exported_memory(
+                            store,
+                            value,
+                            signature.try_into_memory().unwrap(),
+                        )
+                        .unwrap();
 
                         Extern::Memory(memory)
                     } else if value.is_instance_of::<WebAssembly::Global>() {
@@ -233,7 +232,6 @@ fn process_exports<T>(
             };
 
             Ok((name, ext))
-            // tracing::debug!(?name, ?value, ?ty, "entry");
         })
         .collect()
 }

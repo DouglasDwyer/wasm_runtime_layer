@@ -49,7 +49,7 @@ impl<V> FromStoredJs for V
 where
     V: FromJs,
 {
-    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self>
+    fn from_stored_js<T>(_: &mut StoreInner<T>, value: JsValue) -> Option<Self>
     where
         Self: Sized,
     {
@@ -63,7 +63,7 @@ where
 {
     type Repr = V::Repr;
 
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Self::Repr {
+    fn to_stored_js<T>(&self, _: &StoreInner<T>) -> Self::Repr {
         self.to_js()
     }
 }

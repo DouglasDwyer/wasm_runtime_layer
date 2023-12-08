@@ -1,12 +1,12 @@
 use js_sys::{ArrayBuffer, Object, Reflect, Uint8Array, WebAssembly};
 use wasm_bindgen::{JsCast as _, JsValue};
 
-use crate::backend::{AsContext, AsContextMut, WasmMemory};
-
-use super::{
-    conversion::{FromStoredJs, ToStoredJs},
-    Engine, JsErrorMsg, StoreInner,
+use crate::{
+    backend::{AsContext, AsContextMut, WasmMemory},
+    MemoryType,
 };
+
+use super::{conversion::ToStoredJs, Engine, JsErrorMsg, StoreInner};
 
 #[derive(Debug, Clone)]
 /// WebAssembly memory
@@ -20,6 +20,7 @@ pub struct Memory {
 pub(crate) struct MemoryInner {
     /// The memory value
     pub value: WebAssembly::Memory,
+    pub ty: MemoryType,
 }
 
 impl MemoryInner {
@@ -41,12 +42,17 @@ impl ToStoredJs for Memory {
     }
 }
 
-impl FromStoredJs for Memory {
-    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
+impl Memory {
+    pub(crate) fn from_exported_memory<T>(
+        store: &mut StoreInner<T>,
+        value: JsValue,
+        ty: MemoryType,
+    ) -> Option<Self> {
         let memory: &WebAssembly::Memory = value.dyn_ref()?;
 
         Some(store.insert_memory(MemoryInner {
             value: memory.clone(),
+            ty,
         }))
     }
 }
@@ -63,11 +69,11 @@ impl WasmMemory<Engine> for Memory {
 
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
 
-        Ok(ctx.insert_memory(MemoryInner { value: memory }))
+        Ok(ctx.insert_memory(MemoryInner { value: memory, ty }))
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> crate::MemoryType {
-        todo!()
+        ctx.as_context().memories[self.id].ty
     }
 
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> anyhow::Result<u32> {
@@ -77,8 +83,8 @@ impl WasmMemory<Engine> for Memory {
         Ok(inner.value.grow(additional))
     }
 
-    fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
-        todo!()
+    fn current_pages(&self, _: impl AsContext<Engine>) -> u32 {
+        unimplemented!()
     }
 
     fn read(
@@ -106,13 +112,6 @@ impl WasmMemory<Engine> for Memory {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
 
         let inner = &mut ctx.memories[self.id];
-        let host_mem = wasm_bindgen::memory()
-            .dyn_into::<WebAssembly::Memory>()
-            .unwrap()
-            .buffer()
-            .dyn_into::<ArrayBuffer>()
-            .unwrap();
-
         let dst = inner.as_uint8array(offset as _, buffer.len() as _);
 
         tracing::debug!("writing {buffer:?} into guest");
