@@ -1,6 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use anyhow::{bail, Context};
+use fxhash::FxHashMap;
 use js_sys::{JsString, Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 
@@ -27,7 +28,7 @@ pub(crate) struct InstanceInner {
     #[allow(dead_code)]
     pub(crate) instance: WebAssembly::Instance,
     /// The exports of the instance
-    pub(crate) exports: HashMap<String, Extern<Engine>>,
+    pub(crate) exports: FxHashMap<String, Extern<Engine>>,
 }
 
 impl WasmInstance<Engine> for Instance {
@@ -146,7 +147,7 @@ fn process_exports<T>(
     store: &mut StoreInner<T>,
     exports: JsValue,
     parsed: &ParsedModule,
-) -> anyhow::Result<HashMap<String, Extern<Engine>>> {
+) -> anyhow::Result<FxHashMap<String, Extern<Engine>>> {
     #[cfg(feature = "tracing")]
     let _span = tracing::debug_span!("process_exports", ?exports).entered();
     if !exports.is_object() {

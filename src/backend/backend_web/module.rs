@@ -1,6 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Context;
+use fxhash::FxHashMap;
 use js_sys::{Uint8Array, WebAssembly};
 use wasmparser::RefType;
 
@@ -122,17 +123,17 @@ impl From<&wasmparser::TableType> for TableType {
 /// A parsed core module with imports and exports
 pub(crate) struct ParsedModule {
     /// Import signatures
-    pub(crate) imports: HashMap<(String, String), ExternType>,
+    pub(crate) imports: FxHashMap<(String, String), ExternType>,
     /// Export signatures
-    pub(crate) exports: HashMap<String, ExternType>,
+    pub(crate) exports: FxHashMap<String, ExternType>,
 }
 
 /// Parses a module from bytes and extracts import and export signatures
 pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
     let parser = wasmparser::Parser::new(0);
 
-    let mut imports = HashMap::new();
-    let mut exports = HashMap::new();
+    let mut imports = FxHashMap::default();
+    let mut exports = FxHashMap::default();
 
     let mut types = Vec::new();
 
