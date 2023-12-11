@@ -4,9 +4,9 @@ use anyhow::{bail, Context};
 use js_sys::{JsString, Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::{
-    backend::{Export, Extern, Imports, WasmInstance},
-    web::{conversion::ToStoredJs, Func, Global, Memory, Table},
+use crate::backend::{
+    backend_web::{conversion::ToStoredJs, Func, Global, Memory, Table},
+    Export, Extern, Imports, WasmInstance,
 };
 
 use super::{module::ParsedModule, Engine, JsErrorMsg, Module, StoreInner};

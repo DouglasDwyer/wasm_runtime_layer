@@ -20,6 +20,7 @@ pub struct Memory {
 pub(crate) struct MemoryInner {
     /// The memory value
     pub value: WebAssembly::Memory,
+    /// The memory type
     pub ty: MemoryType,
 }
 
@@ -43,6 +44,7 @@ impl ToStoredJs for Memory {
 }
 
 impl Memory {
+    /// Construct a memory from an exported memory object
     pub(crate) fn from_exported_memory<T>(
         store: &mut StoreInner<T>,
         value: JsValue,

@@ -13,8 +13,9 @@ mod backend_wasmi;
 mod backend_wasmtime;
 
 #[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
-/// The backend which integrates with the web browser's WebAssembly API.
-mod backend_web;
+/// The backend which integrates with the web browser's WebAssembly API allowing for JIT
+/// accelerated wasm execution.
+pub(crate) mod backend_web;
 
 /// Runtime representation of a value.
 #[derive(Clone)]

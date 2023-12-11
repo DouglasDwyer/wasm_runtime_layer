@@ -2,13 +2,12 @@ use anyhow::Context;
 use js_sys::{Array, Function};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 
-use crate::{
-    backend::{AsContext, AsContextMut, Value, WasmFunc},
-    web::{DropResource, JsErrorMsg},
-    FuncType,
-};
+use crate::FuncType;
 
-use super::{conversion::ToStoredJs, Engine, StoreContextMut, StoreInner};
+use super::{
+    conversion::ToStoredJs, DropResource, Engine, JsErrorMsg, StoreContextMut, StoreInner,
+};
+use crate::backend::{AsContext, AsContextMut, Value, WasmFunc};
 
 /// A bound function
 #[derive(Debug, Clone)]

@@ -59,7 +59,9 @@ pub mod backend;
 
 /// Provides a backend targeting the browser's WebAssembly API
 #[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
-pub mod web;
+pub mod web {
+    pub use crate::backend::backend_web::Engine;
+}
 
 use crate::backend::*;
 use anyhow::Result;
