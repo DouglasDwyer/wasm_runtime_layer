@@ -12,6 +12,11 @@ mod backend_wasmi;
 /// The backend which provides support for the `wasmtime` runtime.
 mod backend_wasmtime;
 
+#[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
+/// The backend which integrates with the web browser's WebAssembly API allowing for JIT
+/// accelerated wasm execution.
+pub(crate) mod backend_web;
+
 /// Runtime representation of a value.
 #[derive(Clone)]
 pub enum Value<E: WasmEngine> {
@@ -27,6 +32,23 @@ pub enum Value<E: WasmEngine> {
     FuncRef(Option<E::Func>),
     /// An optional external reference.
     ExternRef(Option<E::ExternRef>),
+}
+
+impl<E: WasmEngine> std::fmt::Debug for Value<E>
+where
+    E::Func: std::fmt::Debug,
+    E::ExternRef: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::I32(v) => f.debug_tuple("I32").field(v).finish(),
+            Value::I64(v) => f.debug_tuple("I64").field(v).finish(),
+            Value::F32(v) => f.debug_tuple("F32").field(v).finish(),
+            Value::F64(v) => f.debug_tuple("F64").field(v).finish(),
+            Value::FuncRef(v) => f.debug_tuple("FuncRef").field(v).finish(),
+            Value::ExternRef(v) => f.debug_tuple("ExternRef").field(v).finish(),
+        }
+    }
 }
 
 /// An external item to a WebAssembly module.
@@ -296,7 +318,7 @@ impl<E: WasmEngine> std::fmt::Debug for Imports<E> {
 }
 
 /// Provides a backing implementation for a WebAssembly runtime.
-pub trait WasmEngine: 'static + Clone + Sized + Send + Sync {
+pub trait WasmEngine: 'static + Clone + Sized {
     /// The external reference type.
     type ExternRef: WasmExternRef<Self>;
     /// The function type.
@@ -467,24 +489,24 @@ pub trait AsContextMut<E: WasmEngine>: AsContext<E> {
     fn as_context_mut(&mut self) -> E::StoreContextMut<'_, Self::UserState>;
 }
 
-impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &T {
-    type UserState = T::UserState;
+impl<E, C> AsContext<E> for C
+where
+    C: crate::AsContext<Engine = E>,
+    E: WasmEngine,
+{
+    type UserState = C::UserState;
 
-    fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
-        (*self).as_context()
+    fn as_context(&self) -> <E as WasmEngine>::StoreContext<'_, Self::UserState> {
+        <Self as crate::AsContext>::as_context(self).inner
     }
 }
 
-impl<T: AsContext<E>, E: WasmEngine> AsContext<E> for &mut T {
-    type UserState = T::UserState;
-
-    fn as_context(&self) -> E::StoreContext<'_, Self::UserState> {
-        (**self).as_context()
-    }
-}
-
-impl<T: AsContextMut<E>, E: WasmEngine> AsContextMut<E> for &mut T {
-    fn as_context_mut(&mut self) -> E::StoreContextMut<'_, Self::UserState> {
-        (*self).as_context_mut()
+impl<E, C> AsContextMut<E> for C
+where
+    C: crate::AsContextMut<Engine = E>,
+    E: WasmEngine,
+{
+    fn as_context_mut(&mut self) -> <E as WasmEngine>::StoreContextMut<'_, Self::UserState> {
+        <Self as crate::AsContextMut>::as_context_mut(self).inner
     }
 }

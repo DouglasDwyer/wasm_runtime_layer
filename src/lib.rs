@@ -1,5 +1,4 @@
 #![deny(warnings)]
-#![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
@@ -18,12 +17,12 @@
 //! let mut store = Store::new(&engine, ());
 //!
 //! // 2. Create modules and instances, similar to other runtimes
-//! let module_bin = wabt::wat2wasm(
+//! let module_bin = wat::parse_str(
 //!     r#"
 //! (module
 //! (type $t0 (func (param i32) (result i32)))
 //! (func $add_one (export "add_one") (type $t0) (param $p0 i32) (result i32)
-//!     get_local $p0
+//!     local.get $p0
 //!     i32.const 1
 //!     i32.add))
 //! "#,
@@ -50,7 +49,7 @@
 //! ## Optional features and backends
 //!
 //! **backend_wasmi** - Implements the `WasmEngine` trait for `wasmi::Engine` instances.
-//! 
+//!
 //! **backend_wasmtime** - Implements the `WasmEngine` trait for `wasmtime::Engine` instances.
 //!
 //! Contributions for additional backend implementations are welcome!
@@ -58,12 +57,19 @@
 /// Provides traits for implementing runtime backends.
 pub mod backend;
 
+/// Provides a backend targeting the browser's WebAssembly API
+#[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
+pub mod web {
+    pub use crate::backend::backend_web::Engine;
+}
+
 use crate::backend::*;
-use anyhow::*;
+use anyhow::Result;
 use fxhash::*;
 use ref_cast::*;
 use smallvec::*;
 use std::any::*;
+use std::fmt::Display;
 use std::marker::*;
 use std::sync::*;
 
@@ -89,6 +95,19 @@ pub enum ValueType {
     FuncRef,
     /// An optional external reference.
     ExternRef,
+}
+
+impl Display for ValueType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueType::I32 => write!(f, "i32"),
+            ValueType::I64 => write!(f, "i64"),
+            ValueType::F32 => write!(f, "f32"),
+            ValueType::F64 => write!(f, "f64"),
+            ValueType::FuncRef => write!(f, "funcref"),
+            ValueType::ExternRef => write!(f, "externref"),
+        }
+    }
 }
 
 /// The type of a global variable.
@@ -211,6 +230,8 @@ pub struct FuncType {
     /// The `len_params` field denotes how many parameters there are in
     /// the head of the vector before the results.
     params_results: Arc<[ValueType]>,
+    /// A debug name used for debugging or tracing purposes.
+    name: Option<Arc<str>>,
 }
 
 impl std::fmt::Debug for FuncType {
@@ -218,7 +239,41 @@ impl std::fmt::Debug for FuncType {
         f.debug_struct("FuncType")
             .field("params", &self.params())
             .field("results", &self.results())
+            .field("name", &self.name)
             .finish()
+    }
+}
+
+impl Display for FuncType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let params = self.params();
+        let results = self.results();
+
+        let mut first = true;
+
+        write!(f, "func(")?;
+        for param in params {
+            if !first {
+                write!(f, ", ")?;
+            } else {
+                first = false;
+            }
+            write!(f, "{param}")?;
+        }
+
+        let mut first = true;
+
+        write!(f, ")")?;
+        for result in results {
+            if !first {
+                first = false;
+                write!(f, ", ")?;
+            } else {
+                write!(f, " -> ")?;
+            }
+            write!(f, "{result}")?;
+        }
+        Ok(())
     }
 }
 
@@ -235,6 +290,7 @@ impl FuncType {
         Self {
             params_results: params_results.into(),
             len_params,
+            name: None,
         }
     }
 
@@ -246,6 +302,12 @@ impl FuncType {
     /// Returns the result types of the function type.
     pub fn results(&self) -> &[ValueType] {
         &self.params_results[self.len_params..]
+    }
+
+    /// Set the debug name of the function
+    pub fn with_name(mut self, name: impl Into<Arc<str>>) -> Self {
+        self.name = Some(name.into());
+        self
     }
 }
 
@@ -318,6 +380,42 @@ impl ExternType {
         match self {
             Self::Func(ty) => Some(ty),
             _ => None,
+        }
+    }
+
+    /// Return the underlying [`FuncType`] if the types match
+    pub fn try_into_func(self) -> std::result::Result<FuncType, Self> {
+        if let Self::Func(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    /// Return the underlying [`TableType`] if the types match
+    pub fn try_into_table(self) -> Result<TableType, Self> {
+        if let Self::Table(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    /// Return the underlying [`GlobalType`] if the types match
+    pub fn try_into_global(self) -> Result<GlobalType, Self> {
+        if let Self::Global(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    /// Return the underlying [`MemoryType`] if the types match
+    pub fn try_into_memory(self) -> Result<MemoryType, Self> {
+        if let Self::Memory(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
         }
     }
 }
@@ -666,7 +764,7 @@ impl<'a, T: 'a, E: WasmEngine> StoreContext<'a, T, E> {
 /// For more information, see [`Store`].
 pub struct StoreContextMut<'a, T: 'a, E: WasmEngine> {
     /// The backing implementation.
-    inner: E::StoreContextMut<'a, T>,
+    pub inner: E::StoreContextMut<'a, T>,
 }
 
 impl<'a, T: 'a, E: WasmEngine> StoreContextMut<'a, T, E> {
@@ -996,17 +1094,16 @@ impl Instance {
 
     /// Returns an iterator over the exports of the [`Instance`].
     pub fn exports<C: AsContext>(&self, ctx: C) -> impl Iterator<Item = Export> {
-        self.instance
-            .cast::<<C::Engine as WasmEngine>::Instance>()
-            .exports(ctx.as_context().inner)
-            .map(Into::into)
+        let instance = self.instance.cast::<<C::Engine as WasmEngine>::Instance>();
+
+        <_ as WasmInstance<_>>::exports(instance, ctx.as_context().inner).map(Into::into)
     }
 
     /// Returns the value exported to the given `name` if any.
     pub fn get_export<C: AsContext>(&self, ctx: C, name: &str) -> Option<Extern> {
-        self.instance
-            .cast::<<C::Engine as WasmEngine>::Instance>()
-            .get_export(ctx.as_context().inner, name)
+        let instance = self.instance.cast::<<C::Engine as WasmEngine>::Instance>();
+
+        <_ as WasmInstance<_>>::get_export(instance, ctx.as_context().inner, name)
             .as_ref()
             .map(Into::into)
     }
@@ -1104,31 +1201,27 @@ impl Table {
     ///
     /// Returns the old size of the [`Table`] upon success.
     pub fn grow<C: AsContextMut>(&self, mut ctx: C, delta: u32, init: Value) -> Result<u32> {
-        self.table.cast::<<C::Engine as WasmEngine>::Table>().grow(
-            ctx.as_context_mut().inner,
-            delta,
-            (&init).into(),
-        )
+        let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
+
+        <_ as WasmTable<_>>::grow(table, ctx.as_context_mut().inner, delta, (&init).into())
     }
 
     /// Returns the [`Table`] element value at `index`.
     ///
     /// Returns `None` if `index` is out of bounds.
     pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Value> {
-        self.table
-            .cast::<<C::Engine as WasmEngine>::Table>()
-            .get(ctx.as_context_mut().inner, index)
+        let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
+
+        <_ as WasmTable<_>>::get(table, ctx.as_context_mut().inner, index)
             .as_ref()
             .map(Into::into)
     }
 
     /// Sets the [`Value`] of this [`Table`] at `index`.
     pub fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, value: Value) -> Result<()> {
-        self.table.cast::<<C::Engine as WasmEngine>::Table>().set(
-            ctx.as_context_mut().inner,
-            index,
-            (&value).into(),
-        )
+        let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
+
+        <_ as WasmTable<_>>::set(table, ctx.as_context_mut().inner, index, (&value).into())
     }
 }
 
@@ -1281,46 +1374,5 @@ impl<'a, T: 'a, E: WasmEngine> AsContextMut for StoreContextMut<'a, T, E> {
         StoreContextMut {
             inner: crate::backend::AsContextMut::as_context_mut(&mut self.inner),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::*;
-
-    #[test]
-    fn add_one() {
-        // 1. Instantiate a runtime
-        let engine = Engine::new(wasmi::Engine::default());
-        let mut store = Store::new(&engine, ());
-
-        // 2. Create modules and instances, similar to other runtimes
-        let module_bin = wabt::wat2wasm(
-            r#"
-        (module
-        (type $t0 (func (param i32) (result i32)))
-        (func $add_one (export "add_one") (type $t0) (param $p0 i32) (result i32)
-            get_local $p0
-            i32.const 1
-            i32.add))
-        "#,
-        )
-        .unwrap();
-
-        let module = Module::new(&engine, std::io::Cursor::new(&module_bin)).unwrap();
-        let instance = Instance::new(&mut store, &module, &crate::Imports::default()).unwrap();
-
-        let add_one = instance
-            .get_export(&store, "add_one")
-            .unwrap()
-            .into_func()
-            .unwrap();
-
-        let mut result = [crate::Value::I32(0)];
-        add_one
-            .call(&mut store, &[crate::Value::I32(42)], &mut result)
-            .unwrap();
-
-        assert_eq!(result[0], crate::Value::I32(43));
     }
 }
