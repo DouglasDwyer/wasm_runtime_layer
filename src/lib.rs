@@ -230,6 +230,8 @@ pub struct FuncType {
     /// The `len_params` field denotes how many parameters there are in
     /// the head of the vector before the results.
     params_results: Arc<[ValueType]>,
+    /// A debug name used for debugging or tracing purposes.
+    name: Option<Arc<str>>,
 }
 
 impl std::fmt::Debug for FuncType {
@@ -237,6 +239,7 @@ impl std::fmt::Debug for FuncType {
         f.debug_struct("FuncType")
             .field("params", &self.params())
             .field("results", &self.results())
+            .field("name", &self.name)
             .finish()
     }
 }
@@ -287,6 +290,7 @@ impl FuncType {
         Self {
             params_results: params_results.into(),
             len_params,
+            name: None,
         }
     }
 
@@ -298,6 +302,12 @@ impl FuncType {
     /// Returns the result types of the function type.
     pub fn results(&self) -> &[ValueType] {
         &self.params_results[self.len_params..]
+    }
+
+    /// Set the debug name of the function
+    pub fn with_name(mut self, name: impl Into<Arc<str>>) -> Self {
+        self.name = Some(name.into());
+        self
     }
 }
 
@@ -1375,7 +1385,7 @@ mod tests {
     #[cfg(all(feature = "backend_wasmtime", not(target_arch = "wasm32")))]
     fn test_wasmtime() {
         // 1. Instantiate a runtime
-        let engine = Engine::new(wasmi::Engine::default());
+        let engine = Engine::new(wasmtime::Engine::default());
         add_one(&engine)
     }
 
@@ -1396,6 +1406,7 @@ mod tests {
         add_one(&engine)
     }
 
+    #[allow(unused)]
     fn add_one(engine: &Engine<impl WasmEngine>) {
         let mut store = Store::new(engine, ());
 

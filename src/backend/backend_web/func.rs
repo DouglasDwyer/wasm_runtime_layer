@@ -80,7 +80,7 @@ macro_rules! func_wrapper {
                 )*
             ];
 
-            match $func(store, &args) {
+            match $func(store, &ty, &args) {
                 Ok(v) => { v.into() }
                 Err(_err) => {
                     #[cfg(feature = "tracing")]
@@ -134,9 +134,10 @@ impl WasmFunc<Engine> for Func {
         let mut res = vec![Value::I32(0); ty.results().len()];
 
         let mut func = {
-            move |mut store: StoreContextMut<T>, args: &[Value<Engine>]| {
+            move |mut store: StoreContextMut<T>, ty: &FuncType, args: &[Value<Engine>]| {
                 #[cfg(feature = "tracing")]
-                let _span = tracing::debug_span!("call_host", ?args).entered();
+                let _span =
+                    tracing::debug_span!("call_host", name = ty.name.as_deref(), ?args).entered();
                 match func(store.as_context_mut(), args, &mut res) {
                     Ok(()) => {
                         #[cfg(feature = "tracing")]
@@ -206,7 +207,8 @@ impl WasmFunc<Engine> for Func {
         let ty = inner.ty.clone();
 
         #[cfg(feature = "tracing")]
-        let _span = tracing::debug_span!("call_guest", ?args, %ty).entered();
+        let _span =
+            tracing::debug_span!("call_guest", ?args, name=ty.name.as_deref(), %ty).entered();
 
         let args = args.iter().map(|v| v.to_stored_js(ctx)).collect::<Array>();
 

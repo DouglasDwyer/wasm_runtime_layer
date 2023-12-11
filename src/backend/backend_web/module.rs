@@ -215,7 +215,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     let import = import?;
                     let ty = match import.ty {
                         wasmparser::TypeRef::Func(index) => {
-                            let sig = types[index as usize].clone();
+                            let sig = types[index as usize].clone().with_name(import.name);
                             functions.push(sig.clone());
                             ExternType::Func(sig)
                         }
@@ -238,7 +238,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     let index = export.index as usize;
                     let ty = match export.kind {
                         wasmparser::ExternalKind::Func => {
-                            ExternType::Func(functions[index].clone())
+                            ExternType::Func(functions[index].clone().with_name(export.name))
                         }
                         wasmparser::ExternalKind::Table => ExternType::Table(tables[index]),
                         wasmparser::ExternalKind::Memory => ExternType::Memory(memories[index]),
