@@ -132,11 +132,6 @@ impl WasmTable<Engine> for Table {
             inner.table.set(i, init).unwrap();
         }
 
-        // let old_size = table.values.len() as _;
-        // table
-        //     .values
-        //     .extend(std::iter::repeat(init).take(delta as _));
-
         Ok(old_len)
     }
 

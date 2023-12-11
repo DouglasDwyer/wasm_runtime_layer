@@ -129,15 +129,14 @@ impl WasmFunc<Engine> for Func {
         // live as long as this closure
         let store_ptr = store_ptr as *mut ();
 
-        // let mut host_args_ret = vec![Value::I32(0); ty.params_results.len()];
-
         let mut res = vec![Value::I32(0); ty.results().len()];
 
         let mut func = {
-            move |mut store: StoreContextMut<T>, ty: &FuncType, args: &[Value<Engine>]| {
+            move |mut store: StoreContextMut<T>, _ty: &FuncType, args: &[Value<Engine>]| {
                 #[cfg(feature = "tracing")]
                 let _span =
-                    tracing::debug_span!("call_host", name = ty.name.as_deref(), ?args).entered();
+                    tracing::debug_span!("call_host", name = _ty.name.as_deref(), ?args).entered();
+
                 match func(store.as_context_mut(), args, &mut res) {
                     Ok(()) => {
                         #[cfg(feature = "tracing")]

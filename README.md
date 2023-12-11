@@ -66,6 +66,12 @@ To run the tests for wasmi and wasmtime, run:
 cargo test --all-features
 ```
 
+To test a single backend:
+
+```sh
+cargo test --tests --features backend_wasmi
+```
+
 For the *wasm32* target, you can use the slower interpreter *wasmi*, or the native JIT accelerated browser backend.
 
 To test the backends, you need to install [`wasm-pack`](https://github.com/rustwasm/wasm-pack).

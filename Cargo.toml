@@ -28,7 +28,6 @@ wasmparser = { version = "0.118", default-features = false, optional = true }
 [dev-dependencies]
 wat = "1.0"
 wasm-bindgen-test = "0.3"
-# wasm_runtime_layer = { path = ".", features = [ "backend_wasmi" ] }
 
 [features]
 backend_wasmi = [ "wasmi" ]
