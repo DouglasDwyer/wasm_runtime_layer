@@ -52,7 +52,34 @@
 //!
 //! **backend_wasmtime** - Implements the `WasmEngine` trait for `wasmtime::Engine` instances.
 //!
+//! **backend_web** - Implement a wasm engine targeting the browser's WebAssembly API on `wasm32-unknown-unknown` targets.
+//!
+//! **tracing** - Enable tracing span and events. This makes it easier to follow execution of the runtime and get better introspection when something goes wrong. This is especially useful for the web backend where debugging is not as easily available.
+//!
 //! Contributions for additional backend implementations are welcome!
+//!
+//! ## Testing
+//!
+//! To run the tests for wasmi and wasmtime, run:
+//!
+//! ```sh
+//! cargo test --all-features
+//! ```
+//!
+//! To test a single backend:
+//!
+//! ```sh
+//! cargo test --tests --features backend_wasmi
+//! ```
+//!
+//! For the *wasm32* target, you can use the slower interpreter *wasmi*, or the native JIT accelerated browser backend.
+//!
+//! To test the backends, you need to install [`wasm-pack`](https://github.com/rustwasm/wasm-pack).
+//!
+//! You can then run:
+//! ```sh
+//! wasm-pack test --node --features backend_wasmi,backend_web
+//! ```
 
 /// Provides traits for implementing runtime backends.
 pub mod backend;
