@@ -33,7 +33,7 @@ wasm-bindgen-test = "0.3"
 [features]
 backend_wasmi = [ "wasmi" ]
 backend_wasmtime = [ "wasmtime" ]
-backend_web = [ "wasm-bindgen", "js-sys", "web-sys", "tracing", "slab", "wasmparser" ]
+backend_web = [ "wasm-bindgen", "js-sys", "web-sys", "slab", "wasmparser" ]
 
 [package.metadata."docs.rs"]
 all-features = true

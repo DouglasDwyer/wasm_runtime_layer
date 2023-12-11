@@ -201,8 +201,10 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     });
                 }
             }
-            wasmparser::Payload::TagSection(section) => {
-                for tag in section {
+            wasmparser::Payload::TagSection(_section) =>
+            {
+                #[cfg(feature = "tracing")]
+                for tag in _section {
                     let tag = tag?;
 
                     tracing::trace!(?tag, "tag");
@@ -248,8 +250,10 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                 }
             }
             wasmparser::Payload::StartSection { .. } => {}
-            wasmparser::Payload::ElementSection(section) => {
-                for element in section {
+            wasmparser::Payload::ElementSection(_section) =>
+            {
+                #[cfg(feature = "tracing")]
+                for element in _section {
                     let element = element?;
                     match element.kind {
                         wasmparser::ElementKind::Passive => tracing::debug!("passive"),

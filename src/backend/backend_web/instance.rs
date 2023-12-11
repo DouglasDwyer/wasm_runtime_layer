@@ -36,6 +36,7 @@ impl WasmInstance<Engine> for Instance {
         module: &Module,
         imports: &Imports<Engine>,
     ) -> anyhow::Result<Self> {
+        #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("Instance::new").entered();
         let store: &mut StoreInner<_> = &mut *store.as_context_mut();
 
@@ -58,6 +59,7 @@ impl WasmInstance<Engine> for Instance {
                 .with_context(|| "Failed to instantiate module")?;
         };
 
+        #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("get_exports").entered();
 
         let js_exports = Reflect::get(&instance, &"exports".into()).expect("exports object");
@@ -102,14 +104,17 @@ impl WasmInstance<Engine> for Instance {
 
 /// Creates the js import map
 fn create_imports_object<T>(store: &StoreInner<T>, imports: &Imports<Engine>) -> Object {
+    #[cfg(feature = "tracing")]
     let _span = tracing::debug_span!("process_imports").entered();
 
     let imports = imports
         .into_iter()
         .map(|((module, name), imp)| {
+            #[cfg(feature = "tracing")]
             tracing::trace!(?module, ?name, ?imp, "import");
             let js = imp.to_stored_js(store);
 
+            #[cfg(feature = "tracing")]
             tracing::trace!(module, name, "export");
 
             (module, (JsString::from(&*name), js))
@@ -142,6 +147,7 @@ fn process_exports<T>(
     exports: JsValue,
     parsed: &ParsedModule,
 ) -> anyhow::Result<HashMap<String, Extern<Engine>>> {
+    #[cfg(feature = "tracing")]
     let _span = tracing::debug_span!("process_exports", ?exports).entered();
     if !exports.is_object() {
         bail!(
@@ -151,9 +157,6 @@ fn process_exports<T>(
     }
 
     let exports: Object = exports.into();
-    let names = Object::get_own_property_names(&exports);
-
-    tracing::debug!(?names, ?exports);
 
     Object::entries(&exports)
         .into_iter()
@@ -165,6 +168,7 @@ fn process_exports<T>(
 
             let value: JsValue = Reflect::get_u32(&entry, 1).unwrap();
 
+            #[cfg(feature = "tracing")]
             let _span = tracing::trace_span!("process_export", ?name, ?value).entered();
 
             let signature = parsed.exports.get(&name).expect("export signature").clone();
@@ -176,7 +180,6 @@ fn process_exports<T>(
             {
                 "function" => {
                     let func = Func::from_exported_function(
-                        &name,
                         store,
                         value,
                         signature.try_into_func().unwrap(),
@@ -188,7 +191,6 @@ fn process_exports<T>(
                 "object" => {
                     if value.is_instance_of::<js_sys::Function>() {
                         let func = Func::from_exported_function(
-                            &name,
                             store,
                             value,
                             signature.try_into_func().unwrap(),
@@ -224,6 +226,7 @@ fn process_exports<T>(
 
                         Extern::Global(global)
                     } else {
+                        #[cfg(feature = "tracing")]
                         tracing::error!("Unsupported export type {value:?}");
                         panic!("Unsupported export type {value:?}")
                     }

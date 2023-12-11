@@ -40,6 +40,7 @@ impl Table {
         value: JsValue,
         ty: TableType,
     ) -> Option<Self> {
+        #[cfg(feature = "tracing")]
         let _span = tracing::trace_span!("Table::from_js", ?value).entered();
         let table = value.dyn_into::<WebAssembly::Table>().ok()?;
 
@@ -67,7 +68,8 @@ impl WasmTable<Engine> for Table {
         ty: TableType,
         init: Value<Engine>,
     ) -> anyhow::Result<Self> {
-        let _span = tracing::info_span!("Table::new", ?ty, ?init).entered();
+        #[cfg(feature = "tracing")]
+        let _span = tracing::debug_span!("Table::new", ?ty, ?init).entered();
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
         let desc = Object::new();
@@ -145,6 +147,7 @@ impl WasmTable<Engine> for Table {
         // To enable this we would need to cache and intern a unique id for each value to be able
         // to reconcile the signature and existing Store value. This would also avoid duplicating
         // values
+        #[cfg(feature = "tracing")]
         tracing::error!("get is not implemented");
         None
     }

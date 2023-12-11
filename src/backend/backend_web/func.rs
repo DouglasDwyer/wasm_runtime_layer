@@ -23,8 +23,6 @@ pub(crate) struct FuncInner {
     pub(crate) func: Function,
     /// The function signature
     ty: FuncType,
-    /// Debug label
-    name: Option<String>,
 }
 
 impl ToStoredJs for Func {
@@ -38,7 +36,6 @@ impl ToStoredJs for Func {
 impl Func {
     /// Creates a new function from a JS value
     pub fn from_exported_function<T>(
-        name: &str,
         store: &mut StoreInner<T>,
         value: JsValue,
         signature: FuncType,
@@ -49,7 +46,6 @@ impl Func {
             func,
             // TODO: we don't really know what the exported function's signature is
             ty: signature,
-            name: Some(format!("guest.{name}")),
         }))
     }
 }
@@ -86,8 +82,9 @@ macro_rules! func_wrapper {
 
             match $func(store, &args) {
                 Ok(v) => { v.into() }
-                Err(err) => {
-                    tracing::error!("{err:?}");
+                Err(_err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!("{_err:?}");
                     return JsValue::UNDEFINED;
                 }
             }
@@ -109,6 +106,7 @@ impl WasmFunc<Engine> for Func {
             + Sync
             + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> anyhow::Result<()>,
     ) -> Self {
+        #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("Func::new").entered();
 
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
@@ -137,17 +135,19 @@ impl WasmFunc<Engine> for Func {
 
         let mut func = {
             move |mut store: StoreContextMut<T>, args: &[Value<Engine>]| {
-                let span = tracing::debug_span!("call_host", ?args);
-                span.in_scope(|| match func(store.as_context_mut(), args, &mut res) {
-                    Ok(v) => {
+                #[cfg(feature = "tracing")]
+                let _span = tracing::debug_span!("call_host", ?args).entered();
+                match func(store.as_context_mut(), args, &mut res) {
+                    Ok(()) => {
+                        #[cfg(feature = "tracing")]
                         tracing::debug!(?res, "result");
-                        Ok(v)
                     }
                     Err(err) => {
+                        #[cfg(feature = "tracing")]
                         tracing::error!("{err:?}");
-                        Err(err)
+                        return Err(err);
                     }
-                })?;
+                };
 
                 let results = match &res[..] {
                     [] => JsValue::UNDEFINED,
@@ -182,12 +182,9 @@ impl WasmFunc<Engine> for Func {
             }
         };
 
-        let func = ctx.insert_func(FuncInner {
-            func,
-            ty,
-            name: None,
-        });
+        let func = ctx.insert_func(FuncInner { func, ty });
 
+        #[cfg(feature = "tracing")]
         tracing::debug!(id = func.id, "func");
         ctx.insert_drop_resource(DropResource::new(resource));
 
@@ -208,7 +205,8 @@ impl WasmFunc<Engine> for Func {
         let inner: &FuncInner = &ctx.funcs[self.id];
         let ty = inner.ty.clone();
 
-        let _span = tracing::debug_span!("call_guest", ?args, name = inner.name, %ty).entered();
+        #[cfg(feature = "tracing")]
+        let _span = tracing::debug_span!("call_guest", ?args, %ty).entered();
 
         let args = args.iter().map(|v| v.to_stored_js(ctx)).collect::<Array>();
 
@@ -218,6 +216,7 @@ impl WasmFunc<Engine> for Func {
             .map_err(JsErrorMsg::from)
             .context("Guest function threw an error")?;
 
+        #[cfg(feature = "tracing")]
         tracing::debug!(?res,ty=?inner.ty);
 
         // https://webassembly.github.io/spec/js-api/#exported-function-exotic-objects

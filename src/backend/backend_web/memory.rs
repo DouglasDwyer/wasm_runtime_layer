@@ -116,6 +116,7 @@ impl WasmMemory<Engine> for Memory {
         let inner = &mut ctx.memories[self.id];
         let dst = inner.as_uint8array(offset as _, buffer.len() as _);
 
+        #[cfg(feature = "tracing")]
         tracing::debug!("writing {buffer:?} into guest");
         dst.copy_from(buffer);
 

@@ -308,21 +308,25 @@ impl FromStoredJs for Value<Engine> {
             "boolean" => Value::I32(bool::from_stored_js(store, value).unwrap() as i32),
             "null" => Value::I32(0),
             "function" => {
+                #[cfg(feature = "tracing")]
                 tracing::error!("conversion to a function outside of a module not permitted");
                 return None;
             }
             // An instance of a WebAssembly.* class or null
             "object" => {
                 if value.is_instance_of::<js_sys::Function>() {
+                    #[cfg(feature = "tracing")]
                     tracing::error!("conversion to a function outside of a module not permitted");
                     return None;
                 } else {
+                    #[cfg(feature = "tracing")]
                     tracing::error!(?value, "Unsupported value type");
                     return None;
                 }
             }
-            v => {
-                tracing::error!(?ty, ?v, "Unknown value primitive type");
+            _ => {
+                #[cfg(feature = "tracing")]
+                tracing::error!(?ty, "Unknown value primitive type");
                 return None;
             }
         };
@@ -401,6 +405,7 @@ impl FromJs for ValueType {
             "anyfunc" => Self::FuncRef,
             "externref" => Self::ExternRef,
             _ => {
+                #[cfg(feature = "tracing")]
                 tracing::error!("Invalid value type {s:?}");
                 return None;
             }
@@ -423,6 +428,7 @@ impl Value<Engine> {
             ValueType::F32 => Some(Value::F32(f32::from_js(value)?)),
             ValueType::F64 => Some(Value::F64(f64::from_js(value)?)),
             ValueType::FuncRef | ValueType::ExternRef => {
+                #[cfg(feature = "tracing")]
                 tracing::error!(
                     "conversion to a function or extern outside of a module not permitted"
                 );

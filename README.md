@@ -54,6 +54,8 @@ assert_eq!(result[0], Value::I32(43));
 
 **backend_web** - Implement a wasm engine targeting the browser's WebAssembly API on `wasm32-unknown-unknown` targets.
 
+**tracing** - Enable tracing span and events. This makes it easier to follow execution of the runtime and get better introspection when something goes wrong. This is especially useful for the web backend where debugging is not as easily available.
+
 Contributions for additional backend implementations are welcome!
 
 ## Testing

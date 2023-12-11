@@ -93,7 +93,8 @@ impl<T> Drop for Store<T> {
 
 impl<T> WasmStore<T, Engine> for Store<T> {
     fn new(engine: &Engine, data: T) -> Self {
-        let _span = tracing::info_span!("Store::new").entered();
+        #[cfg(feature = "tracing")]
+        let _span = tracing::debug_span!("Store::new").entered();
         Self::from_inner(Box::new(StoreInner {
             engine: engine.clone(),
             instances: Slab::new(),
