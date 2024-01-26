@@ -62,7 +62,7 @@ impl Memory {
 impl WasmMemory<Engine> for Memory {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: crate::MemoryType) -> anyhow::Result<Self> {
         let desc = Object::new();
-        Reflect::set(&desc, &"intial".into(), &ty.initial.into()).unwrap();
+        Reflect::set(&desc, &"initial".into(), &ty.initial.into()).unwrap();
         if let Some(maximum) = ty.maximum {
             Reflect::set(&desc, &"maximum".into(), &maximum.into()).unwrap();
         }
