@@ -899,23 +899,23 @@ impl ExternRef {
     /// Creates a new [`ExternRef`] wrapping the given value.
     pub fn new<T: 'static + Send + Sync, C: AsContextMut>(
         mut ctx: C,
-        object: impl Into<Option<T>>,
+        object: T,
     ) -> Self {
         Self {
             extern_ref: BackendObject::new(
                 <<C::Engine as WasmEngine>::ExternRef as WasmExternRef<C::Engine>>::new(
                     ctx.as_context_mut().inner,
-                    object.into(),
+                    object,
                 ),
             ),
         }
     }
 
     /// Returns a shared reference to the underlying data for this [`ExternRef`].
-    pub fn downcast<'a, T: 'static, S: 'a, E: WasmEngine>(
-        &self,
-        ctx: StoreContext<'a, S, E>,
-    ) -> Result<Option<&'a T>> {
+    pub fn downcast<'a, 's: 'a, T: 'static, S: 's, E: WasmEngine>(
+        &'a self,
+        ctx: StoreContext<'s, S, E>,
+    ) -> Result<&'a T> {
         self.extern_ref.cast::<E::ExternRef>().downcast(ctx.inner)
     }
 }
