@@ -344,12 +344,12 @@ pub trait WasmEngine: 'static + Clone + Sized {
 /// Provides a nullable opaque reference to any data within WebAssembly.
 pub trait WasmExternRef<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new reference wrapping the given value.
-    fn new<T: 'static + Send + Sync>(ctx: impl AsContextMut<E>, object: Option<T>) -> Self;
+    fn new<T: 'static + Send + Sync>(ctx: impl AsContextMut<E>, object: T) -> Self;
     /// Returns a shared reference to the underlying data.
-    fn downcast<'a, T: 'static, S: 'a>(
-        &self,
-        store: E::StoreContext<'a, S>,
-    ) -> Result<Option<&'a T>>;
+    fn downcast<'a, 's: 'a, T: 'static, S: 's>(
+        &'a self,
+        store: E::StoreContext<'s, S>,
+    ) -> Result<&'a T>;
 }
 
 /// Provides a Wasm or host function reference.

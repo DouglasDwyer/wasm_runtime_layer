@@ -27,22 +27,19 @@ impl WasmEngine for wasmi::Engine {
 impl WasmExternRef<wasmi::Engine> for wasmi::ExternRef {
     fn new<T: 'static + Send + Sync>(
         mut ctx: impl AsContextMut<wasmi::Engine>,
-        object: Option<T>,
+        object: T,
     ) -> Self {
         Self::new::<T>(ctx.as_context_mut(), object)
     }
 
-    fn downcast<'a, T: 'static, S: 'a>(
-        &self,
-        store: <wasmi::Engine as WasmEngine>::StoreContext<'a, S>,
-    ) -> Result<Option<&'a T>> {
-        if let Some(data) = self.data(store) {
-            data.downcast_ref()
-                .ok_or_else(|| Error::msg("Incorrect extern ref type."))
-                .map(Some)
-        } else {
-            Ok(None)
-        }
+    fn downcast<'a, 's: 'a, T: 'static, S: 'a>(
+        &'a self,
+        store: <wasmi::Engine as WasmEngine>::StoreContext<'s, S>,
+    ) -> Result<&'a T> {
+        self.data(store)
+            .ok_or_else(|| Error::msg("externref None should be external"))?
+            .downcast_ref()
+            .ok_or_else(|| Error::msg("Incorrect extern ref type."))
     }
 }
 

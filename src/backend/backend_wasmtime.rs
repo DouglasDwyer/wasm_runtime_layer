@@ -26,20 +26,19 @@ impl WasmEngine for wasmtime::Engine {
 impl WasmExternRef<wasmtime::Engine> for wasmtime::ExternRef {
     fn new<T: 'static + Send + Sync>(
         _: impl AsContextMut<wasmtime::Engine>,
-        object: Option<T>,
+        object: T,
     ) -> Self {
-        Self::new::<Option<T>>(object)
+        Self::new::<T>(object)
     }
 
-    fn downcast<'a, T: 'static, S: 'a>(
-        &self,
-        _: <wasmtime::Engine as WasmEngine>::StoreContext<'a, S>,
-    ) -> Result<Option<&'a T>> {
+    fn downcast<'a, 's: 'a, T: 'static, S: 's>(
+        &'a self,
+        _: <wasmtime::Engine as WasmEngine>::StoreContext<'s, S>,
+    ) -> Result<&'a T> {
         Ok(self
             .data()
-            .downcast_ref::<&Option<T>>()
-            .ok_or_else(|| Error::msg("Incorrect extern ref type."))?
-            .as_ref())
+            .downcast_ref::<T>()
+            .ok_or_else(|| Error::msg("Incorrect extern ref type."))?)
     }
 }
 

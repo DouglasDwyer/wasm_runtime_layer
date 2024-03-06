@@ -340,14 +340,14 @@ impl FromStoredJs for Value<Engine> {
 pub struct ExternRef {}
 
 impl WasmExternRef<Engine> for ExternRef {
-    fn new<T: 'static + Send + Sync>(_: impl AsContextMut<Engine>, _: Option<T>) -> Self {
+    fn new<T: 'static + Send + Sync>(_: impl AsContextMut<Engine>, _: T) -> Self {
         unimplemented!("ExternRef is not supported in the web backend")
     }
 
-    fn downcast<'a, T: 'static, S: 'a>(
+    fn downcast<'a, 's: 'a, T: 'static, S: 's>(
         &self,
-        _: <Engine as WasmEngine>::StoreContext<'a, S>,
-    ) -> anyhow::Result<Option<&'a T>> {
+        _: <Engine as WasmEngine>::StoreContext<'s, S>,
+    ) -> anyhow::Result<&'a T> {
         unimplemented!()
     }
 }
