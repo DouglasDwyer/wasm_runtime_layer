@@ -1,5 +1,4 @@
 use crate::backend::*;
-use crate::ArgumentVec;
 use std::sync::*;
 
 impl WasmEngine for wasmi::Engine {

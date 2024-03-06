@@ -1,5 +1,4 @@
 use crate::backend::*;
-use crate::ArgumentVec;
 
 impl WasmEngine for wasmtime::Engine {
     type ExternRef = wasmtime::ExternRef;
