@@ -341,7 +341,7 @@ pub trait WasmEngine: 'static + Clone + Sized {
     type Table: WasmTable<Self>;
 }
 
-/// Provides a nullable opaque reference to any data within WebAssembly.
+/// Provides an opaque reference to any data within WebAssembly.
 pub trait WasmExternRef<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new reference wrapping the given value.
     fn new<T: 'static + Send + Sync>(ctx: impl AsContextMut<E>, object: T) -> Self;

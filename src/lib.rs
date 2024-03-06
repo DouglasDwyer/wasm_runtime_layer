@@ -888,7 +888,7 @@ impl<E: WasmEngine> From<&backend::Value<E>> for Value {
     }
 }
 
-/// Represents a nullable opaque reference to any data within WebAssembly.
+/// Represents an opaque reference to any data within WebAssembly.
 #[derive(Clone, Debug)]
 pub struct ExternRef {
     /// The backing implementation.
