@@ -7,7 +7,7 @@
 //! ## Usage
 //!
 //! To use this crate, first instantiate a backend runtime. The runtime may be any
-//! value that implements `backend::WasmEngine`. Some runtimes are already implemented as optional features.
+//! value that implements `backend::WasmEngine`. Some runtimes are already implemented as additional crates.
 //! Then, one can create an `Engine` from the backend runtime, and use it to initialize modules and instances:
 //!
 //! ```rust
@@ -46,15 +46,12 @@
 //! assert_eq!(result[0], Value::I32(43));
 //! ```
 //!
-//! ## Optional features and backends
+//! ## Backends
 //!
-//! **backend_wasmi** - Implements the `WasmEngine` trait for `wasmi::Engine` instances.
-//!
-//! **backend_wasmtime** - Implements the `WasmEngine` trait for `wasmtime::Engine` instances.
-//!
-//! **backend_web** - Implement a wasm engine targeting the browser's WebAssembly API on `wasm32-unknown-unknown` targets.
-//!
-//! **tracing** - Enable tracing span and events. This makes it easier to follow execution of the runtime and get better introspection when something goes wrong. This is especially useful for the web backend where debugging is not as easily available.
+//! **wasmi-runtime-layer** - Implements the `WasmEngine` trait for wrappers around `wasmtime::Engine` instances.
+//! **wasmtime-runtime-layer** - Implements the `WasmEngine` trait for wrappers around `wasmtime::Engine` instances.
+//! **webassembly-runtime-layer** - Implements a wasm engine targeting the browser's WebAssembly API on `wasm32-unknown-unknown` targets.
+//! **pyodide-webassembly-runtime-layer** - Implements a wasm engine targeting the browser's WebAssembly API when running as a Python extension module inside Pyodide.
 //!
 //! Contributions for additional backend implementations are welcome!
 //!
@@ -83,12 +80,6 @@
 
 /// Provides traits for implementing runtime backends.
 pub mod backend;
-
-/// Provides a backend targeting the browser's WebAssembly API
-#[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
-pub mod web {
-    pub use crate::backend::backend_web::Engine;
-}
 
 use crate::backend::*;
 use anyhow::Result;
@@ -709,8 +700,8 @@ pub struct Engine<E: WasmEngine> {
 
 impl<E: WasmEngine> Engine<E> {
     /// Creates a new engine using the specified backend.
-    pub fn new(backend: E) -> Self {
-        Self { backend }
+    pub fn new(backend: impl Into<E>) -> Self {
+        Self { backend: backend.into() }
     }
 
     /// Unwraps this instance into the core backend engine.
