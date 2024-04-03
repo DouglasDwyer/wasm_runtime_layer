@@ -23,10 +23,7 @@ impl WasmEngine for wasmtime::Engine {
 }
 
 impl WasmExternRef<wasmtime::Engine> for wasmtime::ExternRef {
-    fn new<T: 'static + Send + Sync>(
-        _: impl AsContextMut<wasmtime::Engine>,
-        object: T,
-    ) -> Self {
+    fn new<T: 'static + Send + Sync>(_: impl AsContextMut<wasmtime::Engine>, object: T) -> Self {
         Self::new::<T>(object)
     }
 
@@ -352,7 +349,12 @@ impl WasmTable<wasmtime::Engine> for wasmtime::Table {
         ty: TableType,
         init: Value<wasmtime::Engine>,
     ) -> Result<Self> {
-        Self::new(ctx.as_context_mut(), ty.into(), (&init).into()).map_err(Error::msg)
+        Self::new(
+            ctx.as_context_mut(),
+            ty.into(),
+            wasmtime::Val::from(&init).into(),
+        )
+        .map_err(Error::msg)
     }
 
     fn ty(&self, ctx: impl AsContext<wasmtime::Engine>) -> TableType {
@@ -369,8 +371,12 @@ impl WasmTable<wasmtime::Engine> for wasmtime::Table {
         delta: u32,
         init: Value<wasmtime::Engine>,
     ) -> Result<u32> {
-        self.grow(ctx.as_context_mut(), delta, (&init).into())
-            .map_err(Error::msg)
+        self.grow(
+            ctx.as_context_mut(),
+            delta,
+            wasmtime::Val::from(&init).into(),
+        )
+        .map_err(Error::msg)
     }
 
     fn get(
@@ -389,8 +395,12 @@ impl WasmTable<wasmtime::Engine> for wasmtime::Table {
         index: u32,
         value: Value<wasmtime::Engine>,
     ) -> Result<()> {
-        self.set(ctx.as_context_mut(), index, (&value).into())
-            .map_err(Error::msg)
+        self.set(
+            ctx.as_context_mut(),
+            index,
+            wasmtime::Val::from(&value).into(),
+        )
+        .map_err(Error::msg)
     }
 }
 
