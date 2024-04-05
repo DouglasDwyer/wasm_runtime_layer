@@ -13,7 +13,7 @@
 //! ```rust
 //! # use wasm_runtime_layer::*;
 //! // 1. Instantiate a runtime
-//! let engine = Engine::new(wasmi::Engine::default());
+//! let engine = Engine::new(wasmtime_runtime_layer::Engine::default());
 //! let mut store = Store::new(&engine, ());
 //!
 //! // 2. Create modules and instances, similar to other runtimes
@@ -700,8 +700,8 @@ pub struct Engine<E: WasmEngine> {
 
 impl<E: WasmEngine> Engine<E> {
     /// Creates a new engine using the specified backend.
-    pub fn new(backend: impl Into<E>) -> Self {
-        Self { backend: backend.into() }
+    pub fn new(backend: E) -> Self {
+        Self { backend }
     }
 
     /// Unwraps this instance into the core backend engine.
@@ -888,10 +888,7 @@ pub struct ExternRef {
 
 impl ExternRef {
     /// Creates a new [`ExternRef`] wrapping the given value.
-    pub fn new<T: 'static + Send + Sync, C: AsContextMut>(
-        mut ctx: C,
-        object: T,
-    ) -> Self {
+    pub fn new<T: 'static + Send + Sync, C: AsContextMut>(mut ctx: C, object: T) -> Self {
         Self {
             extern_ref: BackendObject::new(
                 <<C::Engine as WasmEngine>::ExternRef as WasmExternRef<C::Engine>>::new(

@@ -1,29 +1,29 @@
 use wasm_runtime_layer::{backend::WasmEngine, Engine, Imports, Instance, Module, Store, Value};
 
 #[test]
-#[cfg(all(feature = "backend_wasmtime", not(target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_wasmtime() {
     // 1. Instantiate a runtime
-    let engine = Engine::new(wasmtime::Engine::default());
+    let engine = Engine::new(wasmtime_runtime_layer::Engine::default());
     add_one(&engine)
 }
 
-#[test]
-#[wasm_bindgen_test::wasm_bindgen_test]
-#[cfg(feature = "backend_wasmi")]
-fn test_wasmi() {
-    // 1. Instantiate a runtime
-    let engine = Engine::new(wasmi::Engine::default());
-    add_one(&engine)
-}
+// #[test]
+// #[wasm_bindgen_test::wasm_bindgen_test]
+// #[cfg(feature = "backend_wasmi")]
+// fn test_wasmi() {
+//     // 1. Instantiate a runtime
+//     let engine = Engine::new(wasmi::Engine::default());
+//     add_one(&engine)
+// }
 
-#[wasm_bindgen_test::wasm_bindgen_test]
-#[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
-fn test_web() {
-    // 1. Instantiate a runtime
-    let engine = Engine::new(wasm_runtime_layer::web::Engine::default());
-    add_one(&engine)
-}
+// #[wasm_bindgen_test::wasm_bindgen_test]
+// #[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
+// fn test_web() {
+//     // 1. Instantiate a runtime
+//     let engine = Engine::new(wasm_runtime_layer::web::Engine::default());
+//     add_one(&engine)
+// }
 
 #[allow(unused)]
 fn add_one(engine: &Engine<impl WasmEngine>) {

@@ -20,6 +20,7 @@ tracing = { version = "0.1", optional = true }
 [dev-dependencies]
 wat = "1.0"
 wasm-bindgen-test = "0.3"
+wasmtime-runtime-layer = { version = ">=18.0", path = "backends/wasmtime-runtime-layer" }
 
 [package.metadata."docs.rs"]
 all-features = true

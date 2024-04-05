@@ -13,7 +13,7 @@ Then, one can create an `Engine` from the backend runtime, and use it to initial
 
 ```rust
 // 1. Instantiate a runtime
-let engine = Engine::new(wasmi::Engine::default());
+let engine = Engine::new(wasmtime_runtime_layer::Engine::default());
 let mut store = Store::new(&engine, ());
 
 // 2. Create modules and instances, similar to other runtimes
