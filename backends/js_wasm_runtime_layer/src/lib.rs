@@ -2,7 +2,7 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
-//! `wasmi_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmi`.
+//! `js_wasm_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for your web browser's WebAssembly runtime.
 
 /// Conversion to and from JavaScript
 mod conversion;
