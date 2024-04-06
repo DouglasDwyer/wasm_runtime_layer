@@ -1,4 +1,5 @@
 #![deny(warnings)]
+#![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
@@ -10,6 +11,7 @@ use std::{
 };
 
 use anyhow::{Context, Error, Result};
+use ref_cast::RefCast;
 use smallvec::SmallVec;
 use wasm_runtime_layer::{
     backend::{
@@ -30,7 +32,7 @@ type ArgumentVec<T> = SmallVec<[T; DEFAULT_ARGUMENT_SIZE]>;
 /// Generate the boilerplate delegation code for a newtype wrapper.
 macro_rules! delegate {
     (#[derive($($derive:ident),*)] $newtype:ident($inner:ty) $($tt:tt)*) => {
-        #[derive($($derive),*)]
+        #[derive($($derive,)* RefCast)]
         #[repr(transparent)]
         #[doc = concat!("Newtype wrapper around [`", stringify!($inner), "`].")]
         pub struct $newtype$($tt)*($inner);
@@ -58,40 +60,6 @@ macro_rules! delegate {
             )]
             pub fn into_inner(self) -> $inner {
                 self.0
-            }
-
-            #[must_use]
-            #[allow(clippy::needless_lifetimes)]
-            #[doc = concat!(
-                "Convert a shared reference to a [`",
-                stringify!($inner),
-                "`] to a shared reference to a `",
-                stringify!($newtype),
-                "`."
-            )]
-            pub fn from_ref<'s>(inner: &'s $inner) -> &'s Self {
-                // Safety: $newtype is a transparent newtype around $inner
-                #[allow(unsafe_code)]
-                unsafe {
-                    &*(inner as *const $inner).cast()
-                }
-            }
-
-            #[must_use]
-            #[allow(clippy::needless_lifetimes)]
-            #[doc = concat!(
-                "Convert a mutable reference to a [`",
-                stringify!($inner),
-                "`] to a mutable reference to a `",
-                stringify!($newtype),
-                "`."
-            )]
-            pub fn from_mut<'s>(inner: &'s mut $inner) -> &'s mut Self {
-                // Safety: $newtype is a transparent newtype around $inner
-                #[allow(unsafe_code)]
-                unsafe {
-                    &mut *(inner as *mut $inner).cast()
-                }
             }
         }
 
@@ -135,13 +103,13 @@ macro_rules! delegate {
 
         impl$($tt)* AsRef<$newtype$($tt)*> for $inner {
             fn as_ref(&self) -> &$newtype$($tt)* {
-                $newtype::from_ref(self)
+                $newtype::ref_cast(self)
             }
         }
 
         impl$($tt)* AsMut<$newtype$($tt)*> for $inner {
             fn as_mut(&mut self) -> &mut $newtype$($tt)* {
-                $newtype::from_mut(self)
+                $newtype::ref_cast_mut(self)
             }
         }
     }
@@ -447,7 +415,7 @@ impl<T> WasmStore<T, Engine> for Store<T> {
     }
 
     fn engine(&self) -> &Engine {
-        Engine::from_ref(self.as_ref().engine())
+        Engine::ref_cast(self.as_ref().engine())
     }
 
     fn data(&self) -> &T {
@@ -479,7 +447,7 @@ impl<T> AsContextMut<Engine> for Store<T> {
 
 impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
     fn engine(&self) -> &Engine {
-        Engine::from_ref(self.as_ref().engine())
+        Engine::ref_cast(self.as_ref().engine())
     }
 
     fn data(&self) -> &T {
@@ -511,7 +479,7 @@ impl<'a, T> AsContextMut<Engine> for StoreContextMut<'a, T> {
 
 impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
     fn engine(&self) -> &Engine {
-        Engine::from_ref(self.as_ref().engine())
+        Engine::ref_cast(self.as_ref().engine())
     }
 
     fn data(&self) -> &T {

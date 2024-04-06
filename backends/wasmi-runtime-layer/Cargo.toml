@@ -11,6 +11,7 @@ WebAssembly runtime compatibility interface implementation for Wasmi.
 
 [dependencies]
 anyhow = { version = "1.0", default-features = false, features = [ "std" ] }
+ref-cast = { version = "1.0", default-features = false }
 smallvec = { version = "1.11", default-features = false }
 wasm_runtime_layer = { path = "../..", version = "0.3", default-features = false }
 wasmi = { version = "0.31.0", default-features = false, features = [ "std" ] }

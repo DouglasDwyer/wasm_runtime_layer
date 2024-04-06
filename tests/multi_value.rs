@@ -21,14 +21,14 @@ fn test_wasmi() {
     multi_value(&engine)
 }
 
-// #[wasm_bindgen_test::wasm_bindgen_test]
-// #[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
-// fn test_web() {
-//     // 1. Instantiate a runtime
+#[wasm_bindgen_test::wasm_bindgen_test]
+#[cfg(target_arch = "wasm32")]
+fn test_webassembly() {
+    // 1. Instantiate a runtime
 
-//     let engine = Engine::new(wasm_runtime_layer::web::Engine::default());
-//     multi_value(&engine)
-// }
+    let engine = Engine::new(webassembly_runtime_layer::Engine::default());
+    multi_value(&engine)
+}
 
 #[allow(unused)]
 fn multi_value(engine: &Engine<impl WasmEngine>) {
