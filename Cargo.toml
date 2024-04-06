@@ -1,3 +1,10 @@
+[workspace]
+members = [
+    ".",
+    "backends/wasmi-runtime-layer",
+    "backends/wasmtime-runtime-layer",
+]
+
 [package]
 name = "wasm_runtime_layer"
 version = "0.3.0"
@@ -20,6 +27,7 @@ tracing = { version = "0.1", optional = true }
 [dev-dependencies]
 wat = "1.0"
 wasm-bindgen-test = "0.3"
+wasmi-runtime-layer = { version = ">=0.31", path = "backends/wasmi-runtime-layer" }
 wasmtime-runtime-layer = { version = ">=18.0", path = "backends/wasmtime-runtime-layer" }
 
 [package.metadata."docs.rs"]

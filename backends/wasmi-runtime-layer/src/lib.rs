@@ -2,15 +2,14 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
-//! `wasmtime-runtime-layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmtime`.
+//! `wasmi-runtime-layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmi`.
 
 use std::{
     ops::{Deref, DerefMut},
     sync::Arc,
 };
 
-use anyhow::{Error, Result};
-use fxhash::FxHashMap;
+use anyhow::{Context, Error, Result};
 use smallvec::SmallVec;
 use wasm_runtime_layer::{
     backend::{
@@ -148,16 +147,17 @@ macro_rules! delegate {
     }
 }
 
-delegate! { #[derive(Clone, Default)] Engine(wasmtime::Engine) }
-delegate! { #[derive(Clone)] ExternRef(wasmtime::ExternRef) }
-delegate! { #[derive(Clone)] Func(wasmtime::Func) }
-delegate! { #[derive(Clone)] Global(wasmtime::Global) }
-delegate! { #[derive(Clone)] Memory(wasmtime::Memory) }
-delegate! { #[derive(Clone)] Module(wasmtime::Module) }
-delegate! { #[derive()] Store(wasmtime::Store<T>) <T> }
-delegate! { #[derive()] StoreContext(wasmtime::StoreContext<'a, T>) <'a, T> }
-delegate! { #[derive()] StoreContextMut(wasmtime::StoreContextMut<'a, T>) <'a, T> }
-delegate! { #[derive(Clone)] Table(wasmtime::Table) }
+delegate! { #[derive(Clone, Default)] Engine(wasmi::Engine) }
+// delegate! { #[derive(Clone)] ExternRef(wasmi::ExternRef) }
+delegate! { #[derive(Clone)] Func(wasmi::Func) }
+delegate! { #[derive(Clone)] Global(wasmi::Global) }
+delegate! { #[derive(Clone)] Instance(wasmi::Instance) }
+delegate! { #[derive(Clone)] Memory(wasmi::Memory) }
+delegate! { #[derive(Clone)] Module(Arc<wasmi::Module>) }
+delegate! { #[derive()] Store(wasmi::Store<T>) <T> }
+delegate! { #[derive()] StoreContext(wasmi::StoreContext<'a, T>) <'a, T> }
+delegate! { #[derive()] StoreContextMut(wasmi::StoreContextMut<'a, T>) <'a, T> }
+delegate! { #[derive(Clone)] Table(wasmi::Table) }
 
 impl WasmEngine for Engine {
     type ExternRef = ExternRef;
@@ -172,14 +172,65 @@ impl WasmEngine for Engine {
     type Table = Table;
 }
 
-impl WasmExternRef<Engine> for ExternRef {
-    fn new<T: 'static + Send + Sync>(_: impl AsContextMut<Engine>, object: T) -> Self {
-        Self::new(wasmtime::ExternRef::new(object))
+#[derive(Clone)]
+#[repr(transparent)]
+/// Newtype wrapper around [`wasmi::ExternRef`], which ensures it is always [`Some`].
+pub struct ExternRef(wasmi::ExternRef);
+
+impl ExternRef {
+    /// Create an optional [`wasm_runtime_layer::ExternRef`]-compatible `ExternRef`
+    /// from a [`wasmi::ExternRef`].
+    pub fn new(inner: wasmi::ExternRef) -> Option<Self> {
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self(inner))
+        }
     }
 
-    fn downcast<'a, 's: 'a, T: 'static, S: 's>(&'a self, _: StoreContext<'s, S>) -> Result<&'a T> {
-        self.data()
-            .downcast_ref::<T>()
+    #[must_use]
+    /// Consume an `ExternRef` to obtain the inner [`wasmi::ExternRef`].
+    pub fn into_inner(self) -> wasmi::ExternRef {
+        self.0
+    }
+}
+
+impl From<ExternRef> for wasmi::ExternRef {
+    fn from(wrapper: ExternRef) -> Self {
+        wrapper.into_inner()
+    }
+}
+
+impl Deref for ExternRef {
+    type Target = wasmi::ExternRef;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<wasmi::ExternRef> for ExternRef {
+    fn as_ref(&self) -> &wasmi::ExternRef {
+        &self.0
+    }
+}
+
+impl WasmExternRef<Engine> for ExternRef {
+    fn new<T: 'static + Send + Sync>(mut ctx: impl AsContextMut<Engine>, object: T) -> Self {
+        Self(wasmi::ExternRef::new::<T>(
+            ctx.as_context_mut().into_inner(),
+            object,
+        ))
+    }
+
+    fn downcast<'a, 's: 'a, T: 'static, S: 'a>(
+        &'a self,
+        store: StoreContext<'s, S>,
+    ) -> Result<&'a T> {
+        self.as_ref()
+            .data(store)
+            .ok_or_else(|| Error::msg("externref None should be external"))?
+            .downcast_ref()
             .ok_or_else(|| Error::msg("Incorrect extern ref type."))
     }
 }
@@ -193,7 +244,7 @@ impl WasmFunc<Engine> for Func {
             + Sync
             + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> Result<()>,
     ) -> Self {
-        Self::new(wasmtime::Func::new(
+        Self::new(wasmi::Func::new(
             ctx.as_context_mut().into_inner(),
             func_type_into(ty),
             move |mut caller, args, results| {
@@ -204,16 +255,17 @@ impl WasmFunc<Engine> for Func {
                 output.extend(results.iter().cloned().map(value_from));
 
                 func(
-                    StoreContextMut::new(wasmtime::AsContextMut::as_context_mut(&mut caller)),
+                    StoreContextMut::new(wasmi::AsContextMut::as_context_mut(&mut caller)),
                     &input,
                     &mut output,
-                )?;
+                )
+                .map_err(HostError)?;
 
                 for (i, result) in output.into_iter().enumerate() {
                     results[i] = value_into(result);
                 }
 
-                std::result::Result::Ok(())
+                Ok(())
             },
         ))
     }
@@ -250,22 +302,15 @@ impl WasmFunc<Engine> for Func {
 
 impl WasmGlobal<Engine> for Global {
     fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
-        let value = value_into(value);
-        Self::new(
-            wasmtime::Global::new(
-                ctx.as_context_mut().into_inner(),
-                wasmtime::GlobalType::new(
-                    value.ty(),
-                    if mutable {
-                        wasmtime::Mutability::Var
-                    } else {
-                        wasmtime::Mutability::Const
-                    },
-                ),
-                value,
-            )
-            .expect("Could not create global."),
-        )
+        Self::new(wasmi::Global::new(
+            ctx.as_context_mut().into_inner(),
+            value_into(value),
+            if mutable {
+                wasmi::Mutability::Var
+            } else {
+                wasmi::Mutability::Const
+            },
+        ))
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> GlobalType {
@@ -278,45 +323,8 @@ impl WasmGlobal<Engine> for Global {
             .map_err(Error::msg)
     }
 
-    fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Value<Engine> {
-        value_from(self.as_ref().get(ctx.as_context_mut().into_inner()))
-    }
-}
-
-/// Wrapper around [`wasmtime::Instance`].
-#[derive(Clone)]
-pub struct Instance {
-    /// The instance itself.
-    instance: wasmtime::Instance,
-    /// The instance exports.
-    exports: Arc<FxHashMap<String, Export<Engine>>>,
-}
-
-impl Instance {
-    #[must_use]
-    /// Consume an `Instance` to obtain the inner [`wasmtime::Instance`].
-    pub fn into_inner(self) -> wasmtime::Instance {
-        self.instance
-    }
-}
-
-impl From<Instance> for wasmtime::Instance {
-    fn from(wrapper: Instance) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl Deref for Instance {
-    type Target = wasmtime::Instance;
-
-    fn deref(&self) -> &Self::Target {
-        &self.instance
-    }
-}
-
-impl AsRef<wasmtime::Instance> for Instance {
-    fn as_ref(&self) -> &wasmtime::Instance {
-        &self.instance
+    fn get(&self, ctx: impl AsContextMut<Engine>) -> Value<Engine> {
+        value_from(self.as_ref().get(ctx.as_context().into_inner()))
     }
 }
 
@@ -326,56 +334,42 @@ impl WasmInstance<Engine> for Instance {
         module: &Module,
         imports: &Imports<Engine>,
     ) -> Result<Self> {
-        let mut linker = wasmtime::Linker::new(store.as_context().engine());
+        let mut linker = wasmi::Linker::new(store.as_context().engine().as_ref());
 
         for ((module, name), imp) in imports {
-            linker.define(
-                store.as_context().into_inner(),
-                &module,
-                &name,
-                extern_into(imp),
-            )?;
+            linker.define(&module, &name, extern_into(imp))?;
         }
 
-        let res = linker.instantiate(store.as_context_mut().into_inner(), module)?;
-        let exports = Arc::new(
-            res.exports(store.as_context_mut())
-                .map(|x| {
-                    (
-                        x.name().to_string(),
-                        Export {
-                            name: x.name().to_string(),
-                            value: extern_from(x.into_extern()),
-                        },
-                    )
-                })
-                .collect(),
-        );
-
-        Ok(Self {
-            instance: res,
-            exports,
-        })
+        let pre = linker.instantiate(store.as_context_mut().into_inner(), module.as_ref())?;
+        Ok(Self::new(pre.start(store.as_context_mut().into_inner())?))
     }
 
-    fn exports<'a>(&self, _: impl AsContext<Engine>) -> Box<dyn Iterator<Item = Export<Engine>>> {
+    fn exports<'a>(
+        &self,
+        store: impl AsContext<Engine>,
+    ) -> Box<dyn Iterator<Item = Export<Engine>>> {
         Box::new(
-            self.exports
-                .values()
-                .cloned()
+            self.as_ref()
+                .exports(store.as_context().into_inner())
+                .map(|x| Export {
+                    name: x.name().to_string(),
+                    value: extern_from(x.into_extern()),
+                })
                 .collect::<Vec<_>>()
                 .into_iter(),
         )
     }
 
-    fn get_export(&self, _: impl AsContext<Engine>, name: &str) -> Option<Extern<Engine>> {
-        (*self.exports).get(name).map(|x| x.value.clone())
+    fn get_export(&self, store: impl AsContext<Engine>, name: &str) -> Option<Extern<Engine>> {
+        self.as_ref()
+            .get_export(store.as_context().into_inner(), name)
+            .map(extern_from)
     }
 }
 
 impl WasmMemory<Engine> for Memory {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: MemoryType) -> Result<Self> {
-        wasmtime::Memory::new(ctx.as_context_mut().into_inner(), memory_type_into(ty))
+        wasmi::Memory::new(ctx.as_context_mut().into_inner(), memory_type_into(ty))
             .map(Self::new)
             .map_err(Error::msg)
     }
@@ -386,13 +380,19 @@ impl WasmMemory<Engine> for Memory {
 
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
         self.as_ref()
-            .grow(ctx.as_context_mut().into_inner(), additional as u64)
-            .map(|x| x as u32)
+            .grow(
+                ctx.as_context_mut().into_inner(),
+                wasmi::core::Pages::new(additional)
+                    .context("Could not create additional pages.")?,
+            )
+            .map(Into::into)
             .map_err(Error::msg)
     }
 
     fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
-        self.as_ref().size(ctx.as_context().into_inner()) as u32
+        self.as_ref()
+            .current_pages(ctx.as_context().into_inner())
+            .into()
     }
 
     fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
@@ -414,16 +414,17 @@ impl WasmMemory<Engine> for Memory {
 }
 
 impl WasmModule<Engine> for Module {
-    fn new(engine: &Engine, mut stream: impl std::io::Read) -> Result<Self> {
-        let mut buf = Vec::default();
-        stream.read_to_end(&mut buf)?;
-        wasmtime::Module::from_binary(engine, &buf).map(Self::new)
+    fn new(engine: &Engine, stream: impl std::io::Read) -> Result<Self> {
+        Ok(Self::new(Arc::new(wasmi::Module::new(
+            engine.as_ref(),
+            stream,
+        )?)))
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
         Box::new(self.as_ref().exports().map(|x| ExportType {
             name: x.name(),
-            ty: extern_type_from(x.ty()),
+            ty: extern_type_from(x.ty().clone()),
         }))
     }
 
@@ -435,14 +436,14 @@ impl WasmModule<Engine> for Module {
         Box::new(self.as_ref().imports().map(|x| ImportType {
             module: x.module(),
             name: x.name(),
-            ty: extern_type_from(x.ty()),
+            ty: extern_type_from(x.ty().clone()),
         }))
     }
 }
 
 impl<T> WasmStore<T, Engine> for Store<T> {
     fn new(engine: &Engine, data: T) -> Self {
-        Self::new(wasmtime::Store::new(engine, data))
+        Self::new(wasmi::Store::new(engine.as_ref(), data))
     }
 
     fn engine(&self) -> &Engine {
@@ -466,13 +467,13 @@ impl<T> AsContext<Engine> for Store<T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<'_, Self::UserState> {
-        StoreContext::new(wasmtime::AsContext::as_context(self.as_ref()))
+        StoreContext::new(wasmi::AsContext::as_context(self.as_ref()))
     }
 }
 
 impl<T> AsContextMut<Engine> for Store<T> {
     fn as_context_mut(&mut self) -> StoreContextMut<'_, Self::UserState> {
-        StoreContextMut::new(wasmtime::AsContextMut::as_context_mut(self.as_mut()))
+        StoreContextMut::new(wasmi::AsContextMut::as_context_mut(self.as_mut()))
     }
 }
 
@@ -490,7 +491,7 @@ impl<'a, T> AsContext<Engine> for StoreContext<'a, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<T> {
-        StoreContext::new(wasmtime::AsContext::as_context(self.as_ref()))
+        StoreContext::new(wasmi::AsContext::as_context(self.as_ref()))
     }
 }
 
@@ -498,13 +499,13 @@ impl<'a, T> AsContext<Engine> for StoreContextMut<'a, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<T> {
-        StoreContext::new(wasmtime::AsContext::as_context(self.as_ref()))
+        StoreContext::new(wasmi::AsContext::as_context(self.as_ref()))
     }
 }
 
 impl<'a, T> AsContextMut<Engine> for StoreContextMut<'a, T> {
     fn as_context_mut(&mut self) -> StoreContextMut<T> {
-        StoreContextMut::new(wasmtime::AsContextMut::as_context_mut(self.as_mut()))
+        StoreContextMut::new(wasmi::AsContextMut::as_context_mut(self.as_mut()))
     }
 }
 
@@ -526,7 +527,7 @@ impl<'a, T> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, T> {
 
 impl WasmTable<Engine> for Table {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: TableType, init: Value<Engine>) -> Result<Self> {
-        wasmtime::Table::new(
+        wasmi::Table::new(
             ctx.as_context_mut().into_inner(),
             table_type_into(ty),
             value_into(init),
@@ -554,9 +555,9 @@ impl WasmTable<Engine> for Table {
             .map_err(Error::msg)
     }
 
-    fn get(&self, mut ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
+    fn get(&self, ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
         self.as_ref()
-            .get(ctx.as_context_mut().into_inner(), index)
+            .get(ctx.as_context().into_inner(), index)
             .map(value_from)
     }
 
@@ -572,127 +573,140 @@ impl WasmTable<Engine> for Table {
     }
 }
 
-/// Convert a [`wasmtime::Val`] to a [`Value<Engine>`].
-fn value_from(value: wasmtime::Val) -> Value<Engine> {
+/// Convert a [`wasmi::Value`] to a [`Value<Engine>`].
+fn value_from(value: wasmi::Value) -> Value<Engine> {
     match value {
-        wasmtime::Val::I32(x) => Value::I32(x),
-        wasmtime::Val::I64(x) => Value::I64(x),
-        wasmtime::Val::F32(x) => Value::F32(f32::from_bits(x)),
-        wasmtime::Val::F64(x) => Value::F64(f64::from_bits(x)),
-        wasmtime::Val::FuncRef(x) => Value::FuncRef(x.map(Func::new)),
-        wasmtime::Val::ExternRef(x) => Value::ExternRef(x.map(ExternRef::new)),
-        wasmtime::Val::V128(_) => unimplemented!(),
+        wasmi::Value::I32(x) => Value::I32(x),
+        wasmi::Value::I64(x) => Value::I64(x),
+        wasmi::Value::F32(x) => Value::F32(x.to_float()),
+        wasmi::Value::F64(x) => Value::F64(x.to_float()),
+        wasmi::Value::FuncRef(x) => Value::FuncRef(x.func().copied().map(Func::new)),
+        wasmi::Value::ExternRef(x) => Value::ExternRef(ExternRef::new(x)),
     }
 }
 
-/// Convert a [`Value<Engine>`] to a [`wasmtime::Val`].
-fn value_into(value: Value<Engine>) -> wasmtime::Val {
+/// Convert a [`Value<Engine>`] to a [`wasmi::Value`].
+fn value_into(value: Value<Engine>) -> wasmi::Value {
     match value {
-        Value::I32(x) => wasmtime::Val::I32(x),
-        Value::I64(x) => wasmtime::Val::I64(x),
-        Value::F32(x) => wasmtime::Val::F32(x.to_bits()),
-        Value::F64(x) => wasmtime::Val::F64(x.to_bits()),
-        Value::FuncRef(x) => wasmtime::Val::FuncRef(x.map(Func::into_inner)),
-        Value::ExternRef(x) => wasmtime::Val::ExternRef(x.map(ExternRef::into_inner)),
+        Value::I32(x) => wasmi::Value::I32(x),
+        Value::I64(x) => wasmi::Value::I64(x),
+        Value::F32(x) => wasmi::Value::F32(wasmi::core::F32::from_float(x)),
+        Value::F64(x) => wasmi::Value::F64(wasmi::core::F64::from_float(x)),
+        Value::FuncRef(x) => wasmi::Value::FuncRef(wasmi::FuncRef::new(x.map(Func::into_inner))),
+        Value::ExternRef(x) => wasmi::Value::ExternRef(
+            x.map(ExternRef::into_inner)
+                .unwrap_or_else(wasmi::ExternRef::null),
+        ),
     }
 }
 
-/// Convert a [`wasmtime::ValType`] to a [`ValueType`].
-fn value_type_from(ty: wasmtime::ValType) -> ValueType {
+/// Convert a [`wasmi::core::ValueType`] to a [`ValueType`].
+fn value_type_from(ty: wasmi::core::ValueType) -> ValueType {
     match ty {
-        wasmtime::ValType::I32 => ValueType::I32,
-        wasmtime::ValType::I64 => ValueType::I64,
-        wasmtime::ValType::F32 => ValueType::F32,
-        wasmtime::ValType::F64 => ValueType::F64,
-        wasmtime::ValType::FuncRef => ValueType::FuncRef,
-        wasmtime::ValType::ExternRef => ValueType::ExternRef,
-        wasmtime::ValType::V128 => unimplemented!(),
+        wasmi::core::ValueType::I32 => ValueType::I32,
+        wasmi::core::ValueType::I64 => ValueType::I64,
+        wasmi::core::ValueType::F32 => ValueType::F32,
+        wasmi::core::ValueType::F64 => ValueType::F64,
+        wasmi::core::ValueType::FuncRef => ValueType::FuncRef,
+        wasmi::core::ValueType::ExternRef => ValueType::ExternRef,
     }
 }
 
-/// Convert a [`ValueType`] to a [`wasmtime::ValType`].
-fn value_type_into(ty: ValueType) -> wasmtime::ValType {
+/// Convert a [`ValueType`] to a [`wasmi::core::ValueType`].
+fn value_type_into(ty: ValueType) -> wasmi::core::ValueType {
     match ty {
-        ValueType::I32 => wasmtime::ValType::I32,
-        ValueType::I64 => wasmtime::ValType::I64,
-        ValueType::F32 => wasmtime::ValType::F32,
-        ValueType::F64 => wasmtime::ValType::F64,
-        ValueType::FuncRef => wasmtime::ValType::FuncRef,
-        ValueType::ExternRef => wasmtime::ValType::ExternRef,
+        ValueType::I32 => wasmi::core::ValueType::I32,
+        ValueType::I64 => wasmi::core::ValueType::I64,
+        ValueType::F32 => wasmi::core::ValueType::F32,
+        ValueType::F64 => wasmi::core::ValueType::F64,
+        ValueType::FuncRef => wasmi::core::ValueType::FuncRef,
+        ValueType::ExternRef => wasmi::core::ValueType::ExternRef,
     }
 }
 
-/// Convert a [`wasmtime::FuncType`] to a [`FuncType`].
-fn func_type_from(ty: wasmtime::FuncType) -> FuncType {
+/// Convert a [`wasmi::FuncType`] to a [`FuncType`].
+fn func_type_from(ty: wasmi::FuncType) -> FuncType {
     FuncType::new(
-        ty.params().map(value_type_from),
-        ty.results().map(value_type_from),
+        ty.params().iter().cloned().map(value_type_from),
+        ty.results().iter().cloned().map(value_type_from),
     )
 }
 
-/// Convert a [`FuncType`] to a [`wasmtime::FuncType`].
-fn func_type_into(ty: FuncType) -> wasmtime::FuncType {
-    wasmtime::FuncType::new(
+/// Convert a [`FuncType`] to a [`wasmi::FuncType`].
+fn func_type_into(ty: FuncType) -> wasmi::FuncType {
+    wasmi::FuncType::new(
         ty.params().iter().map(|&x| value_type_into(x)),
         ty.results().iter().map(|&x| value_type_into(x)),
     )
 }
 
-/// Convert a [`wasmtime::GlobalType`] to a [`GlobalType`].
-fn global_type_from(ty: wasmtime::GlobalType) -> GlobalType {
-    GlobalType::new(
-        value_type_from(ty.content().clone()),
-        matches!(ty.mutability(), wasmtime::Mutability::Var),
+/// Convert a [`wasmi::GlobalType`] to a [`GlobalType`].
+fn global_type_from(ty: wasmi::GlobalType) -> GlobalType {
+    GlobalType::new(value_type_from(ty.content()), ty.mutability().is_mut())
+}
+
+/// Convert a [`wasmi::MemoryType`] to a [`MemoryType`].
+fn memory_type_from(ty: wasmi::MemoryType) -> MemoryType {
+    MemoryType::new(
+        ty.initial_pages().into(),
+        ty.maximum_pages().map(Into::into),
     )
 }
 
-/// Convert a [`wasmtime::MemoryType`] to a [`MemoryType`].
-fn memory_type_from(ty: wasmtime::MemoryType) -> MemoryType {
-    MemoryType::new(ty.minimum() as u32, ty.maximum().map(|x| x as u32))
+/// Convert a [`MemoryType`] to a [`wasmi::MemoryType`].
+fn memory_type_into(ty: MemoryType) -> wasmi::MemoryType {
+    wasmi::MemoryType::new(ty.initial_pages(), ty.maximum_pages())
+        .expect("Could not convert memory.")
 }
 
-/// Convert a [`MemoryType`] to a [`wasmtime::MemoryType`].
-fn memory_type_into(ty: MemoryType) -> wasmtime::MemoryType {
-    wasmtime::MemoryType::new(ty.initial_pages(), ty.maximum_pages())
-}
-
-/// Convert a [`wasmtime::TableType`] to a [`TableType`].
-fn table_type_from(ty: wasmtime::TableType) -> TableType {
+/// Convert a [`wasmi::TableType`] to a [`TableType`].
+fn table_type_from(ty: wasmi::TableType) -> TableType {
     TableType::new(value_type_from(ty.element()), ty.minimum(), ty.maximum())
 }
 
-/// Convert a [`TableType`] to a [`wasmtime::TableType`].
-fn table_type_into(ty: TableType) -> wasmtime::TableType {
-    wasmtime::TableType::new(value_type_into(ty.element()), ty.minimum(), ty.maximum())
+/// Convert a [`TableType`] to a [`wasmi::TableType`].
+fn table_type_into(ty: TableType) -> wasmi::TableType {
+    wasmi::TableType::new(value_type_into(ty.element()), ty.minimum(), ty.maximum())
 }
 
-/// Convert a [`wasmtime::Extern`] to an [`Extern<Engine>`].
-fn extern_from(value: wasmtime::Extern) -> Extern<Engine> {
+/// Convert a [`wasmi::Extern`] to an [`Extern<Engine>`].
+fn extern_from(value: wasmi::Extern) -> Extern<Engine> {
     match value {
-        wasmtime::Extern::Func(x) => Extern::Func(Func::new(x)),
-        wasmtime::Extern::Global(x) => Extern::Global(Global::new(x)),
-        wasmtime::Extern::Memory(x) => Extern::Memory(Memory::new(x)),
-        wasmtime::Extern::Table(x) => Extern::Table(Table::new(x)),
-        wasmtime::Extern::SharedMemory(_) => unimplemented!(),
+        wasmi::Extern::Func(x) => Extern::Func(Func::new(x)),
+        wasmi::Extern::Global(x) => Extern::Global(Global::new(x)),
+        wasmi::Extern::Memory(x) => Extern::Memory(Memory::new(x)),
+        wasmi::Extern::Table(x) => Extern::Table(Table::new(x)),
     }
 }
 
-/// Convert an [`Extern<Engine>`] to a [`wasmtime::Extern`].
-fn extern_into(value: Extern<Engine>) -> wasmtime::Extern {
+/// Convert an [`Extern<Engine>`] to a [`wasmi::Extern`].
+fn extern_into(value: Extern<Engine>) -> wasmi::Extern {
     match value {
-        Extern::Func(x) => wasmtime::Extern::Func(x.into_inner()),
-        Extern::Global(x) => wasmtime::Extern::Global(x.into_inner()),
-        Extern::Memory(x) => wasmtime::Extern::Memory(x.into_inner()),
-        Extern::Table(x) => wasmtime::Extern::Table(x.into_inner()),
+        Extern::Func(x) => wasmi::Extern::Func(x.into_inner()),
+        Extern::Global(x) => wasmi::Extern::Global(x.into_inner()),
+        Extern::Memory(x) => wasmi::Extern::Memory(x.into_inner()),
+        Extern::Table(x) => wasmi::Extern::Table(x.into_inner()),
     }
 }
 
-/// Convert a [`wasmtime::ExternType`] to an [`ExternType`].
-fn extern_type_from(ty: wasmtime::ExternType) -> ExternType {
+/// Convert a [`wasmi::ExternType`] to an [`ExternType`].
+fn extern_type_from(ty: wasmi::ExternType) -> ExternType {
     match ty {
-        wasmtime::ExternType::Func(x) => ExternType::Func(func_type_from(x)),
-        wasmtime::ExternType::Global(x) => ExternType::Global(global_type_from(x)),
-        wasmtime::ExternType::Memory(x) => ExternType::Memory(memory_type_from(x)),
-        wasmtime::ExternType::Table(x) => ExternType::Table(table_type_from(x)),
+        wasmi::ExternType::Func(x) => ExternType::Func(func_type_from(x)),
+        wasmi::ExternType::Global(x) => ExternType::Global(global_type_from(x)),
+        wasmi::ExternType::Memory(x) => ExternType::Memory(memory_type_from(x)),
+        wasmi::ExternType::Table(x) => ExternType::Table(table_type_from(x)),
     }
 }
+
+/// Represents a `wasmi` error derived from `anyhow`.
+#[derive(Debug)]
+struct HostError(anyhow::Error);
+
+impl std::fmt::Display for HostError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl wasmi::core::HostError for HostError {}
