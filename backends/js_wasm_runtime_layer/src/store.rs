@@ -50,8 +50,8 @@ pub struct Store<T> {
     ///
     /// # Playground
     ///
-    /// - `Pin<Box<T>>` solution (UB): https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=685c984584bc0ca1faa780ca292f406c
-    /// - raw pointer solution (sound): https://play.rust-lang.org/?version=stable&mode=release&edition=2021&gist=257841cb1675106d55c756ad59fde2fb
+    /// - `Pin<Box<T>>` solution (UB): <https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=685c984584bc0ca1faa780ca292f406c>
+    /// - raw pointer solution (sound): <https://play.rust-lang.org/?version=stable&mode=release&edition=2021&gist=257841cb1675106d55c756ad59fde2fb>
     ///
     /// You can use `Tools > Miri` to test the validity
     inner: *mut StoreInner<T>,

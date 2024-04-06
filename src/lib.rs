@@ -49,10 +49,10 @@
 //!
 //! ## Backends
 //!
-//! **wasmi-runtime-layer** - Implements the `WasmEngine` trait for wrappers around `wasmi::Engine` instances.
-//! **wasmtime-runtime-layer** - Implements the `WasmEngine` trait for wrappers around `wasmtime::Engine` instances.
-//! **webassembly-runtime-layer** - Implements a wasm engine targeting the browser's WebAssembly API on `wasm32-unknown-unknown` targets.
-//! **pyodide-webassembly-runtime-layer** - Implements a wasm engine targeting the browser's WebAssembly API when running as a Python extension module inside Pyodide.
+//! * **wasmi_runtime_layer** - Implements the `WasmEngine` trait for wrappers around `wasmi::Engine` instances.
+//! * **wasmtime_runtime_layer** - Implements the `WasmEngine` trait for wrappers around `wasmtime::Engine` instances.
+//! * **js_wasm_runtime_layer** - Implements a wasm engine targeting the browser's WebAssembly API on `wasm32-unknown-unknown` targets.
+//! * **pyodide-webassembly-runtime-layer** - Implements a wasm engine targeting the browser's WebAssembly API when running as a Python extension module inside Pyodide.
 //!
 //! Contributions for additional backend implementations are welcome!
 //!

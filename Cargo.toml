@@ -1,9 +1,9 @@
 [workspace]
 members = [
     ".",
-    "backends/wasmi-runtime-layer",
-    "backends/wasmtime-runtime-layer",
-    "backends/webassembly-runtime-layer",
+    "backends/wasmi_runtime_layer",
+    "backends/wasmtime_runtime_layer",
+    "backends/js_wasm_runtime_layer",
 ]
 
 [package]
@@ -23,16 +23,14 @@ fxhash = { version = "0.2", default-features = false }
 ref-cast = { version = "1.0", default-features = false }
 smallvec = { version = "1.11", default-features = false }
 
-tracing = { version = "0.1", optional = true }
-
 [dev-dependencies]
-wat = "1.0"
+js_wasm_runtime_layer = { version = "0.3.0", path = "backends/js_wasm_runtime_layer" }
+wasmi_runtime_layer = { version = "0.31", path = "backends/wasmi_runtime_layer" }
 wasm-bindgen-test = "0.3"
-wasmi-runtime-layer = { version = "0.31", path = "backends/wasmi-runtime-layer" }
-webassembly-runtime-layer = { version = "0.3.0", path = "backends/webassembly-runtime-layer" }
+wat = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-wasmtime-runtime-layer = { version = "18.0", path = "backends/wasmtime-runtime-layer" }
+wasmtime_runtime_layer = { version = "18.0", path = "backends/wasmtime_runtime_layer" }
 
 [package.metadata."docs.rs"]
 all-features = true

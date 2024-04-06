@@ -2,23 +2,22 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
 
-//! `wasmi-runtime-layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmi`.
+//! `wasmi_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmi`.
 
 /// Conversion to and from JavaScript
-pub(crate) mod conversion;
+mod conversion;
 /// Functions
-pub(crate) mod func;
+mod func;
 /// Instances
 mod instance;
 /// Memories
-pub mod memory;
+mod memory;
 /// WebAssembly modules
-pub(crate) mod module;
+mod module;
 /// Stores all the WebAssembly state for a given collection of modules with a similar lifetime
 mod store;
 /// WebAssembly tables
-pub(crate) mod table;
-// mod element;
+mod table;
 
 pub use func::Func;
 pub use instance::Instance;

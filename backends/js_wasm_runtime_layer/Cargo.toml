@@ -1,5 +1,5 @@
 [package]
-name = "webassembly-runtime-layer"
+name = "js_wasm_runtime_layer"
 version = "0.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"

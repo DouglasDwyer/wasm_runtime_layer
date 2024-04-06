@@ -136,8 +136,7 @@ impl WasmFunc<Engine> for Func {
         let mut func = {
             move |mut store: StoreContextMut<T>, _ty: &FuncType, args: &[Value<Engine>]| {
                 #[cfg(feature = "tracing")]
-                let _span =
-                    tracing::debug_span!("call_host", name = _ty.name.as_deref(), ?args).entered();
+                let _span = tracing::debug_span!("call_host", ty=%_ty, ?args).entered();
 
                 match func(store.as_context_mut(), args, &mut res) {
                     Ok(()) => {
@@ -208,8 +207,7 @@ impl WasmFunc<Engine> for Func {
         let ty = inner.ty.clone();
 
         #[cfg(feature = "tracing")]
-        let _span =
-            tracing::debug_span!("call_guest", ?args, name=ty.name.as_deref(), %ty).entered();
+        let _span = tracing::debug_span!("call_guest", ?args, %ty).entered();
 
         let args = args.iter().map(|v| v.to_stored_js(ctx)).collect::<Array>();
 

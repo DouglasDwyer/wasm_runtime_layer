@@ -18,9 +18,9 @@ fn test_wasmi() {
 
 #[wasm_bindgen_test::wasm_bindgen_test]
 #[cfg(target_arch = "wasm32")]
-fn test_webassembly() {
+fn test_js_wasm() {
     // 1. Instantiate a runtime
-    let engine = Engine::new(webassembly_runtime_layer::Engine::default());
+    let engine = Engine::new(js_wasm_runtime_layer::Engine::default());
     add_one(&engine)
 }
 
