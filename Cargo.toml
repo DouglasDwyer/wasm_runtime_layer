@@ -44,7 +44,7 @@ wasm-bindgen-test = "0.3"
 wat = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-wasmtime_runtime_layer = { version = "19.0", path = "backends/wasmtime_runtime_layer" }
+wasmtime_runtime_layer = { version = "20.0", path = "backends/wasmtime_runtime_layer" }
 
 [package.metadata."docs.rs"]
 all-features = true

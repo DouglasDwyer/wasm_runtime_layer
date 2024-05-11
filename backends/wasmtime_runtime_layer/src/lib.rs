@@ -122,7 +122,7 @@ macro_rules! delegate {
 }
 
 delegate! { #[derive(Clone, Default)] Engine(wasmtime::Engine) }
-delegate! { #[derive(Clone)] ExternRef(wasmtime::ExternRef) }
+delegate! { #[derive(Clone)] ExternRef(wasmtime::Rooted<wasmtime::ExternRef>) }
 delegate! { #[derive(Clone)] Func(wasmtime::Func) }
 delegate! { #[derive(Clone)] Global(wasmtime::Global) }
 delegate! { #[derive(Clone)] Memory(wasmtime::Memory) }
@@ -146,12 +146,18 @@ impl WasmEngine for Engine {
 }
 
 impl WasmExternRef<Engine> for ExternRef {
-    fn new<T: 'static + Send + Sync>(_: impl AsContextMut<Engine>, object: T) -> Self {
-        Self::new(wasmtime::ExternRef::new(object))
+    fn new<T: 'static + Send + Sync>(mut ctx: impl AsContextMut<Engine>, object: T) -> Self {
+        Self::new(
+            wasmtime::ExternRef::new(ctx.as_context_mut().into_inner(), object)
+                .expect("out of memory"),
+        )
     }
 
-    fn downcast<'a, 's: 'a, T: 'static, S: 's>(&'a self, _: StoreContext<'s, S>) -> Result<&'a T> {
-        self.data()
+    fn downcast<'a, 's: 'a, T: 'static, S: 's>(
+        &'a self,
+        ctx: StoreContext<'s, S>,
+    ) -> Result<&'a T> {
+        self.data(ctx.into_inner())?
             .downcast_ref::<T>()
             .ok_or_else(|| Error::msg("Incorrect extern ref type."))
     }
@@ -565,6 +571,7 @@ fn value_from(value: wasmtime::Val) -> Value<Engine> {
         wasmtime::Val::FuncRef(x) => Value::FuncRef(x.map(Func::new)),
         wasmtime::Val::ExternRef(x) => Value::ExternRef(x.map(ExternRef::new)),
         wasmtime::Val::V128(_) => unimplemented!(),
+        wasmtime::Val::AnyRef(_) => unimplemented!(),
     }
 }
 
@@ -620,6 +627,7 @@ fn value_from_ref(ref_: wasmtime::Ref) -> Value<Engine> {
     match ref_ {
         wasmtime::Ref::Func(x) => Value::FuncRef(x.map(Func::from)),
         wasmtime::Ref::Extern(x) => Value::ExternRef(x.map(ExternRef::from)),
+        wasmtime::Ref::Any(_) => unimplemented!(),
     }
 }
 
