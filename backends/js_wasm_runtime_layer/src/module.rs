@@ -105,8 +105,8 @@ fn value_type_from_ref_type(ty: &RefType) -> ValueType {
 fn table_type_from(ty: &wasmparser::TableType) -> TableType {
     TableType::new(
         value_type_from_ref_type(&ty.element_type),
-        ty.initial,
-        ty.maximum,
+        ty.initial.try_into().expect("table size"),
+        ty.maximum.map(|v| v.try_into().expect("table size")),
     )
 }
 
@@ -140,8 +140,11 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                 for ty in section {
                     let ty = ty?;
 
-                    let ty = match ty.types() {
-                        [subtype] => match &subtype.composite_type {
+                    let mut subtypes = ty.types();
+                    let subtype = subtypes.next();
+
+                    let ty = match (subtype, subtypes.next()) {
+                        (Some(subtype), None) => match &subtype.composite_type {
                             wasmparser::CompositeType::Func(func_type) => FuncType::new(
                                 func_type.params().iter().map(value_type_from),
                                 func_type.results().iter().map(value_type_from),
