@@ -1,18 +1,23 @@
+#![deny(warnings)]
+#![warn(missing_docs)]
+#![warn(clippy::missing_docs_in_private_items)]
+
+//! `js_wasm_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for your web browser's WebAssembly runtime.
+
 /// Conversion to and from JavaScript
-pub(crate) mod conversion;
+mod conversion;
 /// Functions
-pub(crate) mod func;
+mod func;
 /// Instances
 mod instance;
 /// Memories
-pub mod memory;
+mod memory;
 /// WebAssembly modules
-pub(crate) mod module;
+mod module;
 /// Stores all the WebAssembly state for a given collection of modules with a similar lifetime
 mod store;
 /// WebAssembly tables
-pub(crate) mod table;
-// mod element;
+mod table;
 
 pub use func::Func;
 pub use instance::Instance;
@@ -35,8 +40,8 @@ use slab::Slab;
 
 use js_sys::{JsString, Object, Reflect, WebAssembly};
 
-use crate::{
-    backend::{AsContext, AsContextMut, Value, WasmGlobal},
+use wasm_runtime_layer::{
+    backend::{AsContext, AsContextMut, Extern, Value, WasmEngine, WasmExternRef, WasmGlobal},
     GlobalType, ValueType,
 };
 
@@ -44,8 +49,6 @@ use self::{
     conversion::{FromJs, FromStoredJs, ToJs, ToStoredJs},
     module::{ModuleInner, ParsedModule},
 };
-
-use super::{Extern, WasmEngine, WasmExternRef};
 
 /// Helper to convert a `JsValue` into a proper error, as well as making it `Send` + `Sync`
 #[derive(Debug, Clone)]
@@ -90,23 +93,14 @@ impl From<JsValue> for JsErrorMsg {
 
 impl WasmEngine for Engine {
     type ExternRef = ExternRef;
-
     type Func = Func;
-
     type Global = Global;
-
     type Instance = Instance;
-
     type Memory = Memory;
-
     type Module = Module;
-
     type Store<T> = Store<T>;
-
     type StoreContext<'a, T: 'a> = StoreContext<'a, T>;
-
     type StoreContextMut<'a, T: 'a> = StoreContextMut<'a, T>;
-
     type Table = Table;
 }
 
@@ -115,6 +109,7 @@ impl WasmEngine for Engine {
 /// Most commonly this is to ensure a closure with captures does not get dropped by Rust while a
 /// reference to it exists in the world of Js.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct DropResource(Box<dyn std::fmt::Debug>);
 
 impl DropResource {
@@ -216,16 +211,11 @@ impl WasmGlobal<Engine> for Global {
     fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
         let mut ctx = ctx.as_context_mut();
 
-        let ty = GlobalType::new(value.ty(), mutable);
+        let ty = GlobalType::new(value_ty(&value), mutable);
 
         let desc = Object::new();
 
-        Reflect::set(
-            &desc,
-            &"value".into(),
-            &value.ty().as_js_descriptor().into(),
-        )
-        .unwrap();
+        Reflect::set(&desc, &"value".into(), &value_ty(&value).to_js()).unwrap();
         Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
 
         let value = value.to_stored_js(&ctx);
@@ -253,7 +243,7 @@ impl WasmGlobal<Engine> for Global {
 
         let inner = &mut store.globals[self.id];
 
-        if !inner.ty.mutable {
+        if !inner.ty.mutable() {
             return Err(anyhow::anyhow!("Global is not mutable"));
         }
 
@@ -269,7 +259,7 @@ impl WasmGlobal<Engine> for Global {
         let ty = inner.ty;
         let value = inner.value.value();
 
-        Value::from_js_typed(store, &ty.content, value).unwrap()
+        value_from_js_typed(store, &ty.content(), value).unwrap()
     }
 }
 
@@ -364,29 +354,21 @@ impl ToStoredJs for Extern<Engine> {
     }
 }
 
-impl ValueType {
-    /// Converts this type into the canonical ABI kind
-    ///
-    /// See: <https://webassembly.github.io/spec/js-api/#globals>
-    pub(crate) fn as_js_descriptor(&self) -> &str {
-        match self {
-            Self::I32 => "i32",
-            Self::I64 => "i64",
-            Self::F32 => "f32",
-            Self::F64 => "f64",
-            Self::FuncRef => "anyfunc",
-            Self::ExternRef => "externref",
-        }
-    }
-}
-
 impl ToJs for ValueType {
     type Repr = JsString;
     /// Convert the value enum to a JavaScript descriptor
     ///
     /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
     fn to_js(&self) -> JsString {
-        self.as_js_descriptor().into()
+        match self {
+            ValueType::I32 => "i32",
+            ValueType::I64 => "i64",
+            ValueType::F32 => "f32",
+            ValueType::F64 => "f64",
+            ValueType::FuncRef => "anyfunc",
+            ValueType::ExternRef => "externref",
+        }
+        .into()
     }
 }
 
@@ -415,37 +397,33 @@ impl FromJs for ValueType {
     }
 }
 
-impl Value<Engine> {
-    /// Convert the JsValue into a Value of the supplied type
-    pub(crate) fn from_js_typed<T>(
-        _: &mut StoreInner<T>,
-        ty: &ValueType,
-        value: JsValue,
-    ) -> Option<Value<Engine>> {
-        match ty {
-            ValueType::I32 => Some(Value::I32(i32::from_js(value)?)),
-            ValueType::I64 => Some(Value::I64(i64::from_js(value)?)),
-            ValueType::F32 => Some(Value::F32(f32::from_js(value)?)),
-            ValueType::F64 => Some(Value::F64(f64::from_js(value)?)),
-            ValueType::FuncRef | ValueType::ExternRef => {
-                #[cfg(feature = "tracing")]
-                tracing::error!(
-                    "conversion to a function or extern outside of a module not permitted"
-                );
-                None
-            }
+/// Convert the JsValue into a Value of the supplied type
+pub(crate) fn value_from_js_typed<T>(
+    _: &mut StoreInner<T>,
+    ty: &ValueType,
+    value: JsValue,
+) -> Option<Value<Engine>> {
+    match ty {
+        ValueType::I32 => Some(Value::I32(i32::from_js(value)?)),
+        ValueType::I64 => Some(Value::I64(i64::from_js(value)?)),
+        ValueType::F32 => Some(Value::F32(f32::from_js(value)?)),
+        ValueType::F64 => Some(Value::F64(f64::from_js(value)?)),
+        ValueType::FuncRef | ValueType::ExternRef => {
+            #[cfg(feature = "tracing")]
+            tracing::error!("conversion to a function or extern outside of a module not permitted");
+            None
         }
     }
+}
 
-    /// Convert a value to its type
-    pub(crate) fn ty(&self) -> ValueType {
-        match self {
-            Value::I32(_) => ValueType::I32,
-            Value::I64(_) => ValueType::I64,
-            Value::F32(_) => ValueType::F32,
-            Value::F64(_) => ValueType::F64,
-            Value::FuncRef(_) => ValueType::FuncRef,
-            Value::ExternRef(_) => ValueType::ExternRef,
-        }
+/// Convert a value to its type
+fn value_ty(value: &Value<Engine>) -> ValueType {
+    match value {
+        Value::I32(_) => ValueType::I32,
+        Value::I64(_) => ValueType::I64,
+        Value::F32(_) => ValueType::F32,
+        Value::F64(_) => ValueType::F64,
+        Value::FuncRef(_) => ValueType::FuncRef,
+        Value::ExternRef(_) => ValueType::ExternRef,
     }
 }

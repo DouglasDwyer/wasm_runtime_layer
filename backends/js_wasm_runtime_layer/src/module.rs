@@ -3,14 +3,13 @@ use std::sync::Arc;
 use anyhow::Context;
 use fxhash::FxHashMap;
 use js_sys::{Uint8Array, WebAssembly};
+use wasm_runtime_layer::{
+    backend::WasmModule, ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType,
+    TableType, ValueType,
+};
 use wasmparser::RefType;
 
-use crate::{
-    backend::WasmModule, ExternType, FuncType, GlobalType, ImportType, MemoryType, TableType,
-    ValueType,
-};
-
-use super::{Engine, JsErrorMsg};
+use crate::{Engine, JsErrorMsg};
 
 #[derive(Debug, Clone)]
 /// A WebAssembly Module.
@@ -54,16 +53,11 @@ impl WasmModule<Engine> for Module {
         Ok(module)
     }
 
-    fn exports(&self) -> Box<dyn '_ + Iterator<Item = crate::ExportType<'_>>> {
-        Box::new(
-            self.parsed
-                .exports
-                .iter()
-                .map(|(name, ty)| crate::ExportType {
-                    name: name.as_str(),
-                    ty: ty.clone(),
-                }),
-        )
+    fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
+        Box::new(self.parsed.exports.iter().map(|(name, ty)| ExportType {
+            name: name.as_str(),
+            ty: ty.clone(),
+        }))
     }
 
     fn get_export(&self, name: &str) -> Option<ExternType> {
@@ -84,39 +78,36 @@ impl WasmModule<Engine> for Module {
     }
 }
 
-impl From<&wasmparser::ValType> for ValueType {
-    fn from(value: &wasmparser::ValType) -> Self {
-        match value {
-            wasmparser::ValType::I32 => Self::I32,
-            wasmparser::ValType::I64 => Self::I64,
-            wasmparser::ValType::F32 => Self::F32,
-            wasmparser::ValType::F64 => Self::F64,
-            wasmparser::ValType::V128 => unimplemented!("v128 is not supported"),
-            wasmparser::ValType::Ref(ty) => ty.into(),
-        }
+/// Convert a [`wasmparser::ValType`] to a [`ValueType`].
+fn value_type_from(ty: &wasmparser::ValType) -> ValueType {
+    match ty {
+        wasmparser::ValType::I32 => ValueType::I32,
+        wasmparser::ValType::I64 => ValueType::I64,
+        wasmparser::ValType::F32 => ValueType::F32,
+        wasmparser::ValType::F64 => ValueType::F64,
+        wasmparser::ValType::V128 => unimplemented!("v128 is not supported"),
+        wasmparser::ValType::Ref(ty) => value_type_from_ref_type(ty),
     }
 }
 
-impl From<&RefType> for ValueType {
-    fn from(value: &RefType) -> Self {
-        if value.is_func_ref() {
-            Self::FuncRef
-        } else if value.is_extern_ref() {
-            Self::ExternRef
-        } else {
-            unimplemented!("unsupported reference type {value:?}")
-        }
+/// Convert a [`RefType`] to a [`ValueType`].
+fn value_type_from_ref_type(ty: &RefType) -> ValueType {
+    if ty.is_func_ref() {
+        ValueType::FuncRef
+    } else if ty.is_extern_ref() {
+        ValueType::ExternRef
+    } else {
+        unimplemented!("unsupported reference type {ty:?}")
     }
 }
 
-impl From<&wasmparser::TableType> for TableType {
-    fn from(value: &wasmparser::TableType) -> Self {
-        TableType {
-            element: (&value.element_type).into(),
-            min: value.initial,
-            max: value.maximum,
-        }
-    }
+/// Convert a [`wasmparser::TableType`] to a [`TableType`].
+fn table_type_from(ty: &wasmparser::TableType) -> TableType {
+    TableType::new(
+        value_type_from_ref_type(&ty.element_type),
+        ty.initial,
+        ty.maximum,
+    )
 }
 
 #[derive(Debug)]
@@ -152,8 +143,8 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     let ty = match ty.types() {
                         [subtype] => match &subtype.composite_type {
                             wasmparser::CompositeType::Func(func_type) => FuncType::new(
-                                func_type.params().iter().map(ValueType::from),
-                                func_type.results().iter().map(ValueType::from),
+                                func_type.params().iter().map(value_type_from),
+                                func_type.results().iter().map(value_type_from),
                             ),
                             _ => unreachable!(),
                         },
@@ -176,30 +167,27 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                 for table in section {
                     let table = table?;
 
-                    tables.push((&table.ty).into());
+                    tables.push(table_type_from(&table.ty));
                 }
             }
             wasmparser::Payload::MemorySection(section) => {
                 for memory in section {
                     let memory = memory?;
 
-                    memories.push(MemoryType {
-                        initial: memory.initial.try_into().expect("memory size"),
-                        maximum: memory.maximum.map(|v| v.try_into().expect("memory size")),
-                    })
+                    memories.push(MemoryType::new(
+                        memory.initial.try_into().expect("memory size"),
+                        memory.maximum.map(|v| v.try_into().expect("memory size")),
+                    ))
                 }
             }
             wasmparser::Payload::GlobalSection(section) => {
                 for global in section {
                     let global = global?;
 
-                    let ty: ValueType = (&global.ty.content_type).into();
+                    let ty = value_type_from(&global.ty.content_type);
                     let mutable = global.ty.mutable;
 
-                    globals.push(GlobalType {
-                        content: ty,
-                        mutable,
-                    });
+                    globals.push(GlobalType::new(ty, mutable));
                 }
             }
             wasmparser::Payload::TagSection(_section) =>
@@ -222,8 +210,8 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                         }
                         wasmparser::TypeRef::Table(ty) => {
                             // functions.push(sig.clone());
-                            tables.push((&ty).into());
-                            ExternType::Table((&ty).into())
+                            tables.push(table_type_from(&ty));
+                            ExternType::Table(table_type_from(&ty))
                         }
                         wasmparser::TypeRef::Memory(_) => todo!(),
                         wasmparser::TypeRef::Global(_) => todo!(),

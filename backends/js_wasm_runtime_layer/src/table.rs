@@ -1,13 +1,15 @@
 use anyhow::Context;
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
-
-use crate::{
+use wasm_runtime_layer::{
     backend::{AsContext, AsContextMut, Value, WasmTable},
     TableType, ValueType,
 };
 
-use super::{conversion::ToStoredJs, Engine, JsErrorMsg, StoreContextMut, StoreInner};
+use crate::{
+    conversion::{ToJs, ToStoredJs},
+    Engine, JsErrorMsg, StoreContextMut, StoreInner,
+};
 
 #[derive(Debug, Clone)]
 /// WebAssembly table
@@ -44,8 +46,8 @@ impl Table {
         let _span = tracing::trace_span!("Table::from_js", ?value).entered();
         let table = value.dyn_into::<WebAssembly::Table>().ok()?;
 
-        assert!(table.length() >= ty.min);
-        assert_eq!(ty.element, ValueType::FuncRef);
+        assert!(table.length() >= ty.minimum());
+        assert_eq!(ty.element(), ValueType::FuncRef);
 
         let inner = TableInner { ty, table };
 
@@ -73,21 +75,16 @@ impl WasmTable<Engine> for Table {
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
         let desc = Object::new();
-        Reflect::set(
-            &desc,
-            &"element".into(),
-            &ty.element.as_js_descriptor().into(),
-        )
-        .unwrap();
+        Reflect::set(&desc, &"element".into(), &ty.element().to_js()).unwrap();
 
-        Reflect::set(&desc, &"initial".into(), &ty.min.into()).unwrap();
-        if let Some(max) = ty.max {
+        Reflect::set(&desc, &"initial".into(), &ty.minimum().into()).unwrap();
+        if let Some(max) = ty.maximum() {
             Reflect::set(&desc, &"initial".into(), &max.into()).unwrap();
         }
 
         let table = WebAssembly::Table::new(&desc).map_err(JsErrorMsg::from)?;
 
-        for i in 0..ty.min {
+        for i in 0..ty.minimum() {
             table
                 .set(i, init.to_stored_js(&ctx).unchecked_ref())
                 .unwrap();

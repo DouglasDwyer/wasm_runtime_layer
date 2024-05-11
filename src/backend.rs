@@ -4,19 +4,6 @@ use fxhash::*;
 use std::marker::*;
 use std::ops::*;
 
-#[cfg(feature = "backend_wasmi")]
-/// The backend which provides support for the `wasmi` runtime.
-mod backend_wasmi;
-
-#[cfg(feature = "backend_wasmtime")]
-/// The backend which provides support for the `wasmtime` runtime.
-mod backend_wasmtime;
-
-#[cfg(all(target_arch = "wasm32", feature = "backend_web"))]
-/// The backend which integrates with the web browser's WebAssembly API allowing for JIT
-/// accelerated wasm execution.
-pub(crate) mod backend_web;
-
 /// Runtime representation of a value.
 #[derive(Clone)]
 pub enum Value<E: WasmEngine> {

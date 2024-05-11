@@ -8,12 +8,12 @@
 ## Usage
 
 To use this crate, first instantiate a backend runtime. The runtime may be any
-value that implements `backend::WasmEngine`. Some runtimes are already implemented as optional features.
+value that implements `backend::WasmEngine`. Some runtimes are already implemented as additional crates.
 Then, one can create an `Engine` from the backend runtime, and use it to initialize modules and instances:
 
 ```rust
 // 1. Instantiate a runtime
-let engine = Engine::new(wasmi::Engine::default());
+let engine = Engine::new(wasmi_runtime_layer::Engine::default());
 let mut store = Store::new(&engine, ());
 
 // 2. Create modules and instances, similar to other runtimes
@@ -46,15 +46,12 @@ add_one
 assert_eq!(result[0], Value::I32(43));
 ```
 
-## Optional features and backends
+## Backends
 
-**backend_wasmi** - Implements the `WasmEngine` trait for `wasmi::Engine` instances.
-
-**backend_wasmtime** - Implements the `WasmEngine` trait for `wasmtime::Engine` instances.
-
-**backend_web** - Implement a wasm engine targeting the browser's WebAssembly API on `wasm32-unknown-unknown` targets.
-
-**tracing** - Enable tracing span and events. This makes it easier to follow execution of the runtime and get better introspection when something goes wrong. This is especially useful for the web backend where debugging is not as easily available.
+* **wasmi_runtime_layer** - Implements the `WasmEngine` trait for wrappers around `wasmtime::Engine` instances.
+* **wasmtime_runtime_layer** - Implements the `WasmEngine` trait for wrappers around `wasmtime::Engine` instances.
+* **js_wasm_runtime_layer** - Implements a wasm engine targeting the browser's WebAssembly API on `wasm32-unknown-unknown` targets.
+* **pyodide-webassembly-runtime-layer** - Implements a wasm engine targeting the browser's WebAssembly API when running as a Python extension module inside Pyodide.
 
 Contributions for additional backend implementations are welcome!
 
@@ -63,13 +60,7 @@ Contributions for additional backend implementations are welcome!
 To run the tests for wasmi and wasmtime, run:
 
 ```sh
-cargo test --all-features
-```
-
-To test a single backend:
-
-```sh
-cargo test --tests --features backend_wasmi
+cargo test
 ```
 
 For the *wasm32* target, you can use the slower interpreter *wasmi*, or the native JIT accelerated browser backend.
@@ -78,5 +69,5 @@ To test the backends, you need to install [`wasm-pack`](https://github.com/rustw
 
 You can then run:
 ```sh
-wasm-pack test --node --features backend_wasmi,backend_web
+wasm-pack test --node
 ```

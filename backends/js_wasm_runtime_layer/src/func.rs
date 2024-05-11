@@ -1,13 +1,15 @@
 use anyhow::Context;
 use js_sys::{Array, Function};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
-
-use crate::FuncType;
-
-use super::{
-    conversion::ToStoredJs, DropResource, Engine, JsErrorMsg, StoreContextMut, StoreInner,
+use wasm_runtime_layer::{
+    backend::{AsContext, AsContextMut, Value, WasmFunc},
+    FuncType,
 };
-use crate::backend::{AsContext, AsContextMut, Value, WasmFunc};
+
+use crate::{
+    conversion::ToStoredJs, value_from_js_typed, DropResource, Engine, JsErrorMsg, StoreContextMut,
+    StoreInner,
+};
 
 /// A bound function
 #[derive(Debug, Clone)]
@@ -72,11 +74,11 @@ macro_rules! func_wrapper {
             #[allow(unused_mut)]
             let mut store = StoreContextMut::from_ref(store);
 
-            let _arg_types = &ty.params_results[..ty.len_params];
+            let _arg_types = ty.params();
 
             let args = [
                 $(
-                    (Value::from_js_typed(&mut store, &_arg_types[$idx], $ident)).expect("Failed to convert argument"),
+                    (value_from_js_typed(&mut store, &_arg_types[$idx], $ident)).expect("Failed to convert argument"),
                 )*
             ];
 
@@ -134,8 +136,7 @@ impl WasmFunc<Engine> for Func {
         let mut func = {
             move |mut store: StoreContextMut<T>, _ty: &FuncType, args: &[Value<Engine>]| {
                 #[cfg(feature = "tracing")]
-                let _span =
-                    tracing::debug_span!("call_host", name = _ty.name.as_deref(), ?args).entered();
+                let _span = tracing::debug_span!("call_host", ty=%_ty, ?args).entered();
 
                 match func(store.as_context_mut(), args, &mut res) {
                     Ok(()) => {
@@ -163,7 +164,7 @@ impl WasmFunc<Engine> for Func {
             }
         };
 
-        let (resource, func) = match ty.len_params {
+        let (resource, func) = match ty.params().len() {
             0 => func_wrapper!(store_ptr, ty, func,),
             1 => func_wrapper!(store_ptr, ty, func, 0 => a),
             2 => func_wrapper!(store_ptr, ty, func, 0 => a, 1 => b),
@@ -206,8 +207,7 @@ impl WasmFunc<Engine> for Func {
         let ty = inner.ty.clone();
 
         #[cfg(feature = "tracing")]
-        let _span =
-            tracing::debug_span!("call_guest", ?args, name=ty.name.as_deref(), %ty).entered();
+        let _span = tracing::debug_span!("call_guest", ?args, %ty).entered();
 
         let args = args.iter().map(|v| v.to_stored_js(ctx)).collect::<Array>();
 
@@ -227,8 +227,8 @@ impl WasmFunc<Engine> for Func {
             [] => {}
             // single
             &[ty] => {
-                results[0] = Value::from_js_typed(ctx, &ty, res)
-                    .context("Failed to convert return value")?;
+                results[0] =
+                    value_from_js_typed(ctx, &ty, res).context("Failed to convert return value")?;
             }
             // multi-value
             tys => {
@@ -240,7 +240,7 @@ impl WasmFunc<Engine> for Func {
                     .zip(tys)
                     .zip(results)
                 {
-                    *dst = Value::from_js_typed(ctx, ty, src.clone())
+                    *dst = value_from_js_typed(ctx, ty, src.clone())
                         .context("Failed to convert return value")?;
                 }
             }

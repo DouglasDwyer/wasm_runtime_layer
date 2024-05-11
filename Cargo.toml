@@ -1,6 +1,14 @@
+[workspace]
+members = [
+    ".",
+    "backends/wasmi_runtime_layer",
+    "backends/wasmtime_runtime_layer",
+    "backends/js_wasm_runtime_layer",
+]
+
 [package]
 name = "wasm_runtime_layer"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DouglasDwyer/wasm_runtime_layer"
@@ -10,29 +18,19 @@ Compatibility interface for WASM runtimes.
 """
 
 [dependencies]
-anyhow = { version = "1.0.71", default-features = false, features = [ "std" ] }
-fxhash = { version = "0.2.1", default-features = false }
-ref-cast = { version = "1.0.19", default-features = false }
-smallvec = { version = "1.11.0", default-features = false }
-
-wasmi = { version = ">=0.0.0", optional = true, default-features = false, features = [ "std" ] }
-wasmtime = { version = ">=0.0.0", optional = true, default-features = false, features = [ "cranelift" ] }
-tracing = { version = "0.1", optional = true }
-slab = { version = "0.4", optional = true }
-
-wasm-bindgen = { version = "0.2", optional = true }
-js-sys = { version = "0.3", optional = true }
-wasmparser = { version = "0.118", default-features = false, optional = true }
+anyhow = { version = "1.0", default-features = false, features = [ "std" ] }
+fxhash = { version = "0.2", default-features = false }
+ref-cast = { version = "1.0", default-features = false }
+smallvec = { version = "1.11", default-features = false }
 
 [dev-dependencies]
-wat = "1.0"
+js_wasm_runtime_layer = { version = "0.4.0", path = "backends/js_wasm_runtime_layer" }
+wasmi_runtime_layer = { version = "0.31", path = "backends/wasmi_runtime_layer" }
 wasm-bindgen-test = "0.3"
+wat = "1.0"
 
-[features]
-backend_wasmi = [ "wasmi" ]
-backend_wasmtime = [ "wasmtime" ]
-backend_web = [ "wasm-bindgen", "js-sys", "slab", "wasmparser" ]
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+wasmtime_runtime_layer = { version = "18.0", path = "backends/wasmtime_runtime_layer" }
 
 [package.metadata."docs.rs"]
 all-features = true
-features = [ "wasmtime/runtime" ]

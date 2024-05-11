@@ -5,12 +5,12 @@ use fxhash::FxHashMap;
 use js_sys::{JsString, Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::backend::{
-    backend_web::{conversion::ToStoredJs, Func, Global, Memory, Table},
-    Export, Extern, Imports, WasmInstance,
-};
+use wasm_runtime_layer::backend::{Export, Extern, Imports, WasmInstance};
 
-use super::{module::ParsedModule, Engine, JsErrorMsg, Module, StoreInner};
+use crate::{
+    conversion::ToStoredJs, module::ParsedModule, Engine, Func, Global, JsErrorMsg, Memory, Module,
+    StoreInner, Table,
+};
 
 /// A WebAssembly Instance.
 #[derive(Debug, Clone)]

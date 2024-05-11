@@ -1,12 +1,11 @@
 use js_sys::{ArrayBuffer, Object, Reflect, Uint8Array, WebAssembly};
 use wasm_bindgen::{JsCast as _, JsValue};
-
-use crate::{
+use wasm_runtime_layer::{
     backend::{AsContext, AsContextMut, WasmMemory},
     MemoryType,
 };
 
-use super::{conversion::ToStoredJs, Engine, JsErrorMsg, StoreInner};
+use crate::{conversion::ToStoredJs, Engine, JsErrorMsg, StoreInner};
 
 #[derive(Debug, Clone)]
 /// WebAssembly memory
@@ -60,10 +59,10 @@ impl Memory {
 }
 
 impl WasmMemory<Engine> for Memory {
-    fn new(mut ctx: impl AsContextMut<Engine>, ty: crate::MemoryType) -> anyhow::Result<Self> {
+    fn new(mut ctx: impl AsContextMut<Engine>, ty: MemoryType) -> anyhow::Result<Self> {
         let desc = Object::new();
-        Reflect::set(&desc, &"initial".into(), &ty.initial.into()).unwrap();
-        if let Some(maximum) = ty.maximum {
+        Reflect::set(&desc, &"initial".into(), &ty.initial_pages().into()).unwrap();
+        if let Some(maximum) = ty.maximum_pages() {
             Reflect::set(&desc, &"maximum".into(), &maximum.into()).unwrap();
         }
 
@@ -74,7 +73,7 @@ impl WasmMemory<Engine> for Memory {
         Ok(ctx.insert_memory(MemoryInner { value: memory, ty }))
     }
 
-    fn ty(&self, ctx: impl AsContext<Engine>) -> crate::MemoryType {
+    fn ty(&self, ctx: impl AsContext<Engine>) -> MemoryType {
         ctx.as_context().memories[self.id].ty
     }
 
