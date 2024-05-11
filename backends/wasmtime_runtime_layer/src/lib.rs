@@ -4,6 +4,11 @@
 #![warn(clippy::missing_docs_in_private_items)]
 
 //! `wasmtime_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmtime`.
+//! ## Optional features
+//!
+//! **cranelift** - Enables executing WASM modules and components with the Cranelift compiler, as described in the Wasmtime documentation. Enabled by default.
+//!
+//! **winch** - Enables executing WASM modules and components with the Winch compiler, as described in the Wasmtime documentation.
 
 use std::{
     ops::{Deref, DerefMut},

@@ -8,4 +8,5 @@
 ## Optional features
 
 **cranelift** - Enables executing WASM modules and components with the Cranelift compiler, as described in the Wasmtime documentation. Enabled by default.
+
 **winch** - Enables executing WASM modules and components with the Winch compiler, as described in the Wasmtime documentation.
