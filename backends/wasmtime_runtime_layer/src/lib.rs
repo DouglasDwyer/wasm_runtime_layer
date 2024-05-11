@@ -161,9 +161,10 @@ impl WasmFunc<Engine> for Func {
             + Sync
             + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> Result<()>,
     ) -> Self {
+        let ty = func_type_into(ctx.as_context().engine(), ty);
         Self::new(wasmtime::Func::new(
             ctx.as_context_mut().into_inner(),
-            func_type_into(ty),
+            ty,
             move |mut caller, args, results| {
                 let mut input = ArgumentVec::with_capacity(args.len());
                 input.extend(args.iter().cloned().map(value_from));
@@ -219,11 +220,12 @@ impl WasmFunc<Engine> for Func {
 impl WasmGlobal<Engine> for Global {
     fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
         let value = value_into(value);
+        let ty = value.ty(ctx.as_context_mut().into_inner());
         Self::new(
             wasmtime::Global::new(
                 ctx.as_context_mut().into_inner(),
                 wasmtime::GlobalType::new(
-                    value.ty(),
+                    ty,
                     if mutable {
                         wasmtime::Mutability::Var
                     } else {
@@ -497,7 +499,7 @@ impl WasmTable<Engine> for Table {
         wasmtime::Table::new(
             ctx.as_context_mut().into_inner(),
             table_type_into(ty),
-            value_into(init),
+            value_into_ref(init),
         )
         .map(Self::new)
         .map_err(Error::msg)
@@ -518,14 +520,18 @@ impl WasmTable<Engine> for Table {
         init: Value<Engine>,
     ) -> Result<u32> {
         self.as_ref()
-            .grow(ctx.as_context_mut().into_inner(), delta, value_into(init))
+            .grow(
+                ctx.as_context_mut().into_inner(),
+                delta,
+                value_into_ref(init),
+            )
             .map_err(Error::msg)
     }
 
     fn get(&self, mut ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
         self.as_ref()
             .get(ctx.as_context_mut().into_inner(), index)
-            .map(value_from)
+            .map(value_from_ref)
     }
 
     fn set(
@@ -535,7 +541,11 @@ impl WasmTable<Engine> for Table {
         value: Value<Engine>,
     ) -> Result<()> {
         self.as_ref()
-            .set(ctx.as_context_mut().into_inner(), index, value_into(value))
+            .set(
+                ctx.as_context_mut().into_inner(),
+                index,
+                value_into_ref(value),
+            )
             .map_err(Error::msg)
     }
 }
@@ -572,9 +582,8 @@ fn value_type_from(ty: wasmtime::ValType) -> ValueType {
         wasmtime::ValType::I64 => ValueType::I64,
         wasmtime::ValType::F32 => ValueType::F32,
         wasmtime::ValType::F64 => ValueType::F64,
-        wasmtime::ValType::FuncRef => ValueType::FuncRef,
-        wasmtime::ValType::ExternRef => ValueType::ExternRef,
         wasmtime::ValType::V128 => unimplemented!(),
+        wasmtime::ValType::Ref(ty) => value_type_from_ref_type(&ty),
     }
 }
 
@@ -585,8 +594,48 @@ fn value_type_into(ty: ValueType) -> wasmtime::ValType {
         ValueType::I64 => wasmtime::ValType::I64,
         ValueType::F32 => wasmtime::ValType::F32,
         ValueType::F64 => wasmtime::ValType::F64,
-        ValueType::FuncRef => wasmtime::ValType::FuncRef,
-        ValueType::ExternRef => wasmtime::ValType::ExternRef,
+        ValueType::FuncRef => wasmtime::ValType::Ref(wasmtime::RefType::FUNCREF),
+        ValueType::ExternRef => wasmtime::ValType::Ref(wasmtime::RefType::EXTERNREF),
+    }
+}
+
+/// Convert a [`Value<Engine>`] to a [`wasmtime::Ref`].
+fn value_into_ref(value: Value<Engine>) -> wasmtime::Ref {
+    match value {
+        Value::FuncRef(x) => wasmtime::Ref::Func(x.map(Func::into_inner)),
+        Value::ExternRef(x) => wasmtime::Ref::Extern(x.map(ExternRef::into_inner)),
+        Value::I32(_) | Value::I64(_) | Value::F32(_) | Value::F64(_) => {
+            panic!("Attempt to convert non-reference value to a reference")
+        }
+    }
+}
+
+/// Convert a [`wasmtime::Ref`] to a [`Value<Engine>`].
+fn value_from_ref(ref_: wasmtime::Ref) -> Value<Engine> {
+    match ref_ {
+        wasmtime::Ref::Func(x) => Value::FuncRef(x.map(Func::from)),
+        wasmtime::Ref::Extern(x) => Value::ExternRef(x.map(ExternRef::from)),
+    }
+}
+
+/// Convert a [`wasmtime::ValType`] to a [`ValueType`].
+fn value_type_from_ref_type(ty: &wasmtime::RefType) -> ValueType {
+    match ty {
+        _ if wasmtime::RefType::eq(ty, &wasmtime::RefType::FUNCREF) => ValueType::FuncRef,
+        _ if wasmtime::RefType::eq(ty, &wasmtime::RefType::EXTERNREF) => ValueType::ExternRef,
+        // TODO: is the matching against FuncRef correct here
+        _ => unimplemented!(),
+    }
+}
+
+/// Convert a [`ValueType`] to a [`wasmtime::ValType`].
+fn value_type_into_ref_type(ty: ValueType) -> wasmtime::RefType {
+    match ty {
+        ValueType::FuncRef => wasmtime::RefType::FUNCREF,
+        ValueType::ExternRef => wasmtime::RefType::EXTERNREF,
+        ValueType::I32 | ValueType::I64 | ValueType::F32 | ValueType::F64 => {
+            panic!("Attempt to convert non-reference type to a reference type")
+        }
     }
 }
 
@@ -599,8 +648,9 @@ fn func_type_from(ty: wasmtime::FuncType) -> FuncType {
 }
 
 /// Convert a [`FuncType`] to a [`wasmtime::FuncType`].
-fn func_type_into(ty: FuncType) -> wasmtime::FuncType {
+fn func_type_into(engine: &Engine, ty: FuncType) -> wasmtime::FuncType {
     wasmtime::FuncType::new(
+        Engine::ref_cast(engine),
         ty.params().iter().map(|&x| value_type_into(x)),
         ty.results().iter().map(|&x| value_type_into(x)),
     )
@@ -626,12 +676,20 @@ fn memory_type_into(ty: MemoryType) -> wasmtime::MemoryType {
 
 /// Convert a [`wasmtime::TableType`] to a [`TableType`].
 fn table_type_from(ty: wasmtime::TableType) -> TableType {
-    TableType::new(value_type_from(ty.element()), ty.minimum(), ty.maximum())
+    TableType::new(
+        value_type_from_ref_type(ty.element()),
+        ty.minimum(),
+        ty.maximum(),
+    )
 }
 
 /// Convert a [`TableType`] to a [`wasmtime::TableType`].
 fn table_type_into(ty: TableType) -> wasmtime::TableType {
-    wasmtime::TableType::new(value_type_into(ty.element()), ty.minimum(), ty.maximum())
+    wasmtime::TableType::new(
+        value_type_into_ref_type(ty.element()),
+        ty.minimum(),
+        ty.maximum(),
+    )
 }
 
 /// Convert a [`wasmtime::Extern`] to an [`Extern<Engine>`].
