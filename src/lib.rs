@@ -714,6 +714,7 @@ impl<E: WasmEngine> Engine<E> {
 /// the Wasm bytes into a valid module artifact).
 ///
 /// Spec: <https://webassembly.github.io/spec/core/exec/runtime.html#store>
+#[repr(transparent)]
 pub struct Store<T, E: WasmEngine> {
     /// The backing implementation.
     inner: E::Store<T>,
@@ -752,6 +753,7 @@ impl<T, E: WasmEngine> Store<T, E> {
 ///
 /// This type is suitable for [`AsContext`] trait bounds on methods if desired.
 /// For more information, see [`Store`].
+#[repr(transparent)]
 pub struct StoreContext<'a, T: 'a, E: WasmEngine> {
     /// The backing implementation.
     inner: E::StoreContext<'a, T>,
@@ -775,6 +777,7 @@ impl<'a, T: 'a, E: WasmEngine> StoreContext<'a, T, E> {
 ///
 /// This type is suitable for [`AsContextMut`] or [`AsContext`] trait bounds on methods if desired.
 /// For more information, see [`Store`].
+#[repr(transparent)]
 pub struct StoreContextMut<'a, T: 'a, E: WasmEngine> {
     /// The backing implementation.
     pub inner: E::StoreContextMut<'a, T>,
