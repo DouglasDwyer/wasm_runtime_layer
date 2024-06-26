@@ -227,7 +227,8 @@ impl WasmFunc<Engine> for Func {
                     &input,
                     &mut output,
                 )
-                .map_err(HostError)?;
+                .map_err(HostError)
+                .map_err(wasmi::Error::host)?;
 
                 for (i, result) in output.into_iter().enumerate() {
                     results[i] = value_into(result);
@@ -383,7 +384,7 @@ impl WasmMemory<Engine> for Memory {
 
 impl WasmModule<Engine> for Module {
     fn new(engine: &Engine, stream: impl std::io::Read) -> Result<Self> {
-        Ok(Self::new(Arc::new(wasmi::Module::new(
+        Ok(Self::new(Arc::new(wasmi::Module::new_streaming(
             engine.as_ref(),
             stream,
         )?)))
@@ -541,54 +542,54 @@ impl WasmTable<Engine> for Table {
     }
 }
 
-/// Convert a [`wasmi::Value`] to a [`Value<Engine>`].
-fn value_from(value: wasmi::Value) -> Value<Engine> {
+/// Convert a [`wasmi::Val`] to a [`Value<Engine>`].
+fn value_from(value: wasmi::Val) -> Value<Engine> {
     match value {
-        wasmi::Value::I32(x) => Value::I32(x),
-        wasmi::Value::I64(x) => Value::I64(x),
-        wasmi::Value::F32(x) => Value::F32(x.to_float()),
-        wasmi::Value::F64(x) => Value::F64(x.to_float()),
-        wasmi::Value::FuncRef(x) => Value::FuncRef(x.func().copied().map(Func::new)),
-        wasmi::Value::ExternRef(x) => Value::ExternRef(ExternRef::new(x)),
+        wasmi::Val::I32(x) => Value::I32(x),
+        wasmi::Val::I64(x) => Value::I64(x),
+        wasmi::Val::F32(x) => Value::F32(x.to_float()),
+        wasmi::Val::F64(x) => Value::F64(x.to_float()),
+        wasmi::Val::FuncRef(x) => Value::FuncRef(x.func().copied().map(Func::new)),
+        wasmi::Val::ExternRef(x) => Value::ExternRef(ExternRef::new(x)),
     }
 }
 
-/// Convert a [`Value<Engine>`] to a [`wasmi::Value`].
-fn value_into(value: Value<Engine>) -> wasmi::Value {
+/// Convert a [`Value<Engine>`] to a [`wasmi::Val`].
+fn value_into(value: Value<Engine>) -> wasmi::Val {
     match value {
-        Value::I32(x) => wasmi::Value::I32(x),
-        Value::I64(x) => wasmi::Value::I64(x),
-        Value::F32(x) => wasmi::Value::F32(wasmi::core::F32::from_float(x)),
-        Value::F64(x) => wasmi::Value::F64(wasmi::core::F64::from_float(x)),
-        Value::FuncRef(x) => wasmi::Value::FuncRef(wasmi::FuncRef::new(x.map(Func::into_inner))),
-        Value::ExternRef(x) => wasmi::Value::ExternRef(
+        Value::I32(x) => wasmi::Val::I32(x),
+        Value::I64(x) => wasmi::Val::I64(x),
+        Value::F32(x) => wasmi::Val::F32(wasmi::core::F32::from_float(x)),
+        Value::F64(x) => wasmi::Val::F64(wasmi::core::F64::from_float(x)),
+        Value::FuncRef(x) => wasmi::Val::FuncRef(wasmi::FuncRef::new(x.map(Func::into_inner))),
+        Value::ExternRef(x) => wasmi::Val::ExternRef(
             x.map(ExternRef::into_inner)
                 .unwrap_or_else(wasmi::ExternRef::null),
         ),
     }
 }
 
-/// Convert a [`wasmi::core::ValueType`] to a [`ValueType`].
-fn value_type_from(ty: wasmi::core::ValueType) -> ValueType {
+/// Convert a [`wasmi::core::ValType`] to a [`ValueType`].
+fn value_type_from(ty: wasmi::core::ValType) -> ValueType {
     match ty {
-        wasmi::core::ValueType::I32 => ValueType::I32,
-        wasmi::core::ValueType::I64 => ValueType::I64,
-        wasmi::core::ValueType::F32 => ValueType::F32,
-        wasmi::core::ValueType::F64 => ValueType::F64,
-        wasmi::core::ValueType::FuncRef => ValueType::FuncRef,
-        wasmi::core::ValueType::ExternRef => ValueType::ExternRef,
+        wasmi::core::ValType::I32 => ValueType::I32,
+        wasmi::core::ValType::I64 => ValueType::I64,
+        wasmi::core::ValType::F32 => ValueType::F32,
+        wasmi::core::ValType::F64 => ValueType::F64,
+        wasmi::core::ValType::FuncRef => ValueType::FuncRef,
+        wasmi::core::ValType::ExternRef => ValueType::ExternRef,
     }
 }
 
-/// Convert a [`ValueType`] to a [`wasmi::core::ValueType`].
-fn value_type_into(ty: ValueType) -> wasmi::core::ValueType {
+/// Convert a [`ValueType`] to a [`wasmi::core::ValType`].
+fn value_type_into(ty: ValueType) -> wasmi::core::ValType {
     match ty {
-        ValueType::I32 => wasmi::core::ValueType::I32,
-        ValueType::I64 => wasmi::core::ValueType::I64,
-        ValueType::F32 => wasmi::core::ValueType::F32,
-        ValueType::F64 => wasmi::core::ValueType::F64,
-        ValueType::FuncRef => wasmi::core::ValueType::FuncRef,
-        ValueType::ExternRef => wasmi::core::ValueType::ExternRef,
+        ValueType::I32 => wasmi::core::ValType::I32,
+        ValueType::I64 => wasmi::core::ValType::I64,
+        ValueType::F32 => wasmi::core::ValType::F32,
+        ValueType::F64 => wasmi::core::ValType::F64,
+        ValueType::FuncRef => wasmi::core::ValType::FuncRef,
+        ValueType::ExternRef => wasmi::core::ValType::ExternRef,
     }
 }
 

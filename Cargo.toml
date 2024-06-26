@@ -39,12 +39,12 @@ smallvec.workspace = true
 
 [dev-dependencies]
 js_wasm_runtime_layer = { version = "0.4.0", path = "backends/js_wasm_runtime_layer" }
-wasmi_runtime_layer = { version = "0.31", path = "backends/wasmi_runtime_layer" }
+wasmi_runtime_layer = { version = "0.32", path = "backends/wasmi_runtime_layer" }
 wasm-bindgen-test = "0.3"
 wat = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-wasmtime_runtime_layer = { version = "21.0", path = "backends/wasmtime_runtime_layer" }
+wasmtime_runtime_layer = { version = "22.0", path = "backends/wasmtime_runtime_layer" }
 
 [package.metadata."docs.rs"]
 all-features = true
