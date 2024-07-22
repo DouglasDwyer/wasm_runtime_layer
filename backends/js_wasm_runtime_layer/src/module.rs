@@ -145,7 +145,10 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
 
                     let ty = match (subtype, subtypes.next()) {
                         (Some(subtype), None) => match &subtype.composite_type {
-                            wasmparser::CompositeType::Func(func_type) => FuncType::new(
+                            wasmparser::CompositeType {
+                                inner: wasmparser::CompositeInnerType::Func(func_type),
+                                shared: false,
+                            } => FuncType::new(
                                 func_type.params().iter().map(value_type_from),
                                 func_type.results().iter().map(value_type_from),
                             ),
