@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Context, Error, Result};
+use anyhow::{Error, Result};
 use ref_cast::RefCast;
 use smallvec::SmallVec;
 use wasm_runtime_layer::{
@@ -349,19 +349,12 @@ impl WasmMemory<Engine> for Memory {
 
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
         self.as_ref()
-            .grow(
-                ctx.as_context_mut().into_inner(),
-                wasmi::core::Pages::new(additional)
-                    .context("Could not create additional pages.")?,
-            )
-            .map(Into::into)
+            .grow(ctx.as_context_mut().into_inner(), additional)
             .map_err(Error::msg)
     }
 
     fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
-        self.as_ref()
-            .current_pages(ctx.as_context().into_inner())
-            .into()
+        self.as_ref().size(ctx.as_context().into_inner())
     }
 
     fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
