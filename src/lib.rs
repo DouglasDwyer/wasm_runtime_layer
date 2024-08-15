@@ -229,7 +229,7 @@ impl MemoryType {
 /// # Note
 ///
 /// Can be cloned cheaply.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct FuncType {
     /// The number of function parameters.
     len_params: usize,
@@ -256,6 +256,14 @@ impl std::fmt::Debug for FuncType {
             .finish()
     }
 }
+
+impl PartialEq for FuncType {
+    fn eq(&self, other: &Self) -> bool {
+        self.len_params == other.len_params && self.params_results == other.params_results
+    }
+}
+
+impl Eq for FuncType {}
 
 impl Display for FuncType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
