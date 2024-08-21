@@ -832,6 +832,21 @@ pub enum Value {
     ExternRef(Option<ExternRef>),
 }
 
+impl Value {
+    /// Returns the [`ValueType`] for this [`Value`].
+    #[must_use]
+    pub const fn ty(&self) -> ValueType {
+        match self {
+            Value::I32(_) => ValueType::I32,
+            Value::I64(_) => ValueType::I64,
+            Value::F32(_) => ValueType::F32,
+            Value::F64(_) => ValueType::F64,
+            Value::FuncRef(_) => ValueType::FuncRef,
+            Value::ExternRef(_) => ValueType::ExternRef,
+        }
+    }
+}
+
 impl PartialEq for Value {
     fn eq(&self, o: &Self) -> bool {
         match (self, o) {

@@ -230,8 +230,8 @@ impl WasmFunc<Engine> for Func {
 
 impl WasmGlobal<Engine> for Global {
     fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
+        let ty = value_type_into(value.ty());
         let value = value_into(value);
-        let ty = value.ty(ctx.as_context_mut().into_inner());
         Self::new(
             wasmtime::Global::new(
                 ctx.as_context_mut().into_inner(),
