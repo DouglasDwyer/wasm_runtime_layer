@@ -135,7 +135,6 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
 
     parser.parse_all(bytes).try_for_each(|payload| {
         match payload? {
-            wasmparser::Payload::Version { .. } => {}
             wasmparser::Payload::TypeSection(section) => {
                 for ty in section {
                     let ty = ty?;
@@ -244,7 +243,6 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     exports.insert(export.name.to_string(), ty);
                 }
             }
-            wasmparser::Payload::StartSection { .. } => {}
             wasmparser::Payload::ElementSection(_section) =>
             {
                 #[cfg(feature = "tracing")]
@@ -257,24 +255,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                     }
                 }
             }
-            wasmparser::Payload::DataCountSection { .. } => {}
-            wasmparser::Payload::DataSection(_) => {}
-            wasmparser::Payload::CodeSectionStart { .. } => {}
-            wasmparser::Payload::CodeSectionEntry(_) => {}
-            wasmparser::Payload::ModuleSection { .. } => {}
-            wasmparser::Payload::InstanceSection(_) => {}
-            wasmparser::Payload::CoreTypeSection(_) => {}
-            wasmparser::Payload::ComponentSection { .. } => {}
-            wasmparser::Payload::ComponentInstanceSection(_) => {}
-            wasmparser::Payload::ComponentAliasSection(_) => {}
-            wasmparser::Payload::ComponentTypeSection(_) => {}
-            wasmparser::Payload::ComponentCanonicalSection(_) => {}
-            wasmparser::Payload::ComponentStartSection { .. } => {}
-            wasmparser::Payload::ComponentImportSection(_) => {}
-            wasmparser::Payload::ComponentExportSection(_) => {}
-            wasmparser::Payload::CustomSection(_) => {}
-            wasmparser::Payload::UnknownSection { .. } => {}
-            wasmparser::Payload::End(_) => {}
+            _ => {}
         }
 
         anyhow::Ok(())

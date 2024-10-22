@@ -521,7 +521,7 @@ impl WasmTable<Engine> for Table {
     }
 
     fn size(&self, ctx: impl AsContext<Engine>) -> u32 {
-        self.as_ref().size(ctx.as_context().into_inner())
+        expect_table32(self.as_ref().size(ctx.as_context().into_inner()))
     }
 
     fn grow(
@@ -533,15 +533,16 @@ impl WasmTable<Engine> for Table {
         self.as_ref()
             .grow(
                 ctx.as_context_mut().into_inner(),
-                delta,
+                u64::from(delta),
                 value_into_ref(init),
             )
+            .map(expect_table32)
             .map_err(Error::msg)
     }
 
     fn get(&self, mut ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
         self.as_ref()
-            .get(ctx.as_context_mut().into_inner(), index)
+            .get(ctx.as_context_mut().into_inner(), u64::from(index))
             .map(value_from_ref)
     }
 
@@ -554,7 +555,7 @@ impl WasmTable<Engine> for Table {
         self.as_ref()
             .set(
                 ctx.as_context_mut().into_inner(),
-                index,
+                u64::from(index),
                 value_into_ref(value),
             )
             .map_err(Error::msg)
@@ -691,9 +692,14 @@ fn memory_type_into(ty: MemoryType) -> wasmtime::MemoryType {
 fn table_type_from(ty: wasmtime::TableType) -> TableType {
     TableType::new(
         value_type_from_ref_type(ty.element()),
-        ty.minimum(),
-        ty.maximum(),
+        expect_table32(ty.minimum()),
+        ty.maximum().map(expect_table32),
     )
+}
+
+/// Convert a table size `u64` to a `u32` or panic
+fn expect_table32(x: u64) -> u32 {
+    x.try_into().expect("table64 is not supported")
 }
 
 /// Convert a [`TableType`] to a [`wasmtime::TableType`].
