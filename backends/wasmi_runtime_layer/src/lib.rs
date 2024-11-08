@@ -5,10 +5,7 @@
 
 //! `wasmi_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmi`.
 
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::ops::{Deref, DerefMut};
 
 use anyhow::{Error, Result};
 use ref_cast::RefCast;
@@ -121,7 +118,7 @@ delegate! { #[derive(Clone)] Func(wasmi::Func) }
 delegate! { #[derive(Clone)] Global(wasmi::Global) }
 delegate! { #[derive(Clone)] Instance(wasmi::Instance) }
 delegate! { #[derive(Clone)] Memory(wasmi::Memory) }
-delegate! { #[derive(Clone)] Module(Arc<wasmi::Module>) }
+delegate! { #[derive(Clone)] Module(wasmi::Module) }
 delegate! { #[derive()] Store(wasmi::Store<T>) <T> }
 delegate! { #[derive()] StoreContext(wasmi::StoreContext<'a, T>) <'a, T> }
 delegate! { #[derive()] StoreContextMut(wasmi::StoreContextMut<'a, T>) <'a, T> }
@@ -377,10 +374,10 @@ impl WasmMemory<Engine> for Memory {
 
 impl WasmModule<Engine> for Module {
     fn new(engine: &Engine, stream: impl std::io::Read) -> Result<Self> {
-        Ok(Self::new(Arc::new(wasmi::Module::new_streaming(
+        Ok(Self::new(wasmi::Module::new_streaming(
             engine.as_ref(),
             stream,
-        )?)))
+        )?))
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
