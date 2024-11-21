@@ -158,6 +158,7 @@ impl WasmExternRef<Engine> for ExternRef {
         ctx: StoreContext<'s, S>,
     ) -> Result<&'a T> {
         self.data(ctx.into_inner())?
+            .ok_or_else(|| Error::msg("extern ref must not be a wrapped anyref"))?
             .downcast_ref::<T>()
             .ok_or_else(|| Error::msg("Incorrect extern ref type."))
     }
