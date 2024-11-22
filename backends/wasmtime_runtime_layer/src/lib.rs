@@ -468,7 +468,7 @@ impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
     }
 }
 
-impl<'a, T> AsContext<Engine> for StoreContext<'a, T> {
+impl<T> AsContext<Engine> for StoreContext<'_, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<T> {
@@ -476,7 +476,7 @@ impl<'a, T> AsContext<Engine> for StoreContext<'a, T> {
     }
 }
 
-impl<'a, T> AsContext<Engine> for StoreContextMut<'a, T> {
+impl<T> AsContext<Engine> for StoreContextMut<'_, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<T> {
@@ -484,7 +484,7 @@ impl<'a, T> AsContext<Engine> for StoreContextMut<'a, T> {
     }
 }
 
-impl<'a, T> AsContextMut<Engine> for StoreContextMut<'a, T> {
+impl<T> AsContextMut<Engine> for StoreContextMut<'_, T> {
     fn as_context_mut(&mut self) -> StoreContextMut<T> {
         StoreContextMut::new(wasmtime::AsContextMut::as_context_mut(self.as_mut()))
     }
