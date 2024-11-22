@@ -16,7 +16,7 @@ js-sys = { version = "0.3", default-features = false }
 slab = { version = "0.4", default-features = false }
 smallvec.workspace = true
 tracing = { version = "0.1", default-features = false, optional = true }
-wasmparser = { version = "0.219", default-features = false, features = [ "std", "component-model" ]}
+wasmparser = { version = "0.220", default-features = false, features = [ "std" ]}
 wasm-bindgen = { version = "0.2", default-features = false }
 wasm_runtime_layer.workspace = true
 
