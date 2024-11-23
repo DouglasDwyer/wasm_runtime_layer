@@ -94,7 +94,8 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Run the tests with wasm-pack
-        run: wasm-pack test --node \
+        run: |
+          wasm-pack test --node \
           --workspace --exclude wasmtime_runtime_layer \
           --release
 
