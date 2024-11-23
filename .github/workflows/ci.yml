@@ -40,7 +40,17 @@ jobs:
       - name: Check the powerset
         run: |
           cargo hack check --all \
+            --exclude wasmtime_runtime_layer \
             --feature-powerset --keep-going
+
+      # manual feature powerset since one of the runtime features is required
+      - name: Check the powerset for the wasmtime_runtime_layer
+        run: |
+          cargo check -p wasmtime_runtime_layer
+          cargo check -p wasmtime_runtime_layer \
+            --no-default-features --features cranelift
+          cargo check -p wasmtime_runtime_layer \
+            --no-default-features --features winch
 
   test:
     name: Test Suite
@@ -67,8 +77,18 @@ jobs:
       - name: Run the test-suite powerset
         run: |
           cargo hack test --workspace \
+            --exclude wasmtime_runtime_layer \
             --no-fail-fast --feature-powerset --keep-going \
             --release
+
+      # manual feature powerset since one of the runtime features is required
+      - name: Check the powerset for the wasmtime_runtime_layer
+        run: |
+          cargo test -p wasmtime_runtime_layer --release
+          cargo test -p wasmtime_runtime_layer --release \
+            --no-default-features --features cranelift
+          cargo test -p wasmtime_runtime_layer --release \
+            --no-default-features --features winch
       
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -123,5 +143,18 @@ jobs:
       - name: Check the code style powerset
         run: |
           cargo hack clippy --all \
+            --exclude wasmtime_runtime_layer \
             --feature-powerset --keep-going \
+            -- -D warnings
+
+      # manual feature powerset since one of the runtime features is required
+      - name: Check the powerset for the wasmtime_runtime_layer
+        run: |
+          cargo clippy -p wasmtime_runtime_layer \
+            -- -D warnings
+          cargo clippy -p wasmtime_runtime_layer \
+            --no-default-features --features cranelift \
+            -- -D warnings
+          cargo clippy -p wasmtime_runtime_layer \
+            --no-default-features --features winch \
             -- -D warnings
