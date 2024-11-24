@@ -40,14 +40,26 @@ jobs:
       - name: Check the powerset
         run: |
           cargo hack check --all \
+            --exclude wasmtime_runtime_layer \
             --feature-powerset --keep-going
+
+      # manual feature powerset since one of the runtime features is required
+      - name: Check the powerset for the wasmtime_runtime_layer
+        run: |
+          cargo check -p wasmtime_runtime_layer
+          cargo check -p wasmtime_runtime_layer \
+            --no-default-features --features cranelift
+          cargo check -p wasmtime_runtime_layer \
+            --no-default-features --features winch
 
   test:
     name: Test Suite
     strategy:
       matrix:
         os: [ubuntu-latest]
-        rust: [stable, nightly]
+        # This should be [stable, nightly] but we override stable since there is a bug with 1.82.0
+        # https://github.com/rustwasm/wasm-bindgen/issues/4274#issuecomment-2493497388
+        rust: [1.81.0]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -67,14 +79,25 @@ jobs:
       - name: Run the test-suite powerset
         run: |
           cargo hack test --workspace \
+            --exclude wasmtime_runtime_layer \
             --no-fail-fast --feature-powerset --keep-going \
             --release
+
+      # manual feature powerset since one of the runtime features is required
+      - name: Check the powerset for the wasmtime_runtime_layer
+        run: |
+          cargo test -p wasmtime_runtime_layer --release
+          cargo test -p wasmtime_runtime_layer --release \
+            --no-default-features --features cranelift
+          cargo test -p wasmtime_runtime_layer --release \
+            --no-default-features --features winch
       
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Run the tests with wasm-pack
-        run: wasm-pack test --node \
+        run: |
+          wasm-pack test --node \
           --workspace --exclude wasmtime_runtime_layer \
           --release
 
@@ -123,5 +146,18 @@ jobs:
       - name: Check the code style powerset
         run: |
           cargo hack clippy --all \
+            --exclude wasmtime_runtime_layer \
             --feature-powerset --keep-going \
+            -- -D warnings
+
+      # manual feature powerset since one of the runtime features is required
+      - name: Check the powerset for the wasmtime_runtime_layer
+        run: |
+          cargo clippy -p wasmtime_runtime_layer \
+            -- -D warnings
+          cargo clippy -p wasmtime_runtime_layer \
+            --no-default-features --features cranelift \
+            -- -D warnings
+          cargo clippy -p wasmtime_runtime_layer \
+            --no-default-features --features winch \
             -- -D warnings
