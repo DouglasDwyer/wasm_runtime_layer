@@ -38,7 +38,7 @@ smallvec.workspace = true
 
 [dev-dependencies]
 js_wasm_runtime_layer = { version = "0.4", path = "backends/js_wasm_runtime_layer" }
-wasmi_runtime_layer = { version = "0.39", path = "backends/wasmi_runtime_layer" }
+wasmi_runtime_layer = { version = "0.40", path = "backends/wasmi_runtime_layer" }
 wasm-bindgen-test = "0.3"
 wat = "1.0"
 
