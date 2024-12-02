@@ -236,7 +236,7 @@ impl<'a, T: 'a> StoreContext<'a, T> {
     }
 }
 
-impl<'a, T> Deref for StoreContext<'a, T> {
+impl<T> Deref for StoreContext<'_, T> {
     type Target = StoreInner<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -262,7 +262,7 @@ impl<'a, T: 'a> StoreContextMut<'a, T> {
     }
 }
 
-impl<'a, T> Deref for StoreContextMut<'a, T> {
+impl<T> Deref for StoreContextMut<'_, T> {
     type Target = StoreInner<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -270,7 +270,7 @@ impl<'a, T> Deref for StoreContextMut<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for StoreContextMut<'a, T> {
+impl<T> DerefMut for StoreContextMut<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut *self.store
     }
