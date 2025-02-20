@@ -57,9 +57,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        # This should be [stable, nightly] but we override stable since there is a bug with 1.82.0
-        # https://github.com/rustwasm/wasm-bindgen/issues/4274#issuecomment-2493497388
-        rust: [1.81.0]
+        rust: [stable, nightly]
     runs-on: ${{ matrix.os }}
 
     steps:
