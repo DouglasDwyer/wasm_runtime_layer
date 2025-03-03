@@ -5,7 +5,6 @@ use alloc::{
     vec::Vec,
 };
 
-use anyhow::Context;
 use fxhash::FxHashMap;
 use js_sys::{Uint8Array, WebAssembly};
 use wasm_runtime_layer::{
@@ -55,6 +54,8 @@ impl WasmModule<Engine> for Module {
 
     #[cfg(feature = "std")]
     fn new_streaming(engine: &Engine, mut stream: impl std::io::Read) -> anyhow::Result<Self> {
+        use anyhow::Context;
+
         let mut buf = Vec::new();
         stream
             .read_to_end(&mut buf)

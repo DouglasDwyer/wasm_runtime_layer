@@ -7,7 +7,7 @@
 
 extern crate alloc;
 
-use alloc::{boxed::Box, vec::Vec};
+use alloc::{boxed::Box, string::ToString, vec::Vec};
 use core::{
     fmt,
     ops::{Deref, DerefMut},
