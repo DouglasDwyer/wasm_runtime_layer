@@ -7,12 +7,12 @@ members = [
 ]
 
 [workspace.dependencies]
-anyhow = { version = "1.0", default-features = false, features = [ "std" ] }
+anyhow = { version = "1.0", default-features = false }
 fxhash = { version = "0.2", default-features = false }
 hashbrown = { version = "0.15", default-features = false }
 ref-cast = { version = "1.0", default-features = false }
 smallvec = { version = "1.11", default-features = false }
-wasm_runtime_layer = { path = ".", version = "0.4.2" }
+wasm_runtime_layer = { path = ".", version = "0.4.2", default-features = false }
 
 [workspace.package]
 version = "0.4.2"
@@ -37,6 +37,10 @@ fxhash.workspace = true
 hashbrown.workspace = true
 ref-cast.workspace = true
 smallvec.workspace = true
+
+[features]
+default = [ "std" ]
+std = [ "anyhow/std" ]
 
 [dev-dependencies]
 js_wasm_runtime_layer = { version = "0.4", path = "backends/js_wasm_runtime_layer" }

@@ -1,4 +1,9 @@
-use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
 
 use anyhow::Context;
 use fxhash::FxHashMap;
@@ -30,16 +35,11 @@ pub(crate) struct ModuleInner {
 }
 
 impl WasmModule<Engine> for Module {
-    fn new(engine: &Engine, mut stream: impl std::io::Read) -> anyhow::Result<Self> {
-        let mut buf = Vec::new();
-        stream
-            .read_to_end(&mut buf)
-            .context("Failed to read module bytes")?;
+    fn new(engine: &Engine, bytes: &[u8]) -> anyhow::Result<Self> {
+        let parsed = parse_module(bytes)?;
 
-        let parsed = parse_module(&buf)?;
-
-        let module = WebAssembly::Module::new(&Uint8Array::from(buf.as_slice()).into())
-            .map_err(JsErrorMsg::from)?;
+        let module =
+            WebAssembly::Module::new(&Uint8Array::from(bytes).into()).map_err(JsErrorMsg::from)?;
 
         let parsed = Arc::new(parsed);
 
@@ -51,6 +51,16 @@ impl WasmModule<Engine> for Module {
         let module = engine.borrow_mut().insert_module(module, parsed);
 
         Ok(module)
+    }
+
+    #[cfg(feature = "std")]
+    fn new_streaming(engine: &Engine, mut stream: impl std::io::Read) -> anyhow::Result<Self> {
+        let mut buf = Vec::new();
+        stream
+            .read_to_end(&mut buf)
+            .context("Failed to read module bytes")?;
+
+        Self::new(engine, buf.as_slice())
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {

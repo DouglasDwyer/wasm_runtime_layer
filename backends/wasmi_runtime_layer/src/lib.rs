@@ -1,7 +1,7 @@
-#![deny(warnings)]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 //! `wasmi_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmi`.
 
@@ -379,7 +379,12 @@ impl WasmMemory<Engine> for Memory {
 }
 
 impl WasmModule<Engine> for Module {
-    fn new(engine: &Engine, stream: impl std::io::Read) -> Result<Self> {
+    fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
+        Ok(Self::new(wasmi::Module::new(engine.as_ref(), bytes)?))
+    }
+
+    #[cfg(feature = "std")]
+    fn new_streaming(engine: &Engine, stream: impl std::io::Read) -> Result<Self> {
         Ok(Self::new(wasmi::Module::new_streaming(
             engine.as_ref(),
             stream,

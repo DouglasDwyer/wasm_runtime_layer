@@ -1,7 +1,7 @@
-#![deny(warnings)]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 //! `wasm_runtime_layer` creates a thin abstraction over WebAssembly runtimes, allowing for backend-agnostic host code. The interface is based upon the `wasmtime` and `wasmi` crates, but may be implemented for any runtime.
 //!
@@ -75,7 +75,12 @@
 
 extern crate alloc;
 
-use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
 use core::{any::Any, fmt};
 
 use anyhow::Result;
@@ -1058,10 +1063,24 @@ pub struct Module {
 }
 
 impl Module {
-    /// Creates a new Wasm [`Module`] from the given byte stream.
-    pub fn new<E: WasmEngine>(engine: &Engine<E>, stream: impl std::io::Read) -> Result<Self> {
+    /// Creates a new Wasm [`Module`] from the given byte slice.
+    pub fn new<E: WasmEngine>(engine: &Engine<E>, bytes: &[u8]) -> Result<Self> {
         Ok(Self {
-            module: BackendObject::new(<E::Module as WasmModule<E>>::new(&engine.backend, stream)?),
+            module: BackendObject::new(<E::Module as WasmModule<E>>::new(&engine.backend, bytes)?),
+        })
+    }
+
+    #[cfg(feature = "std")]
+    /// Creates a new Wasm [`Module`] from the given byte stream.
+    pub fn new_streaming<E: WasmEngine>(
+        engine: &Engine<E>,
+        stream: impl std::io::Read,
+    ) -> Result<Self> {
+        Ok(Self {
+            module: BackendObject::new(<E::Module as WasmModule<E>>::new_streaming(
+                &engine.backend,
+                stream,
+            )?),
         })
     }
 
