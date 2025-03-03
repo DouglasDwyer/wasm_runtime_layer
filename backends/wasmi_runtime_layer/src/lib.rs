@@ -258,11 +258,13 @@ impl WasmFunc<Engine> for Func {
         let mut output = ArgumentVec::with_capacity(results.len());
         output.extend(results.iter().cloned().map(value_into));
 
-        self.as_ref().call(
-            ctx.as_context_mut().into_inner(),
-            &input[..],
-            &mut output[..],
-        )?;
+        self.as_ref()
+            .call(
+                ctx.as_context_mut().into_inner(),
+                &input[..],
+                &mut output[..],
+            )
+            .map_err(Error::msg)?;
 
         for (i, result) in output.into_iter().enumerate() {
             results[i] = value_from(result);
@@ -309,11 +311,18 @@ impl WasmInstance<Engine> for Instance {
         let mut linker = wasmi::Linker::new(store.as_context().engine().as_ref());
 
         for ((module, name), imp) in imports {
-            linker.define(&module, &name, extern_into(imp))?;
+            linker
+                .define(&module, &name, extern_into(imp))
+                .map_err(Error::msg)?;
         }
 
-        let pre = linker.instantiate(store.as_context_mut().into_inner(), module.as_ref())?;
-        Ok(Self::new(pre.start(store.as_context_mut().into_inner())?))
+        let pre = linker
+            .instantiate(store.as_context_mut().into_inner(), module.as_ref())
+            .map_err(Error::msg)?;
+        Ok(Self::new(
+            pre.start(store.as_context_mut().into_inner())
+                .map_err(Error::msg)?,
+        ))
     }
 
     fn exports<'a>(
@@ -380,7 +389,9 @@ impl WasmMemory<Engine> for Memory {
 
 impl WasmModule<Engine> for Module {
     fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
-        Ok(Self::new(wasmi::Module::new(engine.as_ref(), bytes)?))
+        Ok(Self::new(
+            wasmi::Module::new(engine.as_ref(), bytes).map_err(Error::msg)?,
+        ))
     }
 
     #[cfg(feature = "std")]
