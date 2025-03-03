@@ -1,8 +1,13 @@
-use crate::*;
-use anyhow::*;
-use fxhash::*;
-use std::marker::*;
-use std::ops::*;
+use alloc::{boxed::Box, string::String};
+use core::fmt;
+
+use anyhow::Result;
+use fxhash::FxBuildHasher;
+use hashbrown::HashMap;
+
+use crate::{
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, TableType, ValueType,
+};
 
 /// Runtime representation of a value.
 #[derive(Clone)]
@@ -36,12 +41,12 @@ impl<E: WasmEngine> Value<E> {
     }
 }
 
-impl<E: WasmEngine> std::fmt::Debug for Value<E>
+impl<E: WasmEngine> fmt::Debug for Value<E>
 where
-    E::Func: std::fmt::Debug,
-    E::ExternRef: std::fmt::Debug,
+    E::Func: fmt::Debug,
+    E::ExternRef: fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::I32(v) => f.debug_tuple("I32").field(v).finish(),
             Value::I64(v) => f.debug_tuple("I64").field(v).finish(),
@@ -137,14 +142,14 @@ impl<E: WasmEngine> Clone for Extern<E> {
     }
 }
 
-impl<E: WasmEngine> std::fmt::Debug for Extern<E>
+impl<E: WasmEngine> fmt::Debug for Extern<E>
 where
-    E::Global: std::fmt::Debug,
-    E::Func: std::fmt::Debug,
-    E::Memory: std::fmt::Debug,
-    E::Table: std::fmt::Debug,
+    E::Global: fmt::Debug,
+    E::Func: fmt::Debug,
+    E::Memory: fmt::Debug,
+    E::Table: fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Global(arg0) => f.debug_tuple("Global").field(arg0).finish(),
             Self::Table(arg0) => f.debug_tuple("Table").field(arg0).finish(),
@@ -166,11 +171,11 @@ pub struct Export<E: WasmEngine> {
     pub value: Extern<E>,
 }
 
-impl<E: WasmEngine> std::fmt::Debug for Export<E>
+impl<E: WasmEngine> fmt::Debug for Export<E>
 where
-    Extern<E>: std::fmt::Debug,
+    Extern<E>: fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Export")
             .field("name", &self.name)
             .field("value", &self.value)
@@ -182,14 +187,14 @@ where
 #[derive(Clone)]
 pub struct Imports<E: WasmEngine> {
     /// The inner list of external imports.
-    pub(crate) map: FxHashMap<(String, String), Extern<E>>,
+    pub(crate) map: HashMap<(String, String), Extern<E>, FxBuildHasher>,
 }
 
 impl<E: WasmEngine> Imports<E> {
     /// Create a new `Imports`.
     pub fn new() -> Self {
         Self {
-            map: FxHashMap::default(),
+            map: HashMap::default(),
         }
     }
 
@@ -239,7 +244,7 @@ impl<E: WasmEngine> Imports<E> {
 /// An iterator over imports.
 pub struct ImportsIterator<'a, E: WasmEngine> {
     /// The inner iterator over external items.
-    iter: std::collections::hash_map::Iter<'a, (String, String), Extern<E>>,
+    iter: hashbrown::hash_map::Iter<'a, (String, String), Extern<E>>,
 }
 
 impl<'a, E: WasmEngine> ImportsIterator<'a, E> {
@@ -261,7 +266,7 @@ impl<'a, E: WasmEngine> Iterator for ImportsIterator<'a, E> {
 }
 
 impl<E: WasmEngine> IntoIterator for &Imports<E> {
-    type IntoIter = std::collections::hash_map::IntoIter<(String, String), Extern<E>>;
+    type IntoIter = hashbrown::hash_map::IntoIter<(String, String), Extern<E>>;
     type Item = ((String, String), Extern<E>);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -283,8 +288,8 @@ impl<E: WasmEngine> Extend<((String, String), Extern<E>)> for Imports<E> {
     }
 }
 
-impl<E: WasmEngine> std::fmt::Debug for Imports<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl<E: WasmEngine> fmt::Debug for Imports<E> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         /// Stores backing debug data.
         enum SecretMap {
             /// The empty variant.
@@ -304,8 +309,8 @@ impl<E: WasmEngine> std::fmt::Debug for Imports<E> {
             }
         }
 
-        impl std::fmt::Debug for SecretMap {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        impl fmt::Debug for SecretMap {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 match self {
                     Self::Empty => write!(f, "(empty)"),
                     Self::Some(len) => write!(f, "(... {} item(s) ...)", len),

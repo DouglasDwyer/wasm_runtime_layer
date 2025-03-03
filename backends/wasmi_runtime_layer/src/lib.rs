@@ -5,7 +5,13 @@
 
 //! `wasmi_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmi`.
 
-use std::ops::{Deref, DerefMut};
+extern crate alloc;
+
+use alloc::{boxed::Box, vec::Vec};
+use core::{
+    fmt,
+    ops::{Deref, DerefMut},
+};
 
 use anyhow::{Error, Result};
 use ref_cast::RefCast;
@@ -662,8 +668,8 @@ fn extern_type_from(ty: wasmi::ExternType) -> ExternType {
 #[derive(Debug)]
 struct HostError(anyhow::Error);
 
-impl std::fmt::Display for HostError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for HostError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }

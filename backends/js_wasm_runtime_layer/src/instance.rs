@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use alloc::{boxed::Box, collections::BTreeMap, string::String, vec::Vec};
 
 use anyhow::{bail, Context};
 use fxhash::FxHashMap;

@@ -4,6 +4,23 @@
 
 //! `js_wasm_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for your web browser's WebAssembly runtime.
 
+extern crate alloc;
+
+use alloc::{boxed::Box, format, rc::Rc, string::String, sync::Arc};
+use core::{
+    cell::{RefCell, RefMut},
+    error::Error,
+    fmt,
+};
+
+use js_sys::{JsString, Object, Reflect, WebAssembly};
+use slab::Slab;
+use wasm_bindgen::{JsCast, JsValue};
+use wasm_runtime_layer::{
+    backend::{AsContext, AsContextMut, Extern, Value, WasmEngine, WasmExternRef, WasmGlobal},
+    GlobalType, ValueType,
+};
+
 /// Conversion to and from JavaScript
 mod conversion;
 /// Functions
@@ -26,25 +43,6 @@ pub use module::Module;
 pub use store::{Store, StoreContext, StoreContextMut, StoreInner};
 pub use table::Table;
 
-use wasm_bindgen::{JsCast, JsValue};
-
-use std::{
-    cell::{RefCell, RefMut},
-    error::Error,
-    fmt::Display,
-    rc::Rc,
-    sync::Arc,
-};
-
-use slab::Slab;
-
-use js_sys::{JsString, Object, Reflect, WebAssembly};
-
-use wasm_runtime_layer::{
-    backend::{AsContext, AsContextMut, Extern, Value, WasmEngine, WasmExternRef, WasmGlobal},
-    GlobalType, ValueType,
-};
-
 use self::{
     conversion::{FromJs, FromStoredJs, ToJs, ToStoredJs},
     module::{ModuleInner, ParsedModule},
@@ -57,8 +55,8 @@ pub(crate) struct JsErrorMsg {
     message: String,
 }
 
-impl Display for JsErrorMsg {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for JsErrorMsg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.message.fmt(f)
     }
 }
@@ -110,14 +108,14 @@ impl WasmEngine for Engine {
 /// reference to it exists in the world of Js.
 #[derive(Debug)]
 #[allow(dead_code)]
-pub(crate) struct DropResource(Box<dyn std::fmt::Debug>);
+pub(crate) struct DropResource(Box<dyn fmt::Debug>);
 
 impl DropResource {
     /// Creates a new drop resource from anything that implements `std::fmt::Debug`
     ///
     /// In general, any trait can be used here, but `std::fmt::Debug` is the most common and allows
     /// easy introspection of the values being held on to.
-    pub fn new(value: impl 'static + std::fmt::Debug) -> Self {
+    pub fn new(value: impl 'static + fmt::Debug) -> Self {
         Self(Box::new(value))
     }
 }

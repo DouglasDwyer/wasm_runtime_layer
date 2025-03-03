@@ -73,18 +73,21 @@
 //! wasm-pack test --node
 //! ```
 
-/// Provides traits for implementing runtime backends.
-pub mod backend;
+extern crate alloc;
+
+use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use core::{any::Any, fmt};
+
+use anyhow::Result;
+use fxhash::FxBuildHasher;
+use hashbrown::HashMap;
+use ref_cast::RefCast;
+use smallvec::SmallVec;
 
 use crate::backend::*;
-use anyhow::Result;
-use fxhash::*;
-use ref_cast::*;
-use smallvec::*;
-use std::any::*;
-use std::fmt::Display;
-use std::marker::*;
-use std::sync::*;
+
+/// Provides traits for implementing runtime backends.
+pub mod backend;
 
 /// The default amount of arguments and return values for which to allocate
 /// stack space.
@@ -110,8 +113,8 @@ pub enum ValueType {
     ExternRef,
 }
 
-impl Display for ValueType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ValueType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ValueType::I32 => write!(f, "i32"),
             ValueType::I64 => write!(f, "i64"),
@@ -247,8 +250,8 @@ pub struct FuncType {
     name: Option<Arc<str>>,
 }
 
-impl std::fmt::Debug for FuncType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Debug for FuncType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("FuncType")
             .field("params", &self.params())
             .field("results", &self.results())
@@ -265,8 +268,8 @@ impl PartialEq for FuncType {
 
 impl Eq for FuncType {}
 
-impl Display for FuncType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for FuncType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let params = self.params();
         let results = self.results();
 
@@ -405,7 +408,7 @@ impl ExternType {
     }
 
     /// Return the underlying [`FuncType`] if the types match
-    pub fn try_into_func(self) -> std::result::Result<FuncType, Self> {
+    pub fn try_into_func(self) -> core::result::Result<FuncType, Self> {
         if let Self::Func(v) = self {
             Ok(v)
         } else {
@@ -592,14 +595,14 @@ impl<E: WasmEngine> From<crate::backend::Export<E>> for Export {
 #[derive(Clone, Debug)]
 pub struct Imports {
     /// The mapping from names to externals.
-    pub(crate) map: FxHashMap<(String, String), Extern>,
+    pub(crate) map: HashMap<(String, String), Extern, FxBuildHasher>,
 }
 
 impl Imports {
     /// Create a new `Imports`.
     pub fn new() -> Self {
         Self {
-            map: FxHashMap::default(),
+            map: HashMap::default(),
         }
     }
 
@@ -649,7 +652,7 @@ impl Imports {
 /// An iterator over imports.
 pub struct ImportsIterator<'a> {
     /// The inner iterator over external items.
-    iter: std::collections::hash_map::Iter<'a, (String, String), Extern>,
+    iter: hashbrown::hash_map::Iter<'a, (String, String), Extern>,
 }
 
 impl<'a> ImportsIterator<'a> {
@@ -671,7 +674,7 @@ impl<'a> Iterator for ImportsIterator<'a> {
 }
 
 impl IntoIterator for &Imports {
-    type IntoIter = std::collections::hash_map::IntoIter<(String, String), Extern>;
+    type IntoIter = hashbrown::hash_map::IntoIter<(String, String), Extern>;
     type Item = ((String, String), Extern);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -959,7 +962,7 @@ impl Func {
                     results[i] = result.into();
                 }
 
-                std::result::Result::Ok(())
+                Ok(())
             },
         );
 
@@ -998,7 +1001,7 @@ impl Func {
             results[i] = result.into();
         }
 
-        std::result::Result::Ok(())
+        Ok(())
     }
 }
 
@@ -1289,8 +1292,8 @@ impl Clone for BackendObject {
     }
 }
 
-impl std::fmt::Debug for BackendObject {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for BackendObject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BackendObject").finish()
     }
 }

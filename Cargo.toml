@@ -9,6 +9,7 @@ members = [
 [workspace.dependencies]
 anyhow = { version = "1.0", default-features = false, features = [ "std" ] }
 fxhash = { version = "0.2", default-features = false }
+hashbrown = { version = "0.15", default-features = false }
 ref-cast = { version = "1.0", default-features = false }
 smallvec = { version = "1.11", default-features = false }
 wasm_runtime_layer = { path = ".", version = "0.4.2" }
@@ -33,6 +34,7 @@ Compatibility interface for WASM runtimes.
 [dependencies]
 anyhow.workspace = true
 fxhash.workspace = true
+hashbrown.workspace = true
 ref-cast.workspace = true
 smallvec.workspace = true
 

@@ -1,3 +1,5 @@
+use alloc::vec;
+
 use anyhow::Context;
 use js_sys::{Array, Function};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};

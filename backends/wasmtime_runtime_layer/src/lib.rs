@@ -10,10 +10,10 @@
 //!
 //! **winch** - Enables executing WASM modules and components with the Winch compiler, as described in the Wasmtime documentation.
 
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+extern crate alloc;
+
+use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use core::ops::{Deref, DerefMut};
 
 use anyhow::{Error, Result};
 use fxhash::FxHashMap;
@@ -194,7 +194,7 @@ impl WasmFunc<Engine> for Func {
                     results[i] = value_into(result);
                 }
 
-                std::result::Result::Ok(())
+                Ok(())
             },
         ))
     }
