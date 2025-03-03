@@ -1,6 +1,7 @@
 [workspace]
 members = [
     ".",
+    "backends/wasmer_runtime_layer",
     "backends/wasmi_runtime_layer",
     "backends/wasmtime_runtime_layer",
     "backends/js_wasm_runtime_layer",
