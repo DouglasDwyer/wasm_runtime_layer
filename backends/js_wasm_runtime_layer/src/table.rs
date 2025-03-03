@@ -1,3 +1,5 @@
+use core::fmt;
+
 use anyhow::Context;
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
@@ -26,8 +28,8 @@ pub(crate) struct TableInner {
     ty: TableType,
 }
 
-impl std::fmt::Debug for TableInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for TableInner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TableInner")
             .field("ty", &self.ty)
             .field("inner", &self.table)

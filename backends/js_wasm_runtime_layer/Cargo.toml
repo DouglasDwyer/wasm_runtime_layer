@@ -1,24 +1,26 @@
 [package]
 name = "js_wasm_runtime_layer"
 version = "0.4.0"
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 readme = "README.md"
 description = """
 WebAssembly runtime compatibility interface implementation for your web browser's WebAssembly runtime.
 """
 
 [dependencies]
-anyhow.workspace = true
-fxhash.workspace = true
+anyhow = { workspace = true }
+fxhash = { workspace = true }
 js-sys = { version = "0.3", default-features = false }
 slab = { version = "0.4", default-features = false }
-smallvec.workspace = true
+smallvec = { workspace = true }
 tracing = { version = "0.1", default-features = false, optional = true }
 wasmparser = { version = "0.226", default-features = false, features = [ "std" ]}
 wasm-bindgen = { version = "0.2", default-features = false }
-wasm_runtime_layer.workspace = true
+wasm_runtime_layer = { workspace = true }
 
 [features]
-tracing = ["dep:tracing"]
+default = [ "std" ]
+std = [ "anyhow/std", "wasm_runtime_layer/std" ]
+tracing = [ "dep:tracing" ]

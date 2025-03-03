@@ -10,7 +10,7 @@ WebAssembly runtime compatibility interface implementation for Wasmtime.
 """
 
 [dependencies]
-anyhow = { version = "1.0", default-features = false, features = [ "std" ] }
+anyhow = { version = "1.0", default-features = false }
 fxhash = { version = "0.2", default-features = false }
 ref-cast = { version = "1.0", default-features = false }
 smallvec = { version = "1.11", default-features = false }
@@ -18,7 +18,8 @@ wasm_runtime_layer = { path = "../..", version = "0.4.2", default-features = fal
 wasmtime = { version = "30.0", default-features = false, features = [ "runtime", "gc" ] }
 
 [features]
-default = [ "cranelift" ]
+default = [ "cranelift", "std" ]
+std = [ "anyhow/std", "wasm_runtime_layer/std" ]
 
 cranelift = [ "wasmtime/cranelift" ]
 winch = [ "wasmtime/winch" ]

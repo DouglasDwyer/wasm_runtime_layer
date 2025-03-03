@@ -1,5 +1,6 @@
-use std::{
-    mem,
+use alloc::{boxed::Box, vec::Vec};
+use core::{
+    fmt, mem,
     ops::{Deref, DerefMut},
 };
 
@@ -148,8 +149,8 @@ impl<T> AsContextMut<Engine> for Store<T> {
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for Store<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: fmt::Debug> fmt::Debug for Store<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
