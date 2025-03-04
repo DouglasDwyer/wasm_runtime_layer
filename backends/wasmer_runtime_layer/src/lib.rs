@@ -140,7 +140,7 @@ impl WasmEngine for Engine {
 impl WasmExternRef<Engine> for ExternRef {
     fn new<T: 'static + Send + Sync>(mut ctx: impl AsContextMut<Engine>, object: T) -> Self {
         Self::new(wasmer::ExternRef::new(
-            ctx.as_context_mut().as_mut(),
+            ctx.as_context_mut().as_store_mut(),
             // we double-erase here to ensure that downcast can extract
             // something that's Send+Sync
             Box::new(object) as Box<dyn Any + Send + Sync>,
@@ -153,7 +153,7 @@ impl WasmExternRef<Engine> for ExternRef {
     ) -> Result<&'a T> {
         let object: &Box<dyn Any + Send + Sync> = self
             .as_ref()
-            .downcast(ctx.as_ref())
+            .downcast(ctx.as_store_ref())
             .ok_or_else(|| Error::msg("Incorrect extern ref type."))?;
         let object: &T = object
             .downcast_ref()
@@ -186,7 +186,7 @@ impl WasmFunc<Engine> for Func {
         let mut ctx: StoreContextMut<T> = ctx.as_context_mut();
         let env = ctx.env.clone();
         Self::new(wasmer::Function::new_with_env(
-            ctx.as_mut(),
+            ctx.as_store_mut(),
             &env,
             ty,
             move |mut env, args| {
@@ -212,7 +212,7 @@ impl WasmFunc<Engine> for Func {
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> FuncType {
-        func_type_from(self.as_ref().ty(ctx.as_context().as_ref()))
+        func_type_from(self.as_ref().ty(ctx.as_context().as_store_ref()))
     }
 
     fn call<T>(
@@ -226,7 +226,7 @@ impl WasmFunc<Engine> for Func {
 
         let output = self
             .as_ref()
-            .call(ctx.as_context_mut().as_mut(), &input[..])?;
+            .call(ctx.as_context_mut().as_store_mut(), &input[..])?;
 
         for (i, result) in output.into_vec().into_iter().enumerate() {
             results[i] = value_from(result);
@@ -240,29 +240,29 @@ impl WasmGlobal<Engine> for Global {
     fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
         if mutable {
             Self::new(wasmer::Global::new_mut(
-                ctx.as_context_mut().as_mut(),
+                ctx.as_context_mut().as_store_mut(),
                 value_into(value),
             ))
         } else {
             Self::new(wasmer::Global::new(
-                ctx.as_context_mut().as_mut(),
+                ctx.as_context_mut().as_store_mut(),
                 value_into(value),
             ))
         }
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> GlobalType {
-        global_type_from(self.as_ref().ty(ctx.as_context().as_ref()))
+        global_type_from(self.as_ref().ty(ctx.as_context().as_store_ref()))
     }
 
     fn set(&self, mut ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> Result<()> {
         self.as_ref()
-            .set(ctx.as_context_mut().as_mut(), value_into(new_value))
+            .set(ctx.as_context_mut().as_store_mut(), value_into(new_value))
             .map_err(Error::msg)
     }
 
     fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Value<Engine> {
-        value_from(self.as_ref().get(ctx.as_context_mut().as_mut()))
+        value_from(self.as_ref().get(ctx.as_context_mut().as_store_mut()))
     }
 }
 
@@ -278,9 +278,13 @@ impl WasmInstance<Engine> for Instance {
             wimports.define(&module, &name, extern_into(imp));
         }
 
-        wasmer::Instance::new(store.as_context_mut().as_mut(), &module.module, &wimports)
-            .map(Self::new)
-            .map_err(Error::msg)
+        wasmer::Instance::new(
+            store.as_context_mut().as_store_mut(),
+            &module.module,
+            &wimports,
+        )
+        .map(Self::new)
+        .map_err(Error::msg)
     }
 
     fn exports<'a>(&self, _: impl AsContext<Engine>) -> Box<dyn Iterator<Item = Export<Engine>>> {
@@ -307,29 +311,32 @@ impl WasmInstance<Engine> for Instance {
 
 impl WasmMemory<Engine> for Memory {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: MemoryType) -> Result<Self> {
-        wasmer::Memory::new(ctx.as_context_mut().as_mut(), memory_type_into(ty))
+        wasmer::Memory::new(ctx.as_context_mut().as_store_mut(), memory_type_into(ty))
             .map(Self::new)
             .map_err(Error::msg)
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> MemoryType {
-        memory_type_from(self.as_ref().ty(ctx.as_context().as_ref()))
+        memory_type_from(self.as_ref().ty(ctx.as_context().as_store_ref()))
     }
 
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
         self.as_ref()
-            .grow(ctx.as_context_mut().as_mut(), wasmer::Pages(additional))
+            .grow(
+                ctx.as_context_mut().as_store_mut(),
+                wasmer::Pages(additional),
+            )
             .map(|x| x.0)
             .map_err(Error::msg)
     }
 
     fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
-        self.as_ref().view(ctx.as_context().as_ref()).size().0
+        self.as_ref().view(ctx.as_context().as_store_ref()).size().0
     }
 
     fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
         self.as_ref()
-            .view(ctx.as_context().as_ref())
+            .view(ctx.as_context().as_store_ref())
             .read(offset as u64, buffer)
             .map_err(Error::msg)
     }
@@ -341,16 +348,20 @@ impl WasmMemory<Engine> for Memory {
         buffer: &[u8],
     ) -> Result<()> {
         self.as_ref()
-            .view(ctx.as_context_mut().as_mut())
+            .view(ctx.as_context_mut().as_store_mut())
             .write(offset as u64, buffer)
             .map_err(Error::msg)
     }
 }
 
 #[derive(Clone)]
+/// Wrapper around [`wasmer::Module`].
 pub struct Module {
+    /// The wasmer module
     module: wasmer::Module,
+    /// The pre-computed imports of the module
     imports: Vec<wasmer::ImportType>,
+    /// The pre-computed exports of the module
     exports: FxHashMap<String, wasmer::ExportType>,
 }
 
@@ -391,12 +402,17 @@ impl WasmModule<Engine> for Module {
 }
 
 #[derive(Copy, Clone)]
+/// A type-erased handle to store data
 struct DataHandle(*mut ());
 unsafe impl Send for DataHandle {}
 
+/// Wrapper around [`wasmer::Store`] that owns its data `T`.
 pub struct Store<T> {
+    /// The wasmer store
     store: wasmer::Store,
+    /// The function environment that holds the handle to the data
     env: wasmer::FunctionEnv<DataHandle>,
+    /// The owned data
     data: Box<T>,
 }
 
@@ -451,14 +467,19 @@ impl<T> AsContextMut<Engine> for Store<T> {
     }
 }
 
+/// Wrapper around [`wasmer::StoreRef`] that references the data `T`.
 pub struct StoreContext<'a, T> {
+    /// The reference to the store
     store: wasmer::StoreRef<'a>,
+    /// The function environment that holds the handle to the data
     env: wasmer::FunctionEnv<DataHandle>,
+    /// The marker for the data's type
     data: PhantomData<&'a T>,
 }
 
 impl<'a, T> StoreContext<'a, T> {
-    fn as_ref(&self) -> &(impl wasmer::AsStoreRef + 'a) {
+    /// Returns a reference to a [`wasmer::StoreRef`]
+    fn as_store_ref(&self) -> &wasmer::StoreRef<'a> {
         &self.store
     }
 }
@@ -475,26 +496,34 @@ impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
     }
 }
 
-impl<T> AsContext<Engine> for StoreContext<'_, T> {
+impl<'a, T> AsContext<Engine> for StoreContext<'a, T> {
     type UserState = T;
 
-    fn as_context(&self) -> StoreContext<T> {
+    fn as_context(&self) -> StoreContext<'a, T> {
+        let store: wasmer::StoreRef<'_> = self.store.as_store_ref();
+        // Safety: FIXME
+        let store: wasmer::StoreRef<'a> = unsafe { std::mem::transmute(store) };
         Self {
-            store: self.store.as_store_ref(),
+            store,
             env: self.env.clone(),
             data: self.data,
         }
     }
 }
 
+/// Wrapper around [`wasmer::StoreMut`] that references the data `T`.
 pub struct StoreContextMut<'a, T> {
+    /// The mutable reference to the store
     store: wasmer::StoreMut<'a>,
+    /// The function environment that holds the handle to the data
     env: wasmer::FunctionEnv<DataHandle>,
+    /// The marker for the data's type
     data: PhantomData<&'a mut T>,
 }
 
 impl<'a, T> StoreContextMut<'a, T> {
-    fn as_mut(&mut self) -> &mut (impl wasmer::AsStoreMut + 'a) {
+    /// Returns a mutable reference to a [`wasmer::StoreMut`]
+    fn as_store_mut(&mut self) -> &mut wasmer::StoreMut<'a> {
         &mut self.store
     }
 }
@@ -544,7 +573,7 @@ impl<'a, T> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, T> {
 impl WasmTable<Engine> for Table {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: TableType, init: Value<Engine>) -> Result<Self> {
         wasmer::Table::new(
-            ctx.as_context_mut().as_mut(),
+            ctx.as_context_mut().as_store_mut(),
             table_type_into(ty),
             value_into(init),
         )
@@ -553,11 +582,11 @@ impl WasmTable<Engine> for Table {
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> TableType {
-        table_type_from(self.as_ref().ty(ctx.as_context().as_ref()))
+        table_type_from(self.as_ref().ty(ctx.as_context().as_store_ref()))
     }
 
     fn size(&self, ctx: impl AsContext<Engine>) -> u32 {
-        self.as_ref().size(ctx.as_context().as_ref())
+        self.as_ref().size(ctx.as_context().as_store_ref())
     }
 
     fn grow(
@@ -567,13 +596,13 @@ impl WasmTable<Engine> for Table {
         init: Value<Engine>,
     ) -> Result<u32> {
         self.as_ref()
-            .grow(ctx.as_context_mut().as_mut(), delta, value_into(init))
+            .grow(ctx.as_context_mut().as_store_mut(), delta, value_into(init))
             .map_err(Error::msg)
     }
 
     fn get(&self, mut ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
         self.as_ref()
-            .get(ctx.as_context_mut().as_mut(), index)
+            .get(ctx.as_context_mut().as_store_mut(), index)
             .map(value_from)
     }
 
@@ -584,7 +613,11 @@ impl WasmTable<Engine> for Table {
         value: Value<Engine>,
     ) -> Result<()> {
         self.as_ref()
-            .set(ctx.as_context_mut().as_mut(), index, value_into(value))
+            .set(
+                ctx.as_context_mut().as_store_mut(),
+                index,
+                value_into(value),
+            )
             .map_err(Error::msg)
     }
 }
@@ -684,11 +717,6 @@ fn memory_type_into(ty: MemoryType) -> wasmer::MemoryType {
 /// Convert a [`wasmer::TableType`] to a [`TableType`].
 fn table_type_from(ty: wasmer::TableType) -> TableType {
     TableType::new(value_type_from(ty.ty), ty.minimum, ty.maximum)
-}
-
-/// Convert a table size `u64` to a `u32` or panic
-fn expect_table32(x: u64) -> u32 {
-    x.try_into().expect("table64 is not supported")
 }
 
 /// Convert a [`TableType`] to a [`wasmer::TableType`].
