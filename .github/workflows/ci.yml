@@ -40,8 +40,18 @@ jobs:
       - name: Check the powerset
         run: |
           cargo hack check --all \
+            --exclude wasmer_runtime_layer \
             --exclude wasmtime_runtime_layer \
             --feature-powerset --keep-going
+      
+      # manual feature powerset since one of the runtime features is required
+      - name: Check the powerset for the wasmtime_runtime_layer
+        run: |
+          cargo check -p wasmer_runtime_layer
+          cargo check -p wasmer_runtime_layer \
+            --no-default-features --features sys
+          cargo check -p wasmer_runtime_layer \
+            --no-default-features --features js
 
       # manual feature powerset since one of the runtime features is required
       - name: Check the powerset for the wasmtime_runtime_layer
@@ -77,9 +87,17 @@ jobs:
       - name: Run the test-suite powerset
         run: |
           cargo hack test --workspace \
+            --exclude wasmer_runtime_layer \
             --exclude wasmtime_runtime_layer \
             --no-fail-fast --feature-powerset --keep-going \
             --release
+      
+      # manual feature powerset since one of the runtime features is required
+      - name: Check the powerset for the wasmer_runtime_layer
+        run: |
+          cargo test -p wasmer_runtime_layer --release
+          cargo test -p wasmer_runtime_layer --release \
+            --no-default-features --features sys
 
       # manual feature powerset since one of the runtime features is required
       - name: Check the powerset for the wasmtime_runtime_layer
@@ -144,8 +162,21 @@ jobs:
       - name: Check the code style powerset
         run: |
           cargo hack clippy --all \
+            --exclude wasmer_runtime_layer \
             --exclude wasmtime_runtime_layer \
             --feature-powerset --keep-going \
+            -- -D warnings
+      
+      # manual feature powerset since one of the runtime features is required
+      - name: Check the powerset for the wasmer_runtime_layer
+        run: |
+          cargo clippy -p wasmer_runtime_layer \
+            -- -D warnings
+          cargo clippy -p wasmer_runtime_layer \
+            --no-default-features --features sys \
+            -- -D warnings
+          cargo clippy -p wasmer_runtime_layer \
+            --no-default-features --features js \
             -- -D warnings
 
       # manual feature powerset since one of the runtime features is required
