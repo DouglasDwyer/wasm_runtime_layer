@@ -18,8 +18,9 @@ wasm_runtime_layer = { path = "../..", version = "0.4.2", default-features = fal
 wasmer = { version = "5.0", default-features = false }
 
 [features]
-default = [ "sys", "cranelift" ]
+default = [ "std", "sys", "cranelift" ]
 
 cranelift = [ "wasmer/cranelift" ]
 js = [ "wasmer/js" ]
+std = [ "wasmer/std" ]
 sys = [ "wasmer/sys" ]
