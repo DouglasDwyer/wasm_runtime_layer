@@ -30,7 +30,7 @@ fn test_js_wasm() {
 }
 
 #[test]
-#[wasm_bindgen_test::wasm_bindgen_test]
+#[cfg(not(target_arch = "wasm32"))]
 fn test_wasmer() {
     // 1. Instantiate a runtime
     let engine = Engine::new(wasmer_runtime_layer::Engine::default());
