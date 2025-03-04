@@ -4,6 +4,7 @@
 //! `wasmer_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmer`.
 
 use std::{
+    any::Any,
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
@@ -140,7 +141,9 @@ impl WasmExternRef<Engine> for ExternRef {
     fn new<T: 'static + Send + Sync>(mut ctx: impl AsContextMut<Engine>, object: T) -> Self {
         Self::new(wasmer::ExternRef::new(
             ctx.as_context_mut().as_mut(),
-            object,
+            // we double-erase here to ensure that downcast can extract
+            // something that's Send+Sync
+            Box::new(object) as Box<dyn Any + Send + Sync>,
         ))
     }
 
@@ -148,9 +151,16 @@ impl WasmExternRef<Engine> for ExternRef {
         &'a self,
         ctx: StoreContext<'s, S>,
     ) -> Result<&'a T> {
-        self.as_ref()
-            .downcast::<T>(&ctx.store)
-            .ok_or_else(|| Error::msg("Incorrect extern ref type."))
+        let object: &Box<dyn Any + Send + Sync> = self
+            .as_ref()
+            .downcast(ctx.as_ref())
+            .ok_or_else(|| Error::msg("Incorrect extern ref type."))?;
+        let object: &T = object
+            .downcast_ref()
+            .ok_or_else(|| Error::msg("Incorrect extern ref type."))?;
+        // Safety: the returned reference is bounded by both self and the store
+        let object: &'a T = unsafe { &*std::ptr::from_ref(object) };
+        Ok(object)
     }
 }
 
@@ -460,6 +470,7 @@ impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
 
     fn data(&self) -> &T {
         let handle = self.env.as_ref(&self.store);
+        // Safety: the returned reference borrows the store
         unsafe { &*handle.0.cast::<T>() }
     }
 }
@@ -517,6 +528,7 @@ impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
 
     fn data(&self) -> &T {
         let handle = self.env.as_ref(&self.store);
+        // Safety: the returned reference borrows the store
         unsafe { &*handle.0.cast::<T>() }
     }
 }
@@ -524,6 +536,7 @@ impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
 impl<'a, T> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, T> {
     fn data_mut(&mut self) -> &mut T {
         let handle = self.env.as_mut(&mut self.store);
+        // Safety: the returned reference borrows the store
         unsafe { &mut *handle.0.cast::<T>() }
     }
 }
