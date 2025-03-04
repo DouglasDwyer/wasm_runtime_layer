@@ -25,8 +25,15 @@ fn test_wasmi() {
 #[cfg(target_arch = "wasm32")]
 fn test_js_wasm() {
     // 1. Instantiate a runtime
-
     let engine = Engine::new(js_wasm_runtime_layer::Engine::default());
+    multi_value(&engine)
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn test_wasmer() {
+    // 1. Instantiate a runtime
+    let engine = Engine::new(wasmer_runtime_layer::Engine::default());
     multi_value(&engine)
 }
 
