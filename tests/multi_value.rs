@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, io::Cursor};
+use std::collections::BTreeMap;
 
 use wasm_runtime_layer::{
     backend::WasmEngine, Engine, Extern, Func, FuncType, Imports, Instance, Module, Store, Value,
@@ -71,7 +71,7 @@ fn multi_value(engine: &Engine<impl WasmEngine>) {
     imports.define("host", "get-values", crate::Extern::Func(func));
 
     // Parse the component bytes and load its imports and exports.
-    let module = Module::new(engine, Cursor::new(&module_bin)).unwrap();
+    let module = Module::new(engine, &module_bin).unwrap();
     let instance = Instance::new(&mut store, &module, &imports).unwrap();
 
     let exports = instance

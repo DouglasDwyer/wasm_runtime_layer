@@ -7,40 +7,45 @@ members = [
 ]
 
 [workspace.dependencies]
-anyhow = { version = "1.0", default-features = false, features = [ "std" ] }
+anyhow = { version = "1.0", default-features = false }
 fxhash = { version = "0.2", default-features = false }
+hashbrown = { version = "0.15", default-features = false }
 ref-cast = { version = "1.0", default-features = false }
 smallvec = { version = "1.11", default-features = false }
-wasm_runtime_layer = { path = ".", version = "0.4.2" }
+wasm_runtime_layer = { path = ".", version = "0.5", default-features = false }
 
 [workspace.package]
-version = "0.4.2"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DouglasDwyer/wasm_runtime_layer"
 
 [package]
 name = "wasm_runtime_layer"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = "0.5.0"
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 readme = "README.md"
 description = """
 Compatibility interface for WASM runtimes.
 """
 
 [dependencies]
-anyhow.workspace = true
-fxhash.workspace = true
-ref-cast.workspace = true
-smallvec.workspace = true
+anyhow = { workspace = true }
+fxhash = { workspace = true }
+hashbrown = { workspace = true }
+ref-cast = { workspace = true }
+smallvec = { workspace = true }
+
+[features]
+default = [ "std" ]
+std = [ "anyhow/std" ]
 
 [dev-dependencies]
 js_wasm_runtime_layer = { version = "0.4", path = "backends/js_wasm_runtime_layer" }
 wasmi_runtime_layer = { version = "0.40", path = "backends/wasmi_runtime_layer" }
-wasm-bindgen-test = "0.3"
-wat = "1.0"
+wasm-bindgen-test = { version = "0.3" }
+wat = { version = "1.0" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 wasmtime = { version = "30.0", default-features = false, features = [ "gc-null" ] }

@@ -1,7 +1,7 @@
-#![deny(warnings)]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 //! `wasmtime_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmtime`.
 //! ## Optional features
@@ -10,10 +10,15 @@
 //!
 //! **winch** - Enables executing WASM modules and components with the Winch compiler, as described in the Wasmtime documentation.
 
-use std::{
-    ops::{Deref, DerefMut},
+extern crate alloc;
+
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
     sync::Arc,
+    vec::Vec,
 };
+use core::ops::{Deref, DerefMut};
 
 use anyhow::{Error, Result};
 use fxhash::FxHashMap;
@@ -194,7 +199,7 @@ impl WasmFunc<Engine> for Func {
                     results[i] = value_into(result);
                 }
 
-                std::result::Result::Ok(())
+                Ok(())
             },
         ))
     }
@@ -396,10 +401,8 @@ impl WasmMemory<Engine> for Memory {
 }
 
 impl WasmModule<Engine> for Module {
-    fn new(engine: &Engine, mut stream: impl std::io::Read) -> Result<Self> {
-        let mut buf = Vec::default();
-        stream.read_to_end(&mut buf)?;
-        wasmtime::Module::from_binary(engine, &buf).map(Self::new)
+    fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
+        wasmtime::Module::from_binary(engine, bytes).map(Self::new)
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
