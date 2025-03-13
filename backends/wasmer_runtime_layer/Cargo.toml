@@ -10,7 +10,7 @@ WebAssembly runtime compatibility interface implementation for Wasmer.
 """
 
 [dependencies]
-anyhow = { workspace = true }
+anyhow = { workspace = true, features = ["std"] }
 fxhash = { workspace = true }
 ref-cast = { workspace = true }
 smallvec = { workspace = true }

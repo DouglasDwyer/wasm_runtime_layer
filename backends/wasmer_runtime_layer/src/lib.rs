@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
-// #![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 //! `wasmer_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmer`.
 
