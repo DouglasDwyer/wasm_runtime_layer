@@ -1,9 +1,13 @@
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
+// #![cfg_attr(not(feature = "std"), no_std)]
 
 //! `wasmer_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmer`.
 
-use std::{
+extern crate alloc;
+
+use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
+use core::{
     any::Any,
     marker::PhantomData,
     ops::{Deref, DerefMut},
@@ -159,7 +163,7 @@ impl WasmExternRef<Engine> for ExternRef {
             .downcast_ref()
             .ok_or_else(|| Error::msg("Incorrect extern ref type."))?;
         // Safety: the returned reference is bounded by both self and the store
-        let object: &'a T = unsafe { &*std::ptr::from_ref(object) };
+        let object: &'a T = unsafe { &*core::ptr::from_ref(object) };
         Ok(object)
     }
 }
@@ -366,10 +370,8 @@ pub struct Module {
 }
 
 impl WasmModule<Engine> for Module {
-    fn new(engine: &Engine, mut stream: impl std::io::Read) -> Result<Self> {
-        let mut buf = Vec::default();
-        stream.read_to_end(&mut buf)?;
-        let module = wasmer::Module::from_binary(engine, &buf)?;
+    fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
+        let module = wasmer::Module::from_binary(engine, bytes)?;
         let imports = module.imports().collect();
         let exports = module.exports().map(|e| (e.name().to_owned(), e)).collect();
         Ok(Self {
@@ -422,7 +424,7 @@ impl<T> WasmStore<T, Engine> for Store<T> {
         let mut data = Box::new(data);
         let env = wasmer::FunctionEnv::new(
             &mut store,
-            DataHandle(std::ptr::addr_of_mut!(*data).cast::<()>()),
+            DataHandle(core::ptr::addr_of_mut!(*data).cast::<()>()),
         );
 
         Self { store, env, data }

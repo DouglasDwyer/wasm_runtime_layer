@@ -1,18 +1,18 @@
 [package]
 name = "wasmer_runtime_layer"
 version = "5.0.0"
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 readme = "README.md"
 description = """
 WebAssembly runtime compatibility interface implementation for Wasmer.
 """
 
 [dependencies]
-anyhow = { version = "1.0", default-features = false, features = [ "std" ] }
-fxhash = { version = "0.2", default-features = false }
-ref-cast = { version = "1.0", default-features = false }
-smallvec = { version = "1.11", default-features = false }
-wasm_runtime_layer = { path = "../..", version = "0.4.2", default-features = false }
+anyhow = { workspace = true }
+fxhash = { workspace = true }
+ref-cast = { workspace = true }
+smallvec = { workspace = true }
+wasm_runtime_layer = { workspace = true, features = ["std"] }
 wasmer = { version = "5.0" }

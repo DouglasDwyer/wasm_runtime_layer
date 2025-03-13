@@ -19,7 +19,7 @@ wasmtime = { version = "30.0", default-features = false, features = [ "runtime",
 
 [features]
 default = [ "cranelift", "std" ]
-std = [ "anyhow/std", "wasm_runtime_layer/std" ]
+std = [ "anyhow/std", "wasmtime/std", "wasm_runtime_layer/std" ]
 
 cranelift = [ "wasmtime/cranelift" ]
 winch = [ "wasmtime/winch" ]
