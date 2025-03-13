@@ -630,7 +630,7 @@ fn value_from(value: wasmer::Value) -> Value<Engine> {
         wasmer::Value::F64(x) => Value::F64(x),
         wasmer::Value::FuncRef(x) => Value::FuncRef(x.map(Func::new)),
         wasmer::Value::ExternRef(x) => Value::ExternRef(x.map(ExternRef::new)),
-        wasmer::Value::V128(_) => unimplemented!(),
+        wasmer::Value::V128(_) => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
     }
 }
 
@@ -653,7 +653,7 @@ fn value_type_from(ty: wasmer::Type) -> ValueType {
         wasmer::Type::I64 => ValueType::I64,
         wasmer::Type::F32 => ValueType::F32,
         wasmer::Type::F64 => ValueType::F64,
-        wasmer::Type::V128 => unimplemented!(),
+        wasmer::Type::V128 => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
         wasmer::Type::ExternRef => ValueType::ExternRef,
         wasmer::Type::FuncRef => ValueType::FuncRef,
     }
