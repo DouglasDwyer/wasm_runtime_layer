@@ -394,14 +394,6 @@ impl WasmModule<Engine> for Module {
         ))
     }
 
-    #[cfg(feature = "std")]
-    fn new_streaming(engine: &Engine, stream: impl std::io::Read) -> Result<Self> {
-        Ok(Self::new(wasmi::Module::new_streaming(
-            engine.as_ref(),
-            stream,
-        )?))
-    }
-
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
         Box::new(self.as_ref().exports().map(|x| ExportType {
             name: x.name(),

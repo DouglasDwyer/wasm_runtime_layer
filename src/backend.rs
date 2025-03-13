@@ -444,9 +444,6 @@ pub trait WasmInstance<E: WasmEngine>: Clone + Sized + Send + Sync {
 pub trait WasmModule<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new module from the given byte slice.
     fn new(engine: &E, bytes: &[u8]) -> Result<Self>;
-    #[cfg(feature = "std")]
-    /// Creates a new module from the given byte stream.
-    fn new_streaming(engine: &E, stream: impl std::io::Read) -> Result<Self>;
     /// Gets the export types of the module.
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>>;
     /// Gets the export type of the given name, if any, from this module.

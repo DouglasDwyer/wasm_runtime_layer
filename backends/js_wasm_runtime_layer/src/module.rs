@@ -52,18 +52,6 @@ impl WasmModule<Engine> for Module {
         Ok(module)
     }
 
-    #[cfg(feature = "std")]
-    fn new_streaming(engine: &Engine, mut stream: impl std::io::Read) -> anyhow::Result<Self> {
-        use anyhow::Context;
-
-        let mut buf = Vec::new();
-        stream
-            .read_to_end(&mut buf)
-            .context("Failed to read module bytes")?;
-
-        Self::new(engine, buf.as_slice())
-    }
-
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
         Box::new(self.parsed.exports.iter().map(|(name, ty)| ExportType {
             name: name.as_str(),

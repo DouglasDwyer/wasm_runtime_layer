@@ -1070,20 +1070,6 @@ impl Module {
         })
     }
 
-    #[cfg(feature = "std")]
-    /// Creates a new Wasm [`Module`] from the given byte stream.
-    pub fn new_streaming<E: WasmEngine>(
-        engine: &Engine<E>,
-        stream: impl std::io::Read,
-    ) -> Result<Self> {
-        Ok(Self {
-            module: BackendObject::new(<E::Module as WasmModule<E>>::new_streaming(
-                &engine.backend,
-                stream,
-            )?),
-        })
-    }
-
     /// Returns an iterator over the exports of the [`Module`].
     pub fn exports<E: WasmEngine>(
         &self,

@@ -405,13 +405,6 @@ impl WasmModule<Engine> for Module {
         wasmtime::Module::from_binary(engine, bytes).map(Self::new)
     }
 
-    #[cfg(feature = "std")]
-    fn new_streaming(engine: &Engine, mut stream: impl std::io::Read) -> Result<Self> {
-        let mut buf = Vec::default();
-        stream.read_to_end(&mut buf)?;
-        <Self as WasmModule<Engine>>::new(engine, buf.as_slice())
-    }
-
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
         Box::new(self.as_ref().exports().map(|x| ExportType {
             name: x.name(),
