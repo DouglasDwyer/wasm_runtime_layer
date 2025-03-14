@@ -44,7 +44,7 @@ std = [ "anyhow/std" ]
 
 [dev-dependencies]
 js_wasm_runtime_layer = { version = "0.4", path = "backends/js_wasm_runtime_layer" }
-wasmi_runtime_layer = { version = "0.41", path = "backends/wasmi_runtime_layer" }
+wasmi_runtime_layer = { version = "0.42", path = "backends/wasmi_runtime_layer" }
 wasm-bindgen-test = { version = "0.3" }
 wat = { version = "1.0" }
 
