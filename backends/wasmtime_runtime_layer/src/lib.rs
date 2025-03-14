@@ -374,12 +374,12 @@ impl WasmMemory<Engine> for Memory {
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
         self.as_ref()
             .grow(ctx.as_context_mut().into_inner(), additional as u64)
-            .map(|x| x as u32)
+            .map(expect_memory32)
             .map_err(Error::msg)
     }
 
     fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
-        self.as_ref().size(ctx.as_context().into_inner()) as u32
+        expect_memory32(self.as_ref().size(ctx.as_context().into_inner()))
     }
 
     fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
@@ -684,7 +684,15 @@ fn global_type_from(ty: wasmtime::GlobalType) -> GlobalType {
 
 /// Convert a [`wasmtime::MemoryType`] to a [`MemoryType`].
 fn memory_type_from(ty: wasmtime::MemoryType) -> MemoryType {
-    MemoryType::new(ty.minimum() as u32, ty.maximum().map(|x| x as u32))
+    MemoryType::new(
+        expect_memory32(ty.minimum()),
+        ty.maximum().map(expect_memory32),
+    )
+}
+
+/// Convert a memory size `u64` to a `u32` or panic
+fn expect_memory32(x: u64) -> u32 {
+    x.try_into().expect("memory64 is not supported")
 }
 
 /// Convert a [`MemoryType`] to a [`wasmtime::MemoryType`].
