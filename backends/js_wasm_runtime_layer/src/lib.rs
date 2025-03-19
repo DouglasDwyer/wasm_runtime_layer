@@ -329,14 +329,14 @@ pub struct ExternRef {}
 
 impl WasmExternRef<Engine> for ExternRef {
     fn new<T: 'static + Send + Sync>(_: impl AsContextMut<Engine>, _: T) -> Self {
-        unimplemented!("ExternRef is not supported in the web backend")
+        unimplemented!("ExternRef is not supported in the js_wasm_runtime_layer backend")
     }
 
     fn downcast<'a, 's: 'a, T: 'static, S: 's>(
         &self,
         _: <Engine as WasmEngine>::StoreContext<'s, S>,
     ) -> anyhow::Result<&'a T> {
-        unimplemented!()
+        unimplemented!("ExternRef is not supported in the js_wasm_runtime_layer backend")
     }
 }
 
