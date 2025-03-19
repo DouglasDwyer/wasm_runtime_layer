@@ -29,7 +29,7 @@ let module_bin = wat::parse_str(
 )
 .unwrap();
 
-let module = Module::new(&engine, std::io::Cursor::new(&module_bin)).unwrap();
+let module = Module::new(&engine, &module_bin).unwrap();
 let instance = Instance::new(&mut store, &module, &Imports::default()).unwrap();
 
 let add_one = instance
