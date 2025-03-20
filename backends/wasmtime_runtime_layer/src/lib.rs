@@ -731,6 +731,9 @@ fn extern_from(value: wasmtime::Extern) -> Extern<Engine> {
         wasmtime::Extern::Memory(x) => Extern::Memory(Memory::new(x)),
         wasmtime::Extern::Table(x) => Extern::Table(Table::new(x)),
         wasmtime::Extern::SharedMemory(_) => unimplemented!(),
+        wasmtime::Extern::Tag(_) => {
+            unimplemented!("tags are not supported in the wasm_runtime_layer")
+        }
     }
 }
 
@@ -751,5 +754,8 @@ fn extern_type_from(ty: wasmtime::ExternType) -> ExternType {
         wasmtime::ExternType::Global(x) => ExternType::Global(global_type_from(x)),
         wasmtime::ExternType::Memory(x) => ExternType::Memory(memory_type_from(x)),
         wasmtime::ExternType::Table(x) => ExternType::Table(table_type_from(x)),
+        wasmtime::ExternType::Tag(_) => {
+            unimplemented!("tags are not supported in the wasm_runtime_layer")
+        }
     }
 }

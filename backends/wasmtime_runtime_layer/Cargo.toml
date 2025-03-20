@@ -1,6 +1,6 @@
 [package]
 name = "wasmtime_runtime_layer"
-version = "30.0.0"
+version = "31.0.0"
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -15,7 +15,7 @@ fxhash = { workspace = true }
 ref-cast = { workspace = true }
 smallvec = { workspace = true }
 wasm_runtime_layer = { workspace = true }
-wasmtime = { version = "30.0", default-features = false, features = [ "runtime", "gc" ] }
+wasmtime = { version = "31.0", default-features = false, features = [ "runtime", "gc" ] }
 
 [features]
 default = [ "cranelift", "std" ]
