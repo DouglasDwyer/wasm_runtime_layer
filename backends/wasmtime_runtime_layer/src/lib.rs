@@ -739,6 +739,7 @@ fn extern_from(value: wasmtime::Extern) -> Extern<Engine> {
         wasmtime::Extern::Table(x) => Extern::Table(Table::new(x)),
         wasmtime::Extern::Tag(_) => {
             unimplemented!("tags are not supported in the wasm_runtime_layer")
+        }
         wasmtime::Extern::SharedMemory(_) => {
             unimplemented!("shared memories are not supported in the wasm_runtime_layer")
         }
