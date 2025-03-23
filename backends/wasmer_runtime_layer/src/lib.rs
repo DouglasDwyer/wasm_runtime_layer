@@ -8,7 +8,6 @@ extern crate alloc;
 
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
 use core::{
-    any::Any,
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
@@ -141,13 +140,39 @@ impl WasmEngine for Engine {
     type Table = Table;
 }
 
+mod sendsync {
+    //! Helper module that provides the [`SendSync`] wrapper, which provides
+    //! [`Send`] and [`Sync`] unconditionally but can only be constructed after
+    //! proving that `T`: [`Send`] + [`Sync`]
+
+    /// Wrapper that checks `T`: [`Send`] + [`Sync`] only during construction
+    pub struct SendSync<T>(T);
+
+    impl<T: Send + Sync> SendSync<T> {
+        /// Prove that `T`: [`Send`] + [`Sync`]
+        #[must_use]
+        pub fn new(v: T) -> Self {
+            Self(v)
+        }
+    }
+
+    impl<T> SendSync<T> {
+        /// Obtain a reference to the inner `T`
+        pub fn as_ref(&self) -> &T {
+            &self.0
+        }
+    }
+
+    // Safety: SendSync can only be constructed iff T: Send + Sync
+    unsafe impl<T> Send for SendSync<T> {}
+    unsafe impl<T> Sync for SendSync<T> {}
+}
+
 impl WasmExternRef<Engine> for ExternRef {
     fn new<T: 'static + Send + Sync>(mut ctx: impl AsContextMut<Engine>, object: T) -> Self {
         Self::new(wasmer::ExternRef::new(
             ctx.as_context_mut().as_store_mut(),
-            // we double-erase here to ensure that downcast can extract
-            // something that's Send+Sync
-            Box::new(object) as Box<dyn Any + Send + Sync>,
+            sendsync::SendSync::new(object),
         ))
     }
 
@@ -155,16 +180,18 @@ impl WasmExternRef<Engine> for ExternRef {
         &'a self,
         ctx: StoreContext<'s, S>,
     ) -> Result<&'a T> {
-        let object: &Box<dyn Any + Send + Sync> = self
+        let ctx: &wasmer::StoreRef<'s> = ctx.as_store_ref();
+        // Safety:
+        // - StoreRef<'s> is bounded by 's already
+        // - the extended temporary lifetime is not exposed
+        // - &'a T is bounded by 'a and 's outlives 'a
+        let ctx: &'s wasmer::StoreRef<'s> = unsafe { &*core::ptr::from_ref(ctx) };
+
+        let object: &'a sendsync::SendSync<T> = self
             .as_ref()
-            .downcast(ctx.as_store_ref())
+            .downcast(ctx)
             .ok_or_else(|| Error::msg("Incorrect extern ref type."))?;
-        let object: &T = object
-            .downcast_ref()
-            .ok_or_else(|| Error::msg("Incorrect extern ref type."))?;
-        // Safety: the returned reference is bounded by both self and the store
-        let object: &'a T = unsafe { &*core::ptr::from_ref(object) };
-        Ok(object)
+        Ok(object.as_ref())
     }
 }
 
@@ -406,6 +433,13 @@ impl WasmModule<Engine> for Module {
 #[derive(Copy, Clone)]
 /// A type-erased handle to store data
 struct DataHandle(*mut ());
+
+// Safety:
+// - DataHandle is a private implementation detail
+// - Store, StoreContext, and StoreContextMut still inherit Send from T
+// - access to the contained data is guarded by access to the Store[Context]
+// - if T: !Send then Store: !Send and StoreContextMut: !Send -> all good
+// - if T: !Sync then StoreContext: !Send -> all good
 unsafe impl Send for DataHandle {}
 
 /// Wrapper around [`wasmer::Store`] that owns its data `T`.
