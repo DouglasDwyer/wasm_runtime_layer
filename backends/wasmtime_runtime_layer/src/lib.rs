@@ -4,6 +4,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 //! `wasmtime_runtime_layer` implements the `wasm_runtime_layer` abstraction interface over WebAssembly runtimes for `Wasmtime`.
+//!
 //! ## Optional features
 //!
 //! **cranelift** - Enables executing WASM modules and components with the Cranelift compiler, as described in the Wasmtime documentation. Enabled by default.
@@ -575,8 +576,10 @@ fn value_from(value: wasmtime::Val) -> Value<Engine> {
         wasmtime::Val::F64(x) => Value::F64(f64::from_bits(x)),
         wasmtime::Val::FuncRef(x) => Value::FuncRef(x.map(Func::new)),
         wasmtime::Val::ExternRef(x) => Value::ExternRef(x.map(ExternRef::new)),
-        wasmtime::Val::V128(_) => unimplemented!(),
-        wasmtime::Val::AnyRef(_) => unimplemented!(),
+        wasmtime::Val::V128(_) => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
+        wasmtime::Val::AnyRef(_) => {
+            unimplemented!("anyref is not supported in the wasm_runtime_layer")
+        }
     }
 }
 
@@ -599,7 +602,9 @@ fn value_type_from(ty: wasmtime::ValType) -> ValueType {
         wasmtime::ValType::I64 => ValueType::I64,
         wasmtime::ValType::F32 => ValueType::F32,
         wasmtime::ValType::F64 => ValueType::F64,
-        wasmtime::ValType::V128 => unimplemented!(),
+        wasmtime::ValType::V128 => {
+            unimplemented!("v128 is not supported in the wasm_runtime_layer")
+        }
         wasmtime::ValType::Ref(ty) => value_type_from_ref_type(&ty),
     }
 }
@@ -632,7 +637,9 @@ fn value_from_ref(ref_: wasmtime::Ref) -> Value<Engine> {
     match ref_ {
         wasmtime::Ref::Func(x) => Value::FuncRef(x.map(Func::from)),
         wasmtime::Ref::Extern(x) => Value::ExternRef(x.map(ExternRef::from)),
-        wasmtime::Ref::Any(_) => unimplemented!(),
+        wasmtime::Ref::Any(_) => {
+            unimplemented!("anyref is not supported in the wasm_runtime_layer")
+        }
     }
 }
 
@@ -642,7 +649,7 @@ fn value_type_from_ref_type(ty: &wasmtime::RefType) -> ValueType {
         _ if wasmtime::RefType::eq(ty, &wasmtime::RefType::FUNCREF) => ValueType::FuncRef,
         _ if wasmtime::RefType::eq(ty, &wasmtime::RefType::EXTERNREF) => ValueType::ExternRef,
         // TODO: is the matching against FuncRef correct here
-        _ => unimplemented!(),
+        _ => unimplemented!("anyref is not supported in the wasm_runtime_layer"),
     }
 }
 
@@ -730,9 +737,10 @@ fn extern_from(value: wasmtime::Extern) -> Extern<Engine> {
         wasmtime::Extern::Global(x) => Extern::Global(Global::new(x)),
         wasmtime::Extern::Memory(x) => Extern::Memory(Memory::new(x)),
         wasmtime::Extern::Table(x) => Extern::Table(Table::new(x)),
-        wasmtime::Extern::SharedMemory(_) => unimplemented!(),
         wasmtime::Extern::Tag(_) => {
             unimplemented!("tags are not supported in the wasm_runtime_layer")
+        wasmtime::Extern::SharedMemory(_) => {
+            unimplemented!("shared memories are not supported in the wasm_runtime_layer")
         }
     }
 }

@@ -85,7 +85,7 @@ impl WasmMemory<Engine> for Memory {
     }
 
     fn current_pages(&self, _: impl AsContext<Engine>) -> u32 {
-        unimplemented!()
+        todo!("Memory::current_pages is not yet supported in the js_wasm_runtime_layer backend")
     }
 
     fn read(
