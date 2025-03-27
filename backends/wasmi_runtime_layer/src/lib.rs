@@ -563,6 +563,7 @@ fn value_from(value: wasmi::Val) -> Value<Engine> {
         wasmi::Val::I64(x) => Value::I64(x),
         wasmi::Val::F32(x) => Value::F32(x.to_float()),
         wasmi::Val::F64(x) => Value::F64(x.to_float()),
+        wasmi::Val::V128(_) => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
         wasmi::Val::FuncRef(x) => Value::FuncRef(x.func().copied().map(Func::new)),
         wasmi::Val::ExternRef(x) => Value::ExternRef(ExternRef::new(x)),
     }
@@ -590,6 +591,9 @@ fn value_type_from(ty: wasmi::core::ValType) -> ValueType {
         wasmi::core::ValType::I64 => ValueType::I64,
         wasmi::core::ValType::F32 => ValueType::F32,
         wasmi::core::ValType::F64 => ValueType::F64,
+        wasmi::core::ValType::V128 => {
+            unimplemented!("v128 is not supported in the wasm_runtime_layer")
+        }
         wasmi::core::ValType::FuncRef => ValueType::FuncRef,
         wasmi::core::ValType::ExternRef => ValueType::ExternRef,
     }
