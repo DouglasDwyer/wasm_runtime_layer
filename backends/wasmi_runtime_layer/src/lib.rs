@@ -648,7 +648,6 @@ fn expect_memory32(x: u64) -> u32 {
 /// Convert a [`MemoryType`] to a [`wasmi::MemoryType`].
 fn memory_type_into(ty: MemoryType) -> wasmi::MemoryType {
     wasmi::MemoryType::new(ty.initial_pages(), ty.maximum_pages())
-        .expect("Could not convert memory.")
 }
 
 /// Convert a [`wasmi::TableType`] to a [`TableType`].
