@@ -665,6 +665,9 @@ fn value_from(value: wasmer::Value) -> Value<Engine> {
         wasmer::Value::FuncRef(x) => Value::FuncRef(x.map(Func::new)),
         wasmer::Value::ExternRef(x) => Value::ExternRef(x.map(ExternRef::new)),
         wasmer::Value::V128(_) => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
+        wasmer::Value::ExceptionRef(_) => {
+            unimplemented!("exceptions are not supported in the wasm_runtime_layer")
+        }
     }
 }
 
@@ -690,6 +693,9 @@ fn value_type_from(ty: wasmer::Type) -> ValueType {
         wasmer::Type::V128 => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
         wasmer::Type::ExternRef => ValueType::ExternRef,
         wasmer::Type::FuncRef => ValueType::FuncRef,
+        wasmer::Type::ExceptionRef => {
+            unimplemented!("exceptions are not supported in the wasm_runtime_layer")
+        }
     }
 }
 
@@ -764,6 +770,9 @@ fn extern_from(value: wasmer::Extern) -> Extern<Engine> {
         wasmer::Extern::Global(x) => Extern::Global(Global::new(x)),
         wasmer::Extern::Memory(x) => Extern::Memory(Memory::new(x)),
         wasmer::Extern::Table(x) => Extern::Table(Table::new(x)),
+        wasmer::Extern::Tag(_) => {
+            unimplemented!("tags are not supported in the wasm_runtime_layer")
+        }
     }
 }
 
@@ -784,5 +793,8 @@ fn extern_type_from(ty: wasmer::ExternType) -> ExternType {
         wasmer::ExternType::Global(x) => ExternType::Global(global_type_from(x)),
         wasmer::ExternType::Memory(x) => ExternType::Memory(memory_type_from(x)),
         wasmer::ExternType::Table(x) => ExternType::Table(table_type_from(x)),
+        wasmer::ExternType::Tag(_) => {
+            unimplemented!("tags are not supported in the wasm_runtime_layer")
+        }
     }
 }
