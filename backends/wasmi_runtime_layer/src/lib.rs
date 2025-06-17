@@ -264,7 +264,7 @@ impl WasmFunc<Engine> for Func {
                 &input[..],
                 &mut output[..],
             )
-            .map_err(Error::msg)?;
+            .map_err(Error::new)?;
 
         for (i, result) in output.into_iter().enumerate() {
             results[i] = value_from(result);
@@ -294,7 +294,7 @@ impl WasmGlobal<Engine> for Global {
     fn set(&self, mut ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> Result<()> {
         self.as_ref()
             .set(ctx.as_context_mut().into_inner(), value_into(new_value))
-            .map_err(Error::msg)
+            .map_err(Error::new)
     }
 
     fn get(&self, ctx: impl AsContextMut<Engine>) -> Value<Engine> {
@@ -313,15 +313,15 @@ impl WasmInstance<Engine> for Instance {
         for ((module, name), imp) in imports {
             linker
                 .define(&module, &name, extern_into(imp))
-                .map_err(Error::msg)?;
+                .map_err(Error::new)?;
         }
 
         let pre = linker
             .instantiate(store.as_context_mut().into_inner(), module.as_ref())
-            .map_err(Error::msg)?;
+            .map_err(Error::new)?;
         Ok(Self::new(
             pre.start(store.as_context_mut().into_inner())
-                .map_err(Error::msg)?,
+                .map_err(Error::new)?,
         ))
     }
 
@@ -352,7 +352,7 @@ impl WasmMemory<Engine> for Memory {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: MemoryType) -> Result<Self> {
         wasmi::Memory::new(ctx.as_context_mut().into_inner(), memory_type_into(ty))
             .map(Self::new)
-            .map_err(Error::msg)
+            .map_err(Error::new)
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> MemoryType {
@@ -363,7 +363,7 @@ impl WasmMemory<Engine> for Memory {
         self.as_ref()
             .grow(ctx.as_context_mut().into_inner(), additional as u64)
             .map(expect_memory32)
-            .map_err(Error::msg)
+            .map_err(Error::new)
     }
 
     fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
@@ -373,7 +373,7 @@ impl WasmMemory<Engine> for Memory {
     fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
         self.as_ref()
             .read(ctx.as_context().into_inner(), offset, buffer)
-            .map_err(Error::msg)
+            .map_err(Error::new)
     }
 
     fn write(
@@ -384,14 +384,14 @@ impl WasmMemory<Engine> for Memory {
     ) -> Result<()> {
         self.as_ref()
             .write(ctx.as_context_mut().into_inner(), offset, buffer)
-            .map_err(Error::msg)
+            .map_err(Error::new)
     }
 }
 
 impl WasmModule<Engine> for Module {
     fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
         Ok(Self::new(
-            wasmi::Module::new(engine.as_ref(), bytes).map_err(Error::msg)?,
+            wasmi::Module::new(engine.as_ref(), bytes).map_err(Error::new)?,
         ))
     }
 
@@ -507,7 +507,7 @@ impl WasmTable<Engine> for Table {
             value_into(init),
         )
         .map(Self::new)
-        .map_err(Error::msg)
+        .map_err(Error::new)
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> TableType {
@@ -531,7 +531,7 @@ impl WasmTable<Engine> for Table {
                 value_into(init),
             )
             .map(expect_table32)
-            .map_err(Error::msg)
+            .map_err(Error::new)
     }
 
     fn get(&self, ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
@@ -552,7 +552,7 @@ impl WasmTable<Engine> for Table {
                 index as u64,
                 value_into(value),
             )
-            .map_err(Error::msg)
+            .map_err(Error::new)
     }
 }
 
