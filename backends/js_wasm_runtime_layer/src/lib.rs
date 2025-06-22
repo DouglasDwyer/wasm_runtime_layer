@@ -96,9 +96,9 @@ impl WasmEngine for Engine {
     type Instance = Instance;
     type Memory = Memory;
     type Module = Module;
-    type Store<T> = Store<T>;
-    type StoreContext<'a, T: 'a> = StoreContext<'a, T>;
-    type StoreContextMut<'a, T: 'a> = StoreContextMut<'a, T>;
+    type Store<T: 'static> = Store<T>;
+    type StoreContext<'a, T: 'static> = StoreContext<'a, T>;
+    type StoreContextMut<'a, T: 'static> = StoreContextMut<'a, T>;
     type Table = Table;
 }
 
@@ -332,7 +332,7 @@ impl WasmExternRef<Engine> for ExternRef {
         unimplemented!("ExternRef is not supported in the js_wasm_runtime_layer backend")
     }
 
-    fn downcast<'a, 's: 'a, T: 'static, S: 's>(
+    fn downcast<'a, 's: 'a, T: 'static, S: 'static>(
         &self,
         _: <Engine as WasmEngine>::StoreContext<'s, S>,
     ) -> anyhow::Result<&'a T> {
