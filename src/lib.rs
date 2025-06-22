@@ -731,12 +731,12 @@ impl<E: WasmEngine> Engine<E> {
 /// the Wasm bytes into a valid module artifact).
 ///
 /// Spec: <https://webassembly.github.io/spec/core/exec/runtime.html#store>
-pub struct Store<T, E: WasmEngine> {
+pub struct Store<T: 'static, E: WasmEngine> {
     /// The backing implementation.
     inner: E::Store<T>,
 }
 
-impl<T, E: WasmEngine> Store<T, E> {
+impl<T: 'static, E: WasmEngine> Store<T, E> {
     /// Creates a new [`Store`] with a specific [`Engine`].
     pub fn new(engine: &Engine<E>, data: T) -> Self {
         Self {
@@ -769,12 +769,12 @@ impl<T, E: WasmEngine> Store<T, E> {
 ///
 /// This type is suitable for [`AsContext`] trait bounds on methods if desired.
 /// For more information, see [`Store`].
-pub struct StoreContext<'a, T: 'a, E: WasmEngine> {
+pub struct StoreContext<'a, T: 'static, E: WasmEngine> {
     /// The backing implementation.
     inner: E::StoreContext<'a, T>,
 }
 
-impl<'a, T: 'a, E: WasmEngine> StoreContext<'a, T, E> {
+impl<'a, T: 'static, E: WasmEngine> StoreContext<'a, T, E> {
     /// Returns the underlying [`Engine`] this store is connected to.
     pub fn engine(&self) -> &Engine<E> {
         Engine::<E>::ref_cast(self.inner.engine())
@@ -792,12 +792,12 @@ impl<'a, T: 'a, E: WasmEngine> StoreContext<'a, T, E> {
 ///
 /// This type is suitable for [`AsContextMut`] or [`AsContext`] trait bounds on methods if desired.
 /// For more information, see [`Store`].
-pub struct StoreContextMut<'a, T: 'a, E: WasmEngine> {
+pub struct StoreContextMut<'a, T: 'static, E: WasmEngine> {
     /// The backing implementation.
     pub inner: E::StoreContextMut<'a, T>,
 }
 
-impl<'a, T: 'a, E: WasmEngine> StoreContextMut<'a, T, E> {
+impl<'a, T: 'static, E: WasmEngine> StoreContextMut<'a, T, E> {
     /// Returns the underlying [`Engine`] this store is connected to.
     pub fn engine(&self) -> &Engine<E> {
         Engine::<E>::ref_cast(self.inner.engine())
@@ -927,7 +927,7 @@ impl ExternRef {
     }
 
     /// Returns a shared reference to the underlying data for this [`ExternRef`].
-    pub fn downcast<'a, 's: 'a, T: 'static, S: 's, E: WasmEngine>(
+    pub fn downcast<'a, 's: 'a, T: 'static, S: 'static, E: WasmEngine>(
         &'a self,
         ctx: StoreContext<'s, S, E>,
     ) -> Result<&'a T> {
@@ -1329,7 +1329,7 @@ pub trait AsContext {
     type Engine: WasmEngine;
 
     /// The user state associated with the [`Store`], aka the `T` in `Store<T>`.
-    type UserState;
+    type UserState: 'static;
 
     /// Returns the store context that this type provides access to.
     fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine>;
@@ -1341,7 +1341,7 @@ pub trait AsContextMut: AsContext {
     fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine>;
 }
 
-impl<T, E: WasmEngine> AsContext for Store<T, E> {
+impl<T: 'static, E: WasmEngine> AsContext for Store<T, E> {
     type Engine = E;
 
     type UserState = T;
@@ -1353,7 +1353,7 @@ impl<T, E: WasmEngine> AsContext for Store<T, E> {
     }
 }
 
-impl<T, E: WasmEngine> AsContextMut for Store<T, E> {
+impl<T: 'static, E: WasmEngine> AsContextMut for Store<T, E> {
     fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine> {
         StoreContextMut {
             inner: crate::backend::AsContextMut::as_context_mut(&mut self.inner),
@@ -1387,7 +1387,7 @@ impl<T: AsContextMut> AsContextMut for &mut T {
     }
 }
 
-impl<'a, T: 'a, E: WasmEngine> AsContext for StoreContext<'a, T, E> {
+impl<'a, T: 'static, E: WasmEngine> AsContext for StoreContext<'a, T, E> {
     type Engine = E;
 
     type UserState = T;
@@ -1399,7 +1399,7 @@ impl<'a, T: 'a, E: WasmEngine> AsContext for StoreContext<'a, T, E> {
     }
 }
 
-impl<'a, T: 'a, E: WasmEngine> AsContext for StoreContextMut<'a, T, E> {
+impl<'a, T: 'static, E: WasmEngine> AsContext for StoreContextMut<'a, T, E> {
     type Engine = E;
 
     type UserState = T;
@@ -1411,7 +1411,7 @@ impl<'a, T: 'a, E: WasmEngine> AsContext for StoreContextMut<'a, T, E> {
     }
 }
 
-impl<'a, T: 'a, E: WasmEngine> AsContextMut for StoreContextMut<'a, T, E> {
+impl<'a, T: 'static, E: WasmEngine> AsContextMut for StoreContextMut<'a, T, E> {
     fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine> {
         StoreContextMut {
             inner: crate::backend::AsContextMut::as_context_mut(&mut self.inner),
