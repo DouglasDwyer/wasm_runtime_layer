@@ -383,17 +383,7 @@ impl WasmMemory<Engine> for Memory {
     fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
         self.as_ref()
             .read(ctx.as_context().into_inner(), offset, buffer)
-            .map_err(|err| {
-                // FIXME: https://github.com/bytecodealliance/wasmtime/issues/11059
-                #[cfg(feature = "std")]
-                {
-                    Error::new(err)
-                }
-                #[cfg(not(feature = "std"))]
-                {
-                    Error::msg(err)
-                }
-            })
+            .map_err(Error::new)
     }
 
     fn write(
@@ -404,17 +394,7 @@ impl WasmMemory<Engine> for Memory {
     ) -> Result<()> {
         self.as_ref()
             .write(ctx.as_context_mut().into_inner(), offset, buffer)
-            .map_err(|err| {
-                // FIXME: https://github.com/bytecodealliance/wasmtime/issues/11059
-                #[cfg(feature = "std")]
-                {
-                    Error::new(err)
-                }
-                #[cfg(not(feature = "std"))]
-                {
-                    Error::msg(err)
-                }
-            })
+            .map_err(Error::new)
     }
 }
 
