@@ -263,7 +263,6 @@ impl WasmGlobal<Engine> for Global {
     fn set(&self, mut ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> Result<()> {
         self.as_ref()
             .set(ctx.as_context_mut().into_inner(), value_into(new_value))
-            .map_err(Error::msg)
     }
 
     fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Value<Engine> {
@@ -365,7 +364,6 @@ impl WasmMemory<Engine> for Memory {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: MemoryType) -> Result<Self> {
         wasmtime::Memory::new(ctx.as_context_mut().into_inner(), memory_type_into(ty))
             .map(Self::new)
-            .map_err(Error::msg)
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> MemoryType {
@@ -376,7 +374,6 @@ impl WasmMemory<Engine> for Memory {
         self.as_ref()
             .grow(ctx.as_context_mut().into_inner(), additional as u64)
             .map(expect_memory32)
-            .map_err(Error::msg)
     }
 
     fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
@@ -386,7 +383,17 @@ impl WasmMemory<Engine> for Memory {
     fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
         self.as_ref()
             .read(ctx.as_context().into_inner(), offset, buffer)
-            .map_err(Error::msg)
+            .map_err(|err| {
+                // FIXME: https://github.com/bytecodealliance/wasmtime/issues/11059
+                #[cfg(feature = "std")]
+                {
+                    Error::new(err)
+                }
+                #[cfg(not(feature = "std"))]
+                {
+                    Error::msg(err)
+                }
+            })
     }
 
     fn write(
@@ -397,7 +404,17 @@ impl WasmMemory<Engine> for Memory {
     ) -> Result<()> {
         self.as_ref()
             .write(ctx.as_context_mut().into_inner(), offset, buffer)
-            .map_err(Error::msg)
+            .map_err(|err| {
+                // FIXME: https://github.com/bytecodealliance/wasmtime/issues/11059
+                #[cfg(feature = "std")]
+                {
+                    Error::new(err)
+                }
+                #[cfg(not(feature = "std"))]
+                {
+                    Error::msg(err)
+                }
+            })
     }
 }
 
@@ -518,7 +535,6 @@ impl WasmTable<Engine> for Table {
             value_into_ref(init),
         )
         .map(Self::new)
-        .map_err(Error::msg)
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> TableType {
@@ -542,7 +558,6 @@ impl WasmTable<Engine> for Table {
                 value_into_ref(init),
             )
             .map(expect_table32)
-            .map_err(Error::msg)
     }
 
     fn get(&self, mut ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
@@ -557,13 +572,11 @@ impl WasmTable<Engine> for Table {
         index: u32,
         value: Value<Engine>,
     ) -> Result<()> {
-        self.as_ref()
-            .set(
-                ctx.as_context_mut().into_inner(),
-                u64::from(index),
-                value_into_ref(value),
-            )
-            .map_err(Error::msg)
+        self.as_ref().set(
+            ctx.as_context_mut().into_inner(),
+            u64::from(index),
+            value_into_ref(value),
+        )
     }
 }
 
