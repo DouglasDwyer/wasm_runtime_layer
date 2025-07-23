@@ -134,9 +134,9 @@ impl WasmEngine for Engine {
     type Instance = Instance;
     type Memory = Memory;
     type Module = Module;
-    type Store<T> = Store<T>;
-    type StoreContext<'a, T: 'a> = StoreContext<'a, T>;
-    type StoreContextMut<'a, T: 'a> = StoreContextMut<'a, T>;
+    type Store<T: 'static> = Store<T>;
+    type StoreContext<'a, T: 'static> = StoreContext<'a, T>;
+    type StoreContextMut<'a, T: 'static> = StoreContextMut<'a, T>;
     type Table = Table;
 }
 
@@ -196,7 +196,7 @@ impl WasmExternRef<Engine> for ExternRef {
 }
 
 impl WasmFunc<Engine> for Func {
-    fn new<T>(
+    fn new<T: 'static>(
         mut ctx: impl AsContextMut<Engine, UserState = T>,
         ty: FuncType,
         func: impl 'static
@@ -443,7 +443,7 @@ struct DataHandle(*mut ());
 unsafe impl Send for DataHandle {}
 
 /// Wrapper around [`wasmer::Store`] that owns its data `T`.
-pub struct Store<T> {
+pub struct Store<T: 'static> {
     /// The wasmer store
     store: wasmer::Store,
     /// The function environment that holds the handle to the data
@@ -452,7 +452,7 @@ pub struct Store<T> {
     data: Box<T>,
 }
 
-impl<T> WasmStore<T, Engine> for Store<T> {
+impl<T: 'static> WasmStore<T, Engine> for Store<T> {
     fn new(engine: &Engine, data: T) -> Self {
         let mut store = wasmer::Store::new(engine.clone());
         let mut data = Box::new(data);
@@ -481,7 +481,7 @@ impl<T> WasmStore<T, Engine> for Store<T> {
     }
 }
 
-impl<T> AsContext<Engine> for Store<T> {
+impl<T: 'static> AsContext<Engine> for Store<T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<'_, Self::UserState> {
@@ -493,7 +493,7 @@ impl<T> AsContext<Engine> for Store<T> {
     }
 }
 
-impl<T> AsContextMut<Engine> for Store<T> {
+impl<T: 'static> AsContextMut<Engine> for Store<T> {
     fn as_context_mut(&mut self) -> StoreContextMut<'_, Self::UserState> {
         StoreContextMut {
             store: self.store.as_store_mut(),
@@ -504,7 +504,7 @@ impl<T> AsContextMut<Engine> for Store<T> {
 }
 
 /// Wrapper around [`wasmer::StoreRef`] that references the data `T`.
-pub struct StoreContext<'a, T> {
+pub struct StoreContext<'a, T: 'static> {
     /// The reference to the store
     store: wasmer::StoreRef<'a>,
     /// The function environment that holds the handle to the data
@@ -513,14 +513,14 @@ pub struct StoreContext<'a, T> {
     data: PhantomData<&'a T>,
 }
 
-impl<'a, T> StoreContext<'a, T> {
+impl<'a, T: 'static> StoreContext<'a, T> {
     /// Returns a reference to a [`wasmer::StoreRef`]
     fn as_store_ref(&self) -> &wasmer::StoreRef<'a> {
         &self.store
     }
 }
 
-impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
+impl<'a, T: 'static> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
     fn engine(&self) -> &Engine {
         Engine::ref_cast(self.store.engine())
     }
@@ -532,7 +532,7 @@ impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
     }
 }
 
-impl<T> AsContext<Engine> for StoreContext<'_, T> {
+impl<T: 'static> AsContext<Engine> for StoreContext<'_, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<'_, T> {
@@ -545,7 +545,7 @@ impl<T> AsContext<Engine> for StoreContext<'_, T> {
 }
 
 /// Wrapper around [`wasmer::StoreMut`] that references the data `T`.
-pub struct StoreContextMut<'a, T> {
+pub struct StoreContextMut<'a, T: 'static> {
     /// The mutable reference to the store
     store: wasmer::StoreMut<'a>,
     /// The function environment that holds the handle to the data
@@ -554,14 +554,14 @@ pub struct StoreContextMut<'a, T> {
     data: PhantomData<&'a mut T>,
 }
 
-impl<'a, T> StoreContextMut<'a, T> {
+impl<'a, T: 'static> StoreContextMut<'a, T> {
     /// Returns a mutable reference to a [`wasmer::StoreMut`]
     fn as_store_mut(&mut self) -> &mut wasmer::StoreMut<'a> {
         &mut self.store
     }
 }
 
-impl<T> AsContext<Engine> for StoreContextMut<'_, T> {
+impl<T: 'static> AsContext<Engine> for StoreContextMut<'_, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<T> {
@@ -573,7 +573,7 @@ impl<T> AsContext<Engine> for StoreContextMut<'_, T> {
     }
 }
 
-impl<T> AsContextMut<Engine> for StoreContextMut<'_, T> {
+impl<T: 'static> AsContextMut<Engine> for StoreContextMut<'_, T> {
     fn as_context_mut(&mut self) -> StoreContextMut<T> {
         StoreContextMut {
             store: self.store.as_store_mut(),
@@ -583,7 +583,7 @@ impl<T> AsContextMut<Engine> for StoreContextMut<'_, T> {
     }
 }
 
-impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
+impl<'a, T: 'static> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
     fn engine(&self) -> &Engine {
         Engine::ref_cast(self.store.engine())
     }
@@ -595,7 +595,7 @@ impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
     }
 }
 
-impl<'a, T> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, T> {
+impl<'a, T: 'static> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, T> {
     fn data_mut(&mut self) -> &mut T {
         let handle = self.env.as_mut(&mut self.store);
         // Safety: the returned reference borrows the store

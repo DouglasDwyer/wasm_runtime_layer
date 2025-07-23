@@ -342,11 +342,11 @@ pub trait WasmEngine: 'static + Clone + Sized {
     /// The module type.
     type Module: WasmModule<Self>;
     /// The store type.
-    type Store<T>: WasmStore<T, Self>;
+    type Store<T: 'static>: WasmStore<T, Self>;
     /// The store context type.
-    type StoreContext<'a, T: 'a>: WasmStoreContext<'a, T, Self>;
+    type StoreContext<'a, T: 'static>: WasmStoreContext<'a, T, Self>;
     /// The mutable store context type.
-    type StoreContextMut<'a, T: 'a>: WasmStoreContextMut<'a, T, Self>;
+    type StoreContextMut<'a, T: 'static>: WasmStoreContextMut<'a, T, Self>;
     /// The table type.
     type Table: WasmTable<Self>;
 }
@@ -356,7 +356,7 @@ pub trait WasmExternRef<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new reference wrapping the given value.
     fn new<T: 'static + Send + Sync>(ctx: impl AsContextMut<E>, object: T) -> Self;
     /// Returns a shared reference to the underlying data.
-    fn downcast<'a, 's: 'a, T: 'static, S: 's>(
+    fn downcast<'a, 's: 'a, T: 'static, S: 'static>(
         &'a self,
         store: E::StoreContext<'s, S>,
     ) -> Result<&'a T>;
@@ -365,7 +365,7 @@ pub trait WasmExternRef<E: WasmEngine>: Clone + Sized + Send + Sync {
 /// Provides a Wasm or host function reference.
 pub trait WasmFunc<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new function with the given arguments.
-    fn new<T>(
+    fn new<T: 'static>(
         ctx: impl AsContextMut<E, UserState = T>,
         ty: FuncType,
         func: impl 'static
@@ -453,7 +453,7 @@ pub trait WasmModule<E: WasmEngine>: Clone + Sized + Send + Sync {
 }
 
 /// Provides all of the global state that can be manipulated by WASM programs.
-pub trait WasmStore<T, E: WasmEngine>:
+pub trait WasmStore<T: 'static, E: WasmEngine>:
     AsContext<E, UserState = T> + AsContextMut<E, UserState = T>
 {
     /// Creates a new store atop the given engine.
@@ -469,7 +469,7 @@ pub trait WasmStore<T, E: WasmEngine>:
 }
 
 /// Provides a temporary immutable handle to a store.
-pub trait WasmStoreContext<'a, T, E: WasmEngine>: AsContext<E, UserState = T> {
+pub trait WasmStoreContext<'a, T: 'static, E: WasmEngine>: AsContext<E, UserState = T> {
     /// Gets the engine associated with this store.
     fn engine(&self) -> &E;
     /// Gets an immutable reference to the underlying stored data.
@@ -477,7 +477,7 @@ pub trait WasmStoreContext<'a, T, E: WasmEngine>: AsContext<E, UserState = T> {
 }
 
 /// Provides a temporary mutable handle to a store.
-pub trait WasmStoreContextMut<'a, T, E: WasmEngine>:
+pub trait WasmStoreContextMut<'a, T: 'static, E: WasmEngine>:
     WasmStoreContext<'a, T, E> + AsContextMut<E, UserState = T>
 {
     /// Gets a mutable reference to the underlying stored data.
@@ -487,7 +487,7 @@ pub trait WasmStoreContextMut<'a, T, E: WasmEngine>:
 /// A trait used to get shared access to a store.
 pub trait AsContext<E: WasmEngine> {
     /// The type of data associated with the store.
-    type UserState;
+    type UserState: 'static;
 
     /// Returns the store context that this type provides access to.
     fn as_context(&self) -> E::StoreContext<'_, Self::UserState>;

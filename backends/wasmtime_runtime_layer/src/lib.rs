@@ -43,13 +43,13 @@ type ArgumentVec<T> = SmallVec<[T; DEFAULT_ARGUMENT_SIZE]>;
 
 /// Generate the boilerplate delegation code for a newtype wrapper.
 macro_rules! delegate {
-    (#[derive($($derive:ident),*)] $newtype:ident($inner:ty) $($tt:tt)*) => {
+    (#[derive($($derive:ident),*)] $newtype:ident [$($gens:tt)*] ($inner:ty) $($impl:tt)*) => {
         #[derive($($derive,)* RefCast)]
         #[repr(transparent)]
         #[doc = concat!("Newtype wrapper around [`", stringify!($inner), "`].")]
-        pub struct $newtype$($tt)*($inner);
+        pub struct $newtype $($impl)* ($inner);
 
-        impl$($tt)* $newtype$($tt)* {
+        impl$($impl)* $newtype $($gens)* {
             #[must_use]
             #[doc = concat!(
                 "Create a [`wasm_runtime_layer::", stringify!($newtype), "`]-compatible `",
@@ -75,19 +75,19 @@ macro_rules! delegate {
             }
         }
 
-        impl$($tt)* From<$inner> for $newtype$($tt)* {
+        impl$($impl)* From<$inner> for $newtype $($gens)* {
             fn from(inner: $inner) -> Self {
                 Self::new(inner)
             }
         }
 
-        impl$($tt)* From<$newtype$($tt)*> for $inner {
-            fn from(wrapper: $newtype$($tt)*) -> Self {
+        impl$($impl)* From<$newtype $($gens)*> for $inner {
+            fn from(wrapper: $newtype $($gens)*) -> Self {
                 wrapper.into_inner()
             }
         }
 
-        impl$($tt)* Deref for $newtype$($tt)* {
+        impl$($impl)* Deref for $newtype $($gens)* {
             type Target = $inner;
 
             fn deref(&self) -> &Self::Target {
@@ -95,48 +95,48 @@ macro_rules! delegate {
             }
         }
 
-        impl$($tt)* DerefMut for $newtype$($tt)* {
+        impl$($impl)* DerefMut for $newtype $($gens)* {
             fn deref_mut(&mut self) -> &mut Self::Target {
                 &mut self.0
             }
         }
 
-        impl$($tt)* AsRef<$inner> for $newtype$($tt)* {
+        impl$($impl)* AsRef<$inner> for $newtype $($gens)* {
             fn as_ref(&self) -> &$inner {
                 &self.0
             }
         }
 
-        impl$($tt)* AsMut<$inner> for $newtype$($tt)* {
+        impl$($impl)* AsMut<$inner> for $newtype $($gens)* {
             fn as_mut(&mut self) -> &mut $inner {
                 &mut self.0
             }
         }
 
-        impl$($tt)* AsRef<$newtype$($tt)*> for $inner {
-            fn as_ref(&self) -> &$newtype$($tt)* {
+        impl$($impl)* AsRef<$newtype $($gens)*> for $inner {
+            fn as_ref(&self) -> &$newtype $($gens)* {
                 $newtype::ref_cast(self)
             }
         }
 
-        impl$($tt)* AsMut<$newtype$($tt)*> for $inner {
-            fn as_mut(&mut self) -> &mut $newtype$($tt)* {
+        impl$($impl)* AsMut<$newtype $($gens)*> for $inner {
+            fn as_mut(&mut self) -> &mut $newtype $($gens)* {
                 $newtype::ref_cast_mut(self)
             }
         }
     }
 }
 
-delegate! { #[derive(Clone, Default)] Engine(wasmtime::Engine) }
-delegate! { #[derive(Clone)] ExternRef(wasmtime::Rooted<wasmtime::ExternRef>) }
-delegate! { #[derive(Clone)] Func(wasmtime::Func) }
-delegate! { #[derive(Clone)] Global(wasmtime::Global) }
-delegate! { #[derive(Clone)] Memory(wasmtime::Memory) }
-delegate! { #[derive(Clone)] Module(wasmtime::Module) }
-delegate! { #[derive()] Store(wasmtime::Store<T>) <T> }
-delegate! { #[derive()] StoreContext(wasmtime::StoreContext<'a, T>) <'a, T> }
-delegate! { #[derive()] StoreContextMut(wasmtime::StoreContextMut<'a, T>) <'a, T> }
-delegate! { #[derive(Clone)] Table(wasmtime::Table) }
+delegate! { #[derive(Clone, Default)] Engine[](wasmtime::Engine) }
+delegate! { #[derive(Clone)] ExternRef[](wasmtime::Rooted<wasmtime::ExternRef>) }
+delegate! { #[derive(Clone)] Func[](wasmtime::Func) }
+delegate! { #[derive(Clone)] Global[](wasmtime::Global) }
+delegate! { #[derive(Clone)] Memory[](wasmtime::Memory) }
+delegate! { #[derive(Clone)] Module[](wasmtime::Module) }
+delegate! { #[derive()] Store[<T>](wasmtime::Store<T>) <T: 'static> }
+delegate! { #[derive()] StoreContext[<'a, T>](wasmtime::StoreContext<'a, T>) <'a, T: 'static> }
+delegate! { #[derive()] StoreContextMut[<'a, T>](wasmtime::StoreContextMut<'a, T>) <'a, T: 'static> }
+delegate! { #[derive(Clone)] Table[](wasmtime::Table) }
 
 impl WasmEngine for Engine {
     type ExternRef = ExternRef;
@@ -145,9 +145,9 @@ impl WasmEngine for Engine {
     type Instance = Instance;
     type Memory = Memory;
     type Module = Module;
-    type Store<T> = Store<T>;
-    type StoreContext<'a, T: 'a> = StoreContext<'a, T>;
-    type StoreContextMut<'a, T: 'a> = StoreContextMut<'a, T>;
+    type Store<T: 'static> = Store<T>;
+    type StoreContext<'a, T: 'static> = StoreContext<'a, T>;
+    type StoreContextMut<'a, T: 'static> = StoreContextMut<'a, T>;
     type Table = Table;
 }
 
@@ -159,7 +159,7 @@ impl WasmExternRef<Engine> for ExternRef {
         )
     }
 
-    fn downcast<'a, 's: 'a, T: 'static, S: 's>(
+    fn downcast<'a, 's: 'a, T: 'static, S: 'static>(
         &'a self,
         ctx: StoreContext<'s, S>,
     ) -> Result<&'a T> {
@@ -171,7 +171,7 @@ impl WasmExternRef<Engine> for ExternRef {
 }
 
 impl WasmFunc<Engine> for Func {
-    fn new<T>(
+    fn new<T: 'static>(
         mut ctx: impl AsContextMut<Engine, UserState = T>,
         ty: FuncType,
         func: impl 'static
@@ -443,7 +443,7 @@ impl WasmModule<Engine> for Module {
     }
 }
 
-impl<T> WasmStore<T, Engine> for Store<T> {
+impl<T: 'static> WasmStore<T, Engine> for Store<T> {
     fn new(engine: &Engine, data: T) -> Self {
         Self::new(wasmtime::Store::new(engine, data))
     }
@@ -465,7 +465,7 @@ impl<T> WasmStore<T, Engine> for Store<T> {
     }
 }
 
-impl<T> AsContext<Engine> for Store<T> {
+impl<T: 'static> AsContext<Engine> for Store<T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<'_, Self::UserState> {
@@ -473,13 +473,13 @@ impl<T> AsContext<Engine> for Store<T> {
     }
 }
 
-impl<T> AsContextMut<Engine> for Store<T> {
+impl<T: 'static> AsContextMut<Engine> for Store<T> {
     fn as_context_mut(&mut self) -> StoreContextMut<'_, Self::UserState> {
         StoreContextMut::new(wasmtime::AsContextMut::as_context_mut(self.as_mut()))
     }
 }
 
-impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
+impl<'a, T: 'static> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
     fn engine(&self) -> &Engine {
         Engine::ref_cast(self.as_ref().engine())
     }
@@ -489,7 +489,7 @@ impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
     }
 }
 
-impl<T> AsContext<Engine> for StoreContext<'_, T> {
+impl<T: 'static> AsContext<Engine> for StoreContext<'_, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<T> {
@@ -497,7 +497,7 @@ impl<T> AsContext<Engine> for StoreContext<'_, T> {
     }
 }
 
-impl<T> AsContext<Engine> for StoreContextMut<'_, T> {
+impl<T: 'static> AsContext<Engine> for StoreContextMut<'_, T> {
     type UserState = T;
 
     fn as_context(&self) -> StoreContext<T> {
@@ -505,13 +505,13 @@ impl<T> AsContext<Engine> for StoreContextMut<'_, T> {
     }
 }
 
-impl<T> AsContextMut<Engine> for StoreContextMut<'_, T> {
+impl<T: 'static> AsContextMut<Engine> for StoreContextMut<'_, T> {
     fn as_context_mut(&mut self) -> StoreContextMut<T> {
         StoreContextMut::new(wasmtime::AsContextMut::as_context_mut(self.as_mut()))
     }
 }
 
-impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
+impl<'a, T: 'static> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
     fn engine(&self) -> &Engine {
         Engine::ref_cast(self.as_ref().engine())
     }
@@ -521,7 +521,7 @@ impl<'a, T> WasmStoreContext<'a, T, Engine> for StoreContextMut<'a, T> {
     }
 }
 
-impl<'a, T> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, T> {
+impl<'a, T: 'static> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, T> {
     fn data_mut(&mut self) -> &mut T {
         self.as_mut().data_mut()
     }
