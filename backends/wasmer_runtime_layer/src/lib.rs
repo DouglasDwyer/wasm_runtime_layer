@@ -564,7 +564,7 @@ impl<'a, T: 'static> StoreContextMut<'a, T> {
 impl<T: 'static> AsContext<Engine> for StoreContextMut<'_, T> {
     type UserState = T;
 
-    fn as_context(&self) -> StoreContext<T> {
+    fn as_context(&self) -> StoreContext<'_, T> {
         StoreContext {
             store: self.store.as_store_ref(),
             env: self.env.clone(),
@@ -574,7 +574,7 @@ impl<T: 'static> AsContext<Engine> for StoreContextMut<'_, T> {
 }
 
 impl<T: 'static> AsContextMut<Engine> for StoreContextMut<'_, T> {
-    fn as_context_mut(&mut self) -> StoreContextMut<T> {
+    fn as_context_mut(&mut self) -> StoreContextMut<'_, T> {
         StoreContextMut {
             store: self.store.as_store_mut(),
             env: self.env.clone(),

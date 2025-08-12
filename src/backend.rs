@@ -239,7 +239,7 @@ impl<E: WasmEngine> Imports<E> {
     }
 
     /// Iterates through all the imports in this structure
-    pub fn iter(&self) -> ImportsIterator<E> {
+    pub fn iter(&self) -> ImportsIterator<'_, E> {
         ImportsIterator::new(self)
     }
 }

@@ -650,7 +650,7 @@ impl Imports {
     }
 
     /// Iterates through all the imports in this structure
-    pub fn iter(&self) -> ImportsIterator {
+    pub fn iter(&self) -> ImportsIterator<'_> {
         ImportsIterator::new(self)
     }
 }
@@ -1332,13 +1332,13 @@ pub trait AsContext {
     type UserState: 'static;
 
     /// Returns the store context that this type provides access to.
-    fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine>;
+    fn as_context(&self) -> StoreContext<'_, Self::UserState, Self::Engine>;
 }
 
 /// A trait used to get exclusive access to a [`Store`].
 pub trait AsContextMut: AsContext {
     /// Returns the store context that this type provides access to.
-    fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine>;
+    fn as_context_mut(&mut self) -> StoreContextMut<'_, Self::UserState, Self::Engine>;
 }
 
 impl<T: 'static, E: WasmEngine> AsContext for Store<T, E> {
@@ -1346,7 +1346,7 @@ impl<T: 'static, E: WasmEngine> AsContext for Store<T, E> {
 
     type UserState = T;
 
-    fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine> {
+    fn as_context(&self) -> StoreContext<'_, Self::UserState, Self::Engine> {
         StoreContext {
             inner: crate::backend::AsContext::as_context(&self.inner),
         }
@@ -1354,7 +1354,7 @@ impl<T: 'static, E: WasmEngine> AsContext for Store<T, E> {
 }
 
 impl<T: 'static, E: WasmEngine> AsContextMut for Store<T, E> {
-    fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine> {
+    fn as_context_mut(&mut self) -> StoreContextMut<'_, Self::UserState, Self::Engine> {
         StoreContextMut {
             inner: crate::backend::AsContextMut::as_context_mut(&mut self.inner),
         }
@@ -1366,7 +1366,7 @@ impl<T: AsContext> AsContext for &T {
 
     type UserState = T::UserState;
 
-    fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine> {
+    fn as_context(&self) -> StoreContext<'_, Self::UserState, Self::Engine> {
         (**self).as_context()
     }
 }
@@ -1376,13 +1376,13 @@ impl<T: AsContext> AsContext for &mut T {
 
     type UserState = T::UserState;
 
-    fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine> {
+    fn as_context(&self) -> StoreContext<'_, Self::UserState, Self::Engine> {
         (**self).as_context()
     }
 }
 
 impl<T: AsContextMut> AsContextMut for &mut T {
-    fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine> {
+    fn as_context_mut(&mut self) -> StoreContextMut<'_, Self::UserState, Self::Engine> {
         (**self).as_context_mut()
     }
 }
@@ -1392,7 +1392,7 @@ impl<'a, T: 'static, E: WasmEngine> AsContext for StoreContext<'a, T, E> {
 
     type UserState = T;
 
-    fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine> {
+    fn as_context(&self) -> StoreContext<'_, Self::UserState, Self::Engine> {
         StoreContext {
             inner: crate::backend::AsContext::as_context(&self.inner),
         }
@@ -1404,7 +1404,7 @@ impl<'a, T: 'static, E: WasmEngine> AsContext for StoreContextMut<'a, T, E> {
 
     type UserState = T;
 
-    fn as_context(&self) -> StoreContext<Self::UserState, Self::Engine> {
+    fn as_context(&self) -> StoreContext<'_, Self::UserState, Self::Engine> {
         StoreContext {
             inner: crate::backend::AsContext::as_context(&self.inner),
         }
@@ -1412,7 +1412,7 @@ impl<'a, T: 'static, E: WasmEngine> AsContext for StoreContextMut<'a, T, E> {
 }
 
 impl<'a, T: 'static, E: WasmEngine> AsContextMut for StoreContextMut<'a, T, E> {
-    fn as_context_mut(&mut self) -> StoreContextMut<Self::UserState, Self::Engine> {
+    fn as_context_mut(&mut self) -> StoreContextMut<'_, Self::UserState, Self::Engine> {
         StoreContextMut {
             inner: crate::backend::AsContextMut::as_context_mut(&mut self.inner),
         }
