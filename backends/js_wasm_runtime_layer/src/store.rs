@@ -67,7 +67,7 @@ impl<T: 'static> Store<T> {
     }
 
     /// Returns a borrow of the store
-    pub(crate) fn get(&self) -> StoreContext<T> {
+    pub(crate) fn get(&self) -> StoreContext<'_, T> {
         // Safety:
         //
         // A shared reference to the store signifies a non-mutable ownership, and is thus safe.
@@ -76,7 +76,7 @@ impl<T: 'static> Store<T> {
     }
 
     /// Returns a mutable borrow of the store
-    pub(crate) fn get_mut(&mut self) -> StoreContextMut<T> {
+    pub(crate) fn get_mut(&mut self) -> StoreContextMut<'_, T> {
         // Safety:
         //
         // &mut self
@@ -144,7 +144,7 @@ impl<T: 'static> AsContext<Engine> for Store<T> {
 }
 
 impl<T: 'static> AsContextMut<Engine> for Store<T> {
-    fn as_context_mut(&mut self) -> StoreContextMut<T> {
+    fn as_context_mut(&mut self) -> StoreContextMut<'_, T> {
         self.get_mut()
     }
 }

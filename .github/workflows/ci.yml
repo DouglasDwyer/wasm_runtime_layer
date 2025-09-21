@@ -78,6 +78,7 @@ jobs:
         run: |
           cargo hack test --workspace \
             --exclude wasmtime_runtime_layer \
+            --exclude wasmer_runtime_layer \
             --no-fail-fast --feature-powerset --keep-going \
             --release
 

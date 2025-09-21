@@ -44,7 +44,7 @@ pub use store::{Store, StoreContext, StoreContextMut, StoreInner};
 pub use table::Table;
 
 use self::{
-    conversion::{FromJs, FromStoredJs, ToJs, ToStoredJs},
+    conversion::{FromJs, ToJs, ToStoredJs},
     module::{ModuleInner, ParsedModule},
 };
 
@@ -136,7 +136,7 @@ impl Engine {
     // }
 
     /// Mutably borrow the engine
-    pub(crate) fn borrow_mut(&self) -> RefMut<EngineInner> {
+    pub(crate) fn borrow_mut(&self) -> RefMut<'_, EngineInner> {
         self.inner.borrow_mut()
     }
 }
@@ -277,49 +277,6 @@ impl ToStoredJs for Value<Engine> {
             Value::FuncRef(None) => JsValue::NULL,
             Value::ExternRef(_) => todo!(),
         }
-    }
-}
-
-impl FromStoredJs for Value<Engine> {
-    /// Convert from a JavaScript value.
-    ///
-    /// Returns `None` if the value can not be represented
-    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self> {
-        let ty = &*value
-            .js_typeof()
-            .as_string()
-            .expect("typeof returns a string");
-
-        let res = match ty {
-            "number" => Value::F64(f64::from_stored_js(store, value).unwrap()),
-            "bigint" => Value::I64(i64::from_stored_js(store, value).unwrap()),
-            "boolean" => Value::I32(bool::from_stored_js(store, value).unwrap() as i32),
-            "null" => Value::I32(0),
-            "function" => {
-                #[cfg(feature = "tracing")]
-                tracing::error!("conversion to a function outside of a module not permitted");
-                return None;
-            }
-            // An instance of a WebAssembly.* class or null
-            "object" => {
-                if value.is_instance_of::<js_sys::Function>() {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!("conversion to a function outside of a module not permitted");
-                    return None;
-                } else {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!(?value, "Unsupported value type");
-                    return None;
-                }
-            }
-            _ => {
-                #[cfg(feature = "tracing")]
-                tracing::error!(?ty, "Unknown value primitive type");
-                return None;
-            }
-        };
-
-        Some(res)
     }
 }
 

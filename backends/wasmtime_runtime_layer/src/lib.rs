@@ -472,7 +472,7 @@ impl<'a, T: 'static> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
 impl<T: 'static> AsContext<Engine> for StoreContext<'_, T> {
     type UserState = T;
 
-    fn as_context(&self) -> StoreContext<T> {
+    fn as_context(&self) -> StoreContext<'_, T> {
         StoreContext::new(wasmtime::AsContext::as_context(self.as_ref()))
     }
 }
@@ -480,13 +480,13 @@ impl<T: 'static> AsContext<Engine> for StoreContext<'_, T> {
 impl<T: 'static> AsContext<Engine> for StoreContextMut<'_, T> {
     type UserState = T;
 
-    fn as_context(&self) -> StoreContext<T> {
+    fn as_context(&self) -> StoreContext<'_, T> {
         StoreContext::new(wasmtime::AsContext::as_context(self.as_ref()))
     }
 }
 
 impl<T: 'static> AsContextMut<Engine> for StoreContextMut<'_, T> {
-    fn as_context_mut(&mut self) -> StoreContextMut<T> {
+    fn as_context_mut(&mut self) -> StoreContextMut<'_, T> {
         StoreContextMut::new(wasmtime::AsContextMut::as_context_mut(self.as_mut()))
     }
 }

@@ -3,16 +3,6 @@ use wasm_bindgen::JsValue;
 
 use super::StoreInner;
 
-/// Converts a Rust type from JavaScript which needs to be stored in the store
-pub trait FromStoredJs {
-    /// Convert a JavaScript value to this type
-    ///
-    /// Returns None if the type does not match
-    fn from_stored_js<T>(store: &mut StoreInner<T>, value: JsValue) -> Option<Self>
-    where
-        Self: Sized;
-}
-
 /// Converts a Rust type from JavaScript
 pub trait FromJs {
     /// Convert a JavaScript value to this type
@@ -43,18 +33,6 @@ pub trait ToJs {
 
     /// Convert this value to JavaScript
     fn to_js(&self) -> Self::Repr;
-}
-
-impl<V> FromStoredJs for V
-where
-    V: FromJs,
-{
-    fn from_stored_js<T>(_: &mut StoreInner<T>, value: JsValue) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        Self::from_js(value)
-    }
 }
 
 impl<V> ToStoredJs for V

@@ -218,7 +218,7 @@ impl<E: WasmEngine> Imports<E> {
 
     /// Returns true if the Imports contains namespace with the provided name.
     pub fn contains_namespace(&self, name: &str) -> bool {
-        self.map.keys().any(|(k, _)| (k == name))
+        self.map.keys().any(|(k, _)| k == name)
     }
 
     /// Register a list of externs into a namespace.
@@ -239,7 +239,7 @@ impl<E: WasmEngine> Imports<E> {
     }
 
     /// Iterates through all the imports in this structure
-    pub fn iter(&self) -> ImportsIterator<E> {
+    pub fn iter(&self) -> ImportsIterator<'_, E> {
         ImportsIterator::new(self)
     }
 }

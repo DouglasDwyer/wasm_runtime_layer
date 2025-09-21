@@ -119,6 +119,7 @@ macro_rules! delegate {
 }
 
 delegate! { #[derive(Clone, Default)] Engine[](wasmi::Engine) }
+delegate! { #[derive(Clone)] ExternRef[](wasmi::ExternRef) }
 delegate! { #[derive(Clone)] Func[](wasmi::Func) }
 delegate! { #[derive(Clone)] Global[](wasmi::Global) }
 delegate! { #[derive(Clone)] Instance[](wasmi::Instance) }
@@ -142,49 +143,6 @@ impl WasmEngine for Engine {
     type Table = Table;
 }
 
-#[derive(Clone)]
-#[repr(transparent)]
-/// Newtype wrapper around [`wasmi::ExternRef`], which ensures it is always [`Some`].
-pub struct ExternRef(wasmi::ExternRef);
-
-impl ExternRef {
-    /// Create an optional [`wasm_runtime_layer::ExternRef`]-compatible `ExternRef`
-    /// from a [`wasmi::ExternRef`].
-    pub fn new(inner: wasmi::ExternRef) -> Option<Self> {
-        if inner.is_null() {
-            None
-        } else {
-            Some(Self(inner))
-        }
-    }
-
-    #[must_use]
-    /// Consume an `ExternRef` to obtain the inner [`wasmi::ExternRef`].
-    pub fn into_inner(self) -> wasmi::ExternRef {
-        self.0
-    }
-}
-
-impl From<ExternRef> for wasmi::ExternRef {
-    fn from(wrapper: ExternRef) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl Deref for ExternRef {
-    type Target = wasmi::ExternRef;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<wasmi::ExternRef> for ExternRef {
-    fn as_ref(&self) -> &wasmi::ExternRef {
-        &self.0
-    }
-}
-
 impl WasmExternRef<Engine> for ExternRef {
     fn new<T: 'static + Send + Sync>(mut ctx: impl AsContextMut<Engine>, object: T) -> Self {
         Self(wasmi::ExternRef::new::<T>(
@@ -199,7 +157,6 @@ impl WasmExternRef<Engine> for ExternRef {
     ) -> Result<&'a T> {
         self.as_ref()
             .data(store)
-            .ok_or_else(|| Error::msg("externref None should be external"))?
             .downcast_ref()
             .ok_or_else(|| Error::msg("Incorrect extern ref type."))
     }
@@ -315,11 +272,9 @@ impl WasmInstance<Engine> for Instance {
                 .map_err(Error::new)?;
         }
 
-        let pre = linker
-            .instantiate(store.as_context_mut().into_inner(), module.as_ref())
-            .map_err(Error::new)?;
         Ok(Self::new(
-            pre.start(store.as_context_mut().into_inner())
+            linker
+                .instantiate_and_start(store.as_context_mut().into_inner(), module.as_ref())
                 .map_err(Error::new)?,
         ))
     }
@@ -463,7 +418,7 @@ impl<'a, T: 'static> WasmStoreContext<'a, T, Engine> for StoreContext<'a, T> {
 impl<T: 'static> AsContext<Engine> for StoreContext<'_, T> {
     type UserState = T;
 
-    fn as_context(&self) -> StoreContext<T> {
+    fn as_context(&self) -> StoreContext<'_, T> {
         StoreContext::new(wasmi::AsContext::as_context(self.as_ref()))
     }
 }
@@ -471,13 +426,13 @@ impl<T: 'static> AsContext<Engine> for StoreContext<'_, T> {
 impl<T: 'static> AsContext<Engine> for StoreContextMut<'_, T> {
     type UserState = T;
 
-    fn as_context(&self) -> StoreContext<T> {
+    fn as_context(&self) -> StoreContext<'_, T> {
         StoreContext::new(wasmi::AsContext::as_context(self.as_ref()))
     }
 }
 
 impl<T: 'static> AsContextMut<Engine> for StoreContextMut<'_, T> {
-    fn as_context_mut(&mut self) -> StoreContextMut<T> {
+    fn as_context_mut(&mut self) -> StoreContextMut<'_, T> {
         StoreContextMut::new(wasmi::AsContextMut::as_context_mut(self.as_mut()))
     }
 }
@@ -563,8 +518,10 @@ fn value_from(value: wasmi::Val) -> Value<Engine> {
         wasmi::Val::F32(x) => Value::F32(x.to_float()),
         wasmi::Val::F64(x) => Value::F64(x.to_float()),
         wasmi::Val::V128(_) => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
-        wasmi::Val::FuncRef(x) => Value::FuncRef(x.func().copied().map(Func::new)),
-        wasmi::Val::ExternRef(x) => Value::ExternRef(ExternRef::new(x)),
+        wasmi::Val::FuncRef(wasmi::Ref::Null) => Value::FuncRef(None),
+        wasmi::Val::FuncRef(wasmi::Ref::Val(f)) => Value::FuncRef(Some(Func::new(f))),
+        wasmi::Val::ExternRef(wasmi::Ref::Null) => Value::ExternRef(None),
+        wasmi::Val::ExternRef(wasmi::Ref::Val(e)) => Value::ExternRef(Some(ExternRef::new(e))),
     }
 }
 
@@ -575,11 +532,12 @@ fn value_into(value: Value<Engine>) -> wasmi::Val {
         Value::I64(x) => wasmi::Val::I64(x),
         Value::F32(x) => wasmi::Val::F32(wasmi::core::F32::from_float(x)),
         Value::F64(x) => wasmi::Val::F64(wasmi::core::F64::from_float(x)),
-        Value::FuncRef(x) => wasmi::Val::FuncRef(wasmi::FuncRef::new(x.map(Func::into_inner))),
-        Value::ExternRef(x) => wasmi::Val::ExternRef(
-            x.map(ExternRef::into_inner)
-                .unwrap_or_else(wasmi::ExternRef::null),
-        ),
+        Value::FuncRef(x) => {
+            wasmi::Val::FuncRef(x.map_or(wasmi::Ref::Null, |f| wasmi::Ref::Val(f.into_inner())))
+        }
+        Value::ExternRef(x) => {
+            wasmi::Val::ExternRef(x.map_or(wasmi::Ref::Null, |e| wasmi::Ref::Val(e.into_inner())))
+        }
     }
 }
 
@@ -708,4 +666,4 @@ impl fmt::Display for HostError {
     }
 }
 
-impl wasmi::core::HostError for HostError {}
+impl wasmi::errors::HostError for HostError {}
