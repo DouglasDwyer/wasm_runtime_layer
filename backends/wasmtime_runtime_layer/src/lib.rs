@@ -573,6 +573,9 @@ fn value_from(value: wasmtime::Val) -> Value<Engine> {
         wasmtime::Val::AnyRef(_) => {
             unimplemented!("anyref is not supported in the wasm_runtime_layer")
         }
+        wasmtime::Val::ExnRef(_) => {
+            unimplemented!("exnref is not supported in the wasm_runtime_layer")
+        }
     }
 }
 
@@ -632,6 +635,9 @@ fn value_from_ref(ref_: wasmtime::Ref) -> Value<Engine> {
         wasmtime::Ref::Extern(x) => Value::ExternRef(x.map(ExternRef::from)),
         wasmtime::Ref::Any(_) => {
             unimplemented!("anyref is not supported in the wasm_runtime_layer")
+        }
+        wasmtime::Ref::Exn(_) => {
+            unimplemented!("exnref is not supported in the wasm_runtime_layer")
         }
     }
 }
