@@ -576,6 +576,9 @@ fn value_from(value: wasmtime::Val) -> Value<Engine> {
         wasmtime::Val::ExnRef(_) => {
             unimplemented!("exnref is not supported in the wasm_runtime_layer")
         }
+        wasmtime::Val::ContRef(_) => {
+            unimplemented!("contref is not supported in the wasm_runtime_layer")
+        }
     }
 }
 
