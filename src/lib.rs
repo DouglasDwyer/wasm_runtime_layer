@@ -629,7 +629,7 @@ impl Imports {
 
     /// Returns true if the Imports contains namespace with the provided name.
     pub fn contains_namespace(&self, name: &str) -> bool {
-        self.map.keys().any(|(k, _)| (k == name))
+        self.map.keys().any(|(k, _)| k == name)
     }
 
     /// Register a list of externs into a namespace.
