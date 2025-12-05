@@ -146,6 +146,8 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                             wasmparser::CompositeType {
                                 inner: wasmparser::CompositeInnerType::Func(func_type),
                                 shared: false,
+                                describes_idx: None,
+                                descriptor_idx: None,
                             } => FuncType::new(
                                 func_type.params().iter().map(value_type_from),
                                 func_type.results().iter().map(value_type_from),
@@ -220,6 +222,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                         wasmparser::TypeRef::Memory(_) => todo!(),
                         wasmparser::TypeRef::Global(_) => todo!(),
                         wasmparser::TypeRef::Tag(_) => todo!(),
+                        wasmparser::TypeRef::FuncExact(_) => todo!(),
                     };
 
                     imports.insert((import.module.to_string(), import.name.to_string()), ty);
@@ -237,6 +240,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                         wasmparser::ExternalKind::Memory => ExternType::Memory(memories[index]),
                         wasmparser::ExternalKind::Global => ExternType::Global(globals[index]),
                         wasmparser::ExternalKind::Tag => todo!(),
+                        wasmparser::ExternalKind::FuncExact => todo!(),
                     };
 
                     exports.insert(export.name.to_string(), ty);
