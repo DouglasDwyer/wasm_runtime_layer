@@ -530,8 +530,8 @@ fn value_into(value: Value<Engine>) -> wasmi::Val {
     match value {
         Value::I32(x) => wasmi::Val::I32(x),
         Value::I64(x) => wasmi::Val::I64(x),
-        Value::F32(x) => wasmi::Val::F32(wasmi::core::F32::from_float(x)),
-        Value::F64(x) => wasmi::Val::F64(wasmi::core::F64::from_float(x)),
+        Value::F32(x) => wasmi::Val::F32(wasmi::F32::from_float(x)),
+        Value::F64(x) => wasmi::Val::F64(wasmi::F64::from_float(x)),
         Value::FuncRef(x) => {
             wasmi::Val::FuncRef(x.map_or(wasmi::Ref::Null, |f| wasmi::Ref::Val(f.into_inner())))
         }
@@ -541,30 +541,30 @@ fn value_into(value: Value<Engine>) -> wasmi::Val {
     }
 }
 
-/// Convert a [`wasmi::core::ValType`] to a [`ValueType`].
-fn value_type_from(ty: wasmi::core::ValType) -> ValueType {
+/// Convert a [`wasmi::ValType`] to a [`ValueType`].
+fn value_type_from(ty: wasmi::ValType) -> ValueType {
     match ty {
-        wasmi::core::ValType::I32 => ValueType::I32,
-        wasmi::core::ValType::I64 => ValueType::I64,
-        wasmi::core::ValType::F32 => ValueType::F32,
-        wasmi::core::ValType::F64 => ValueType::F64,
-        wasmi::core::ValType::V128 => {
+        wasmi::ValType::I32 => ValueType::I32,
+        wasmi::ValType::I64 => ValueType::I64,
+        wasmi::ValType::F32 => ValueType::F32,
+        wasmi::ValType::F64 => ValueType::F64,
+        wasmi::ValType::V128 => {
             unimplemented!("v128 is not supported in the wasm_runtime_layer")
         }
-        wasmi::core::ValType::FuncRef => ValueType::FuncRef,
-        wasmi::core::ValType::ExternRef => ValueType::ExternRef,
+        wasmi::ValType::FuncRef => ValueType::FuncRef,
+        wasmi::ValType::ExternRef => ValueType::ExternRef,
     }
 }
 
-/// Convert a [`ValueType`] to a [`wasmi::core::ValType`].
-fn value_type_into(ty: ValueType) -> wasmi::core::ValType {
+/// Convert a [`ValueType`] to a [`wasmi::ValType`].
+fn value_type_into(ty: ValueType) -> wasmi::ValType {
     match ty {
-        ValueType::I32 => wasmi::core::ValType::I32,
-        ValueType::I64 => wasmi::core::ValType::I64,
-        ValueType::F32 => wasmi::core::ValType::F32,
-        ValueType::F64 => wasmi::core::ValType::F64,
-        ValueType::FuncRef => wasmi::core::ValType::FuncRef,
-        ValueType::ExternRef => wasmi::core::ValType::ExternRef,
+        ValueType::I32 => wasmi::ValType::I32,
+        ValueType::I64 => wasmi::ValType::I64,
+        ValueType::F32 => wasmi::ValType::F32,
+        ValueType::F64 => wasmi::ValType::F64,
+        ValueType::FuncRef => wasmi::ValType::FuncRef,
+        ValueType::ExternRef => wasmi::ValType::ExternRef,
     }
 }
 
