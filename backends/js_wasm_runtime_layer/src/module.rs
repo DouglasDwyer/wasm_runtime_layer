@@ -206,7 +206,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                 }
             }
             wasmparser::Payload::ImportSection(section) => {
-                for import in section {
+                for import in section.into_imports() {
                     let import = import?;
                     let ty = match import.ty {
                         wasmparser::TypeRef::Func(index) => {
