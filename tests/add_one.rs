@@ -24,13 +24,13 @@ fn test_js_wasm() {
     add_one(&engine)
 }
 
-// #[test]
-// #[cfg(not(target_arch = "wasm32"))]
-// fn test_wasmer() {
-//     // 1. Instantiate a runtime
-//     let engine = Engine::new(wasmer_runtime_layer::Engine::default());
-//     add_one(&engine)
-// }
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn test_wasmer() {
+    // 1. Instantiate a runtime
+    let engine = Engine::new(wasmer_runtime_layer::Engine::default());
+    add_one(&engine)
+}
 
 #[allow(unused)]
 fn add_one(engine: &Engine<impl WasmEngine>) {
