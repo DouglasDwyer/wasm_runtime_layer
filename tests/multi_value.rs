@@ -29,13 +29,13 @@ fn test_js_wasm() {
     multi_value(&engine)
 }
 
-// #[test]
-// #[cfg(not(target_arch = "wasm32"))]
-// fn test_wasmer() {
-//     // 1. Instantiate a runtime
-//     let engine = Engine::new(wasmer_runtime_layer::Engine::default());
-//     multi_value(&engine)
-// }
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn test_wasmer() {
+    // 1. Instantiate a runtime
+    let engine = Engine::new(wasmer_runtime_layer::Engine::default());
+    multi_value(&engine)
+}
 
 #[allow(unused)]
 fn multi_value(engine: &Engine<impl WasmEngine>) {
