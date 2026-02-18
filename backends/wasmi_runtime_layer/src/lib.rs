@@ -136,35 +136,35 @@ impl From<Engine> for wasmi::Engine {
     }
 }
 
-// impl From<ExternRef> for wasmi::ExternRef {
-//     fn from(wrapper: ExternRef) -> Self {
-//         wrapper.into_inner()
-//     }
-// }
+impl From<ExternRef> for wasmi::ExternRef {
+    fn from(wrapper: ExternRef) -> Self {
+        wrapper.into_inner()
+    }
+}
 
-// impl From<Func> for wasmi::Func {
-//     fn from(wrapper: Func) -> Self {
-//         wrapper.into_inner()
-//     }
-// }
+impl From<Func> for wasmi::Func {
+    fn from(wrapper: Func) -> Self {
+        wrapper.into_inner()
+    }
+}
 
-// impl From<Global> for wasmi::Global {
-//     fn from(wrapper: Global) -> Self {
-//         wrapper.into_inner()
-//     }
-// }
+impl From<Global> for wasmi::Global {
+    fn from(wrapper: Global) -> Self {
+        wrapper.into_inner()
+    }
+}
 
-// impl From<Instance> for wasmi::Instance {
-//     fn from(wrapper: Instance) -> Self {
-//         wrapper.into_inner()
-//     }
-// }
+impl From<Instance> for wasmi::Instance {
+    fn from(wrapper: Instance) -> Self {
+        wrapper.into_inner()
+    }
+}
 
-// impl From<Memory> for wasmi::Memory {
-//     fn from(wrapper: Memory) -> Self {
-//         wrapper.into_inner()
-//     }
-// }
+impl From<Memory> for wasmi::Memory {
+    fn from(wrapper: Memory) -> Self {
+        wrapper.into_inner()
+    }
+}
 
 impl From<Module> for wasmi::Module {
     fn from(wrapper: Module) -> Self {
@@ -190,11 +190,11 @@ impl<'a, T> From<StoreContextMut<'a, T>> for wasmi::StoreContextMut<'a, T> {
     }
 }
 
-// impl From<Table> for wasmi::Table {
-//     fn from(wrapper: Table) -> Self {
-//         wrapper.into_inner()
-//     }
-// }
+impl From<Table> for wasmi::Table {
+    fn from(wrapper: Table) -> Self {
+        wrapper.into_inner()
+    }
+}
 
 impl WasmEngine for Engine {
     type ExternRef = ExternRef;
