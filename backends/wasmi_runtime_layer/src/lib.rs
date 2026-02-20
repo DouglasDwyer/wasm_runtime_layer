@@ -72,11 +72,11 @@ macro_rules! delegate {
             }
         }
 
-        // impl$($impl)* From<$newtype $($gens)*> for $inner {
-        //     fn from(wrapper: $newtype $($gens)*) -> Self {
-        //         wrapper.into_inner()
-        //     }
-        // }
+        impl$($impl)* From<$newtype $($gens)*> for $inner {
+            fn from(wrapper: $newtype $($gens)*) -> Self {
+                wrapper.into_inner()
+            }
+        }
 
         impl$($impl)* Deref for $newtype $($gens)* {
             type Target = $inner;
@@ -129,72 +129,6 @@ delegate! { #[derive()] Store[<T>](wasmi::Store<T>) <T: 'static> }
 delegate! { #[derive()] StoreContext[<'a, T>](wasmi::StoreContext<'a, T>) <'a, T: 'static> }
 delegate! { #[derive()] StoreContextMut[<'a, T>](wasmi::StoreContextMut<'a, T>) <'a, T: 'static> }
 delegate! { #[derive(Clone)] Table[](wasmi::Table) }
-
-impl From<Engine> for wasmi::Engine {
-    fn from(wrapper: Engine) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl From<ExternRef> for wasmi::ExternRef {
-    fn from(wrapper: ExternRef) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl From<Func> for wasmi::Func {
-    fn from(wrapper: Func) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl From<Global> for wasmi::Global {
-    fn from(wrapper: Global) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl From<Instance> for wasmi::Instance {
-    fn from(wrapper: Instance) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl From<Memory> for wasmi::Memory {
-    fn from(wrapper: Memory) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl From<Module> for wasmi::Module {
-    fn from(wrapper: Module) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl<T> From<Store<T>> for wasmi::Store<T> {
-    fn from(wrapper: Store<T>) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl<'a, T> From<StoreContext<'a, T>> for wasmi::StoreContext<'a, T> {
-    fn from(wrapper: StoreContext<'a, T>) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl<'a, T> From<StoreContextMut<'a, T>> for wasmi::StoreContextMut<'a, T> {
-    fn from(wrapper: StoreContextMut<'a, T>) -> Self {
-        wrapper.into_inner()
-    }
-}
-
-impl From<Table> for wasmi::Table {
-    fn from(wrapper: Table) -> Self {
-        wrapper.into_inner()
-    }
-}
 
 impl WasmEngine for Engine {
     type ExternRef = ExternRef;
