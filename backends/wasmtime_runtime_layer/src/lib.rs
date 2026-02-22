@@ -378,7 +378,7 @@ impl WasmMemory<Engine> for Memory {
 
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
         self.as_ref()
-            .grow(ctx.as_context_mut().into_inner(), additional as u64)
+            .grow(ctx.as_context_mut().into_inner(), u64::from(additional))
             .and_then(expect_memory32)
     }
 

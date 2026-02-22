@@ -321,7 +321,7 @@ impl WasmMemory<Engine> for Memory {
 
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
         self.as_ref()
-            .grow(ctx.as_context_mut().into_inner(), additional as u64)
+            .grow(ctx.as_context_mut().into_inner(), u64::from(additional))
             .map_err(Error::new)
             .and_then(expect_memory32)
     }
@@ -491,7 +491,7 @@ impl WasmTable<Engine> for Table {
         self.as_ref()
             .grow(
                 ctx.as_context_mut().into_inner(),
-                delta as u64,
+                u64::from(delta),
                 ref_into(init),
             )
             .map_err(Error::new)
@@ -500,7 +500,7 @@ impl WasmTable<Engine> for Table {
 
     fn get(&self, ctx: impl AsContextMut<Engine>, index: u32) -> Option<Ref<Engine>> {
         self.as_ref()
-            .get(ctx.as_context().into_inner(), index as u64)
+            .get(ctx.as_context().into_inner(), u64::from(index))
             .map(ref_from)
     }
 
@@ -508,7 +508,7 @@ impl WasmTable<Engine> for Table {
         self.as_ref()
             .set(
                 ctx.as_context_mut().into_inner(),
-                index as u64,
+                u64::from(index),
                 ref_into(elem),
             )
             .map_err(Error::new)
