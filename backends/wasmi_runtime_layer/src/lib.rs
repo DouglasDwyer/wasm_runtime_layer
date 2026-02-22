@@ -458,7 +458,7 @@ impl WasmTable<Engine> for Table {
         wasmi::Table::new(
             ctx.as_context_mut().into_inner(),
             table_type_into(ty),
-            value_into(init),
+            value_into_ref(init),
         )
         .map(Self::new)
         .map_err(Error::new)
@@ -482,7 +482,7 @@ impl WasmTable<Engine> for Table {
             .grow(
                 ctx.as_context_mut().into_inner(),
                 delta as u64,
-                value_into(init),
+                value_into_ref(init),
             )
             .map(expect_table32)
             .map_err(Error::new)
@@ -491,7 +491,7 @@ impl WasmTable<Engine> for Table {
     fn get(&self, ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
         self.as_ref()
             .get(ctx.as_context().into_inner(), index as u64)
-            .map(value_from)
+            .map(value_from_ref)
     }
 
     fn set(
@@ -504,7 +504,7 @@ impl WasmTable<Engine> for Table {
             .set(
                 ctx.as_context_mut().into_inner(),
                 index as u64,
-                value_into(value),
+                value_into_ref(value),
             )
             .map_err(Error::new)
     }
@@ -518,10 +518,10 @@ fn value_from(value: wasmi::Val) -> Value<Engine> {
         wasmi::Val::F32(x) => Value::F32(x.to_float()),
         wasmi::Val::F64(x) => Value::F64(x.to_float()),
         wasmi::Val::V128(_) => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
-        wasmi::Val::FuncRef(wasmi::Ref::Null) => Value::FuncRef(None),
-        wasmi::Val::FuncRef(wasmi::Ref::Val(f)) => Value::FuncRef(Some(Func::new(f))),
-        wasmi::Val::ExternRef(wasmi::Ref::Null) => Value::ExternRef(None),
-        wasmi::Val::ExternRef(wasmi::Ref::Val(e)) => Value::ExternRef(Some(ExternRef::new(e))),
+        wasmi::Val::FuncRef(wasmi::Nullable::Null) => Value::FuncRef(None),
+        wasmi::Val::FuncRef(wasmi::Nullable::Val(f)) => Value::FuncRef(Some(Func::new(f))),
+        wasmi::Val::ExternRef(wasmi::Nullable::Null) => Value::ExternRef(None),
+        wasmi::Val::ExternRef(wasmi::Nullable::Val(e)) => Value::ExternRef(Some(ExternRef::new(e))),
     }
 }
 
@@ -532,12 +532,10 @@ fn value_into(value: Value<Engine>) -> wasmi::Val {
         Value::I64(x) => wasmi::Val::I64(x),
         Value::F32(x) => wasmi::Val::F32(wasmi::F32::from_float(x)),
         Value::F64(x) => wasmi::Val::F64(wasmi::F64::from_float(x)),
-        Value::FuncRef(x) => {
-            wasmi::Val::FuncRef(x.map_or(wasmi::Ref::Null, |f| wasmi::Ref::Val(f.into_inner())))
-        }
-        Value::ExternRef(x) => {
-            wasmi::Val::ExternRef(x.map_or(wasmi::Ref::Null, |e| wasmi::Ref::Val(e.into_inner())))
-        }
+        Value::FuncRef(None) => wasmi::Val::FuncRef(wasmi::Nullable::Null),
+        Value::FuncRef(Some(x)) => wasmi::Val::FuncRef(wasmi::Nullable::Val(x.into_inner())),
+        Value::ExternRef(None) => wasmi::Val::ExternRef(wasmi::Nullable::Null),
+        Value::ExternRef(Some(x)) => wasmi::Val::ExternRef(wasmi::Nullable::Val(x.into_inner())),
     }
 }
 
@@ -553,6 +551,52 @@ fn value_type_from(ty: wasmi::ValType) -> ValueType {
         }
         wasmi::ValType::FuncRef => ValueType::FuncRef,
         wasmi::ValType::ExternRef => ValueType::ExternRef,
+    }
+}
+
+/// Convert a [`Value<Engine>`] to a [`wasmi::Ref`].
+fn value_into_ref(value: Value<Engine>) -> wasmi::Ref {
+    match value {
+        Value::FuncRef(x) => wasmi::Ref::Func(match x {
+            None => wasmi::Nullable::Null,
+            Some(x) => wasmi::Nullable::Val(x.into_inner()),
+        }),
+        Value::ExternRef(x) => wasmi::Ref::Extern(match x {
+            None => wasmi::Nullable::Null,
+            Some(x) => wasmi::Nullable::Val(x.into_inner()),
+        }),
+        Value::I32(_) | Value::I64(_) | Value::F32(_) | Value::F64(_) => {
+            panic!("Attempt to convert non-reference value to a reference")
+        }
+    }
+}
+
+/// Convert a [`wasmi::Ref`] to a [`Value<Engine>`].
+fn value_from_ref(ref_: wasmi::Ref) -> Value<Engine> {
+    match ref_ {
+        wasmi::Ref::Func(wasmi::Nullable::Null) => Value::FuncRef(None),
+        wasmi::Ref::Func(wasmi::Nullable::Val(x)) => Value::FuncRef(Some(Func::new(x))),
+        wasmi::Ref::Extern(wasmi::Nullable::Null) => Value::ExternRef(None),
+        wasmi::Ref::Extern(wasmi::Nullable::Val(x)) => Value::ExternRef(Some(ExternRef::new(x))),
+    }
+}
+
+/// Convert a [`wasmi::RefType`] to a [`ValueType`].
+fn value_type_from_ref_type(ty: wasmi::RefType) -> ValueType {
+    match ty {
+        wasmi::RefType::Func => ValueType::FuncRef,
+        wasmi::RefType::Extern => ValueType::ExternRef,
+    }
+}
+
+/// Convert a [`ValueType`] to a [`wasmi::RefType`].
+fn value_type_into_ref_type(ty: ValueType) -> wasmi::RefType {
+    match ty {
+        ValueType::FuncRef => wasmi::RefType::Func,
+        ValueType::ExternRef => wasmi::RefType::Extern,
+        ValueType::I32 | ValueType::I64 | ValueType::F32 | ValueType::F64 => {
+            panic!("Attempt to convert non-reference type to a reference type")
+        }
     }
 }
 
@@ -610,7 +654,7 @@ fn memory_type_into(ty: MemoryType) -> wasmi::MemoryType {
 /// Convert a [`wasmi::TableType`] to a [`TableType`].
 fn table_type_from(ty: wasmi::TableType) -> TableType {
     TableType::new(
-        value_type_from(ty.element()),
+        value_type_from_ref_type(ty.element()),
         expect_table32(ty.minimum()),
         ty.maximum().map(expect_table32),
     )
@@ -623,7 +667,11 @@ fn expect_table32(x: u64) -> u32 {
 
 /// Convert a [`TableType`] to a [`wasmi::TableType`].
 fn table_type_into(ty: TableType) -> wasmi::TableType {
-    wasmi::TableType::new(value_type_into(ty.element()), ty.minimum(), ty.maximum())
+    wasmi::TableType::new(
+        value_type_into_ref_type(ty.element()),
+        ty.minimum(),
+        ty.maximum(),
+    )
 }
 
 /// Convert a [`wasmi::Extern`] to an [`Extern<Engine>`].

@@ -645,7 +645,7 @@ fn value_from_ref(ref_: wasmtime::Ref) -> Value<Engine> {
     }
 }
 
-/// Convert a [`wasmtime::ValType`] to a [`ValueType`].
+/// Convert a [`wasmtime::RefType`] to a [`ValueType`].
 fn value_type_from_ref_type(ty: &wasmtime::RefType) -> ValueType {
     match ty {
         _ if wasmtime::RefType::eq(ty, &wasmtime::RefType::FUNCREF) => ValueType::FuncRef,
@@ -655,7 +655,7 @@ fn value_type_from_ref_type(ty: &wasmtime::RefType) -> ValueType {
     }
 }
 
-/// Convert a [`ValueType`] to a [`wasmtime::ValType`].
+/// Convert a [`ValueType`] to a [`wasmtime::RefType`].
 fn value_type_into_ref_type(ty: ValueType) -> wasmtime::RefType {
     match ty {
         ValueType::FuncRef => wasmtime::RefType::FUNCREF,
