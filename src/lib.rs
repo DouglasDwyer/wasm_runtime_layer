@@ -38,13 +38,13 @@
 //!     .unwrap()
 //!     .into_func()
 //!     .unwrap();
-//!         
-//! let mut result = [Value::I32(0)];
+//!
+//! let mut result = [Val::Num(Num::I32(0))];
 //! add_one
-//!     .call(&mut store, &[Value::I32(42)], &mut result)
+//!     .call(&mut store, &[Val::Num(Num::I32(42))], &mut result)
 //!     .unwrap();
 //!
-//! assert_eq!(result[0], Value::I32(43));
+//! assert_eq!(result[0], Val::Num(Num::I32(43)));
 //! ```
 //!
 //! ## Backends
@@ -103,8 +103,57 @@ const DEFAULT_ARGUMENT_SIZE: usize = 4;
 type ArgumentVec<T> = SmallVec<[T; DEFAULT_ARGUMENT_SIZE]>;
 
 /// Type of a value.
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum ValType {
+    /// A numeric value.
+    Num(NumType),
+    /// A vector.
+    Vec(VecType),
+    /// A reference.
+    Ref(RefType),
+}
+
+impl fmt::Debug for ValType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Num(n) => n.fmt(f),
+            Self::Vec(v) => v.fmt(f),
+            Self::Ref(r) => r.fmt(f),
+        }
+    }
+}
+
+impl fmt::Display for ValType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Num(n) => n.fmt(f),
+            Self::Vec(v) => v.fmt(f),
+            Self::Ref(r) => r.fmt(f),
+        }
+    }
+}
+
+impl From<NumType> for ValType {
+    fn from(ty: NumType) -> Self {
+        Self::Num(ty)
+    }
+}
+
+impl From<VecType> for ValType {
+    fn from(ty: VecType) -> Self {
+        Self::Vec(ty)
+    }
+}
+
+impl From<RefType> for ValType {
+    fn from(ty: RefType) -> Self {
+        Self::Ref(ty)
+    }
+}
+
+/// Type of a numeric value.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ValueType {
+pub enum NumType {
     /// 32-bit signed or unsigned integer.
     I32,
     /// 64-bit signed or unsigned integer.
@@ -113,21 +162,48 @@ pub enum ValueType {
     F32,
     /// 64-bit floating point number.
     F64,
+}
+
+impl fmt::Display for NumType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::I32 => write!(f, "i32"),
+            Self::I64 => write!(f, "i64"),
+            Self::F32 => write!(f, "f32"),
+            Self::F64 => write!(f, "f64"),
+        }
+    }
+}
+
+/// Type of a vector.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum VecType {
+    /// 128-bit SIMD vector
+    V128,
+}
+
+impl fmt::Display for VecType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::V128 => write!(f, "v128"),
+        }
+    }
+}
+
+/// Type of a reference.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum RefType {
     /// An optional function reference.
     FuncRef,
     /// An optional external reference.
     ExternRef,
 }
 
-impl fmt::Display for ValueType {
+impl fmt::Display for RefType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ValueType::I32 => write!(f, "i32"),
-            ValueType::I64 => write!(f, "i64"),
-            ValueType::F32 => write!(f, "f32"),
-            ValueType::F64 => write!(f, "f64"),
-            ValueType::FuncRef => write!(f, "funcref"),
-            ValueType::ExternRef => write!(f, "externref"),
+            Self::FuncRef => write!(f, "funcref"),
+            Self::ExternRef => write!(f, "externref"),
         }
     }
 }
@@ -136,19 +212,19 @@ impl fmt::Display for ValueType {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct GlobalType {
     /// The value type of the global variable.
-    content: ValueType,
+    content: ValType,
     /// The mutability of the global variable.
     mutable: bool,
 }
 
 impl GlobalType {
-    /// Creates a new [`GlobalType`] from the given [`ValueType`] and mutability.
-    pub fn new(content: ValueType, mutable: bool) -> Self {
+    /// Creates a new [`GlobalType`] from the given [`ValType`] and mutability.
+    pub fn new(content: ValType, mutable: bool) -> Self {
         Self { content, mutable }
     }
 
-    /// Returns the [`ValueType`] of the global variable.
-    pub fn content(&self) -> ValueType {
+    /// Returns the [`ValType`] of the global variable.
+    pub fn content(&self) -> ValType {
         self.content
     }
 
@@ -161,8 +237,8 @@ impl GlobalType {
 /// A descriptor for a [`Table`] instance.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TableType {
-    /// The type of values stored in the [`Table`].
-    element: ValueType,
+    /// The type of references stored in the [`Table`].
+    element: RefType,
     /// The minimum number of elements the [`Table`] must have.
     min: u32,
     /// The optional maximum number of elements the [`Table`] can have.
@@ -177,15 +253,15 @@ impl TableType {
     /// # Panics
     ///
     /// If `min` is greater than `max`.
-    pub fn new(element: ValueType, min: u32, max: Option<u32>) -> Self {
+    pub fn new(element: RefType, min: u32, max: Option<u32>) -> Self {
         if let Some(max) = max {
             assert!(min <= max);
         }
         Self { element, min, max }
     }
 
-    /// Returns the [`ValueType`] of elements stored in the [`Table`].
-    pub fn element(&self) -> ValueType {
+    /// Returns the [`RefType`] of elements stored in the [`Table`].
+    pub fn element(&self) -> RefType {
         self.element
     }
 
@@ -251,7 +327,7 @@ pub struct FuncType {
     /// by results in their order.
     /// The `len_params` field denotes how many parameters there are in
     /// the head of the vector before the results.
-    params_results: Arc<[ValueType]>,
+    params_results: Arc<[ValType]>,
     /// A debug name used for debugging or tracing purposes.
     name: Option<Arc<str>>,
 }
@@ -311,8 +387,8 @@ impl FuncType {
     /// Creates a new [`FuncType`].
     pub fn new<P, R>(params: P, results: R) -> Self
     where
-        P: IntoIterator<Item = ValueType>,
-        R: IntoIterator<Item = ValueType>,
+        P: IntoIterator<Item = ValType>,
+        R: IntoIterator<Item = ValType>,
     {
         let mut params_results = params.into_iter().collect::<Vec<_>>();
         let len_params = params_results.len();
@@ -325,12 +401,12 @@ impl FuncType {
     }
 
     /// Returns the parameter types of the function type.
-    pub fn params(&self) -> &[ValueType] {
+    pub fn params(&self) -> &[ValType] {
         &self.params_results[..self.len_params]
     }
 
     /// Returns the result types of the function type.
-    pub fn results(&self) -> &[ValueType] {
+    pub fn results(&self) -> &[ValType] {
         &self.params_results[self.len_params..]
     }
 
@@ -346,19 +422,19 @@ impl FuncType {
 /// A list of all possible types which can be externally referenced from a WebAssembly module.
 #[derive(Clone, Debug)]
 pub enum ExternType {
-    /// The type of an [`Extern::Global`].
-    Global(GlobalType),
+    /// The type of an [`Extern::Func`].
+    Func(FuncType),
     /// The type of an [`Extern::Table`].
     Table(TableType),
     /// The type of an [`Extern::Memory`].
     Memory(MemoryType),
-    /// The type of an [`Extern::Func`].
-    Func(FuncType),
+    /// The type of an [`Extern::Global`].
+    Global(GlobalType),
 }
 
-impl From<GlobalType> for ExternType {
-    fn from(global: GlobalType) -> Self {
-        Self::Global(global)
+impl From<FuncType> for ExternType {
+    fn from(func: FuncType) -> Self {
+        Self::Func(func)
     }
 }
 
@@ -374,17 +450,17 @@ impl From<MemoryType> for ExternType {
     }
 }
 
-impl From<FuncType> for ExternType {
-    fn from(func: FuncType) -> Self {
-        Self::Func(func)
+impl From<GlobalType> for ExternType {
+    fn from(global: GlobalType) -> Self {
+        Self::Global(global)
     }
 }
 
 impl ExternType {
-    /// Returns the underlying [`GlobalType`] or `None` if it is of a different type.
-    pub fn global(&self) -> Option<&GlobalType> {
+    /// Returns the underlying [`FuncType`] or `None` if it is of a different type.
+    pub fn func(&self) -> Option<&FuncType> {
         match self {
-            Self::Global(ty) => Some(ty),
+            Self::Func(ty) => Some(ty),
             _ => None,
         }
     }
@@ -405,10 +481,10 @@ impl ExternType {
         }
     }
 
-    /// Returns the underlying [`FuncType`] or `None` if it is of a different type.
-    pub fn func(&self) -> Option<&FuncType> {
+    /// Returns the underlying [`GlobalType`] or `None` if it is of a different type.
+    pub fn global(&self) -> Option<&GlobalType> {
         match self {
-            Self::Func(ty) => Some(ty),
+            Self::Global(ty) => Some(ty),
             _ => None,
         }
     }
@@ -431,18 +507,18 @@ impl ExternType {
         }
     }
 
-    /// Return the underlying [`GlobalType`] if the types match
-    pub fn try_into_global(self) -> Result<GlobalType, Self> {
-        if let Self::Global(v) = self {
+    /// Return the underlying [`MemoryType`] if the types match
+    pub fn try_into_memory(self) -> Result<MemoryType, Self> {
+        if let Self::Memory(v) = self {
             Ok(v)
         } else {
             Err(self)
         }
     }
 
-    /// Return the underlying [`MemoryType`] if the types match
-    pub fn try_into_memory(self) -> Result<MemoryType, Self> {
-        if let Self::Memory(v) = self {
+    /// Return the underlying [`GlobalType`] if the types match
+    pub fn try_into_global(self) -> Result<GlobalType, Self> {
+        if let Self::Global(v) = self {
             Ok(v)
         } else {
             Err(self)
@@ -483,25 +559,25 @@ pub struct ImportType<'module> {
 /// or [`Instance::get_export`](crate::Instance::get_export).
 #[derive(Clone, Debug)]
 pub enum Extern {
-    /// A WebAssembly global which acts like a [`Cell<T>`] of sorts, supporting `get` and `set` operations.
-    ///
-    /// [`Cell<T>`]: https://doc.rust-lang.org/core/cell/struct.Cell.html
-    Global(Global),
+    /// A WebAssembly function which can be called.
+    Func(Func),
     /// A WebAssembly table which is an array of funtion references.
     Table(Table),
     /// A WebAssembly linear memory.
     Memory(Memory),
-    /// A WebAssembly function which can be called.
-    Func(Func),
+    /// A WebAssembly global which acts like a [`Cell<T>`] of sorts, supporting `get` and `set` operations.
+    ///
+    /// [`Cell<T>`]: https://doc.rust-lang.org/core/cell/struct.Cell.html
+    Global(Global),
 }
 
 impl Extern {
-    /// Returns the underlying global variable if `self` is a global variable.
+    /// Returns the underlying function if `self` is a function.
     ///
     /// Returns `None` otherwise.
-    pub fn into_global(self) -> Option<Global> {
-        if let Self::Global(global) = self {
-            return Some(global);
+    pub fn into_func(self) -> Option<Func> {
+        if let Self::Func(func) = self {
+            return Some(func);
         }
         None
     }
@@ -526,12 +602,12 @@ impl Extern {
         None
     }
 
-    /// Returns the underlying function if `self` is a function.
+    /// Returns the underlying global variable if `self` is a global variable.
     ///
     /// Returns `None` otherwise.
-    pub fn into_func(self) -> Option<Func> {
-        if let Self::Func(func) = self {
-            return Some(func);
+    pub fn into_global(self) -> Option<Global> {
+        if let Self::Global(global) = self {
+            return Some(global);
         }
         None
     }
@@ -539,10 +615,10 @@ impl Extern {
     /// Returns the type associated with this [`Extern`].
     pub fn ty(&self, ctx: impl AsContext) -> ExternType {
         match self {
-            Extern::Global(global) => global.ty(ctx).into(),
+            Extern::Func(func) => func.ty(ctx).into(),
             Extern::Table(table) => table.ty(ctx).into(),
             Extern::Memory(memory) => memory.ty(ctx).into(),
-            Extern::Func(func) => func.ty(ctx).into(),
+            Extern::Global(global) => global.ty(ctx).into(),
         }
     }
 }
@@ -550,8 +626,8 @@ impl Extern {
 impl<E: WasmEngine> From<&crate::backend::Extern<E>> for Extern {
     fn from(value: &crate::backend::Extern<E>) -> Self {
         match value {
-            crate::backend::Extern::Global(x) => Self::Global(Global {
-                global: BackendObject::new(x.clone()),
+            crate::backend::Extern::Func(x) => Self::Func(Func {
+                func: BackendObject::new(x.clone()),
             }),
             crate::backend::Extern::Table(x) => Self::Table(Table {
                 table: BackendObject::new(x.clone()),
@@ -559,8 +635,8 @@ impl<E: WasmEngine> From<&crate::backend::Extern<E>> for Extern {
             crate::backend::Extern::Memory(x) => Self::Memory(Memory {
                 memory: BackendObject::new(x.clone()),
             }),
-            crate::backend::Extern::Func(x) => Self::Func(Func {
-                func: BackendObject::new(x.clone()),
+            crate::backend::Extern::Global(x) => Self::Global(Global {
+                global: BackendObject::new(x.clone()),
             }),
         }
     }
@@ -569,10 +645,10 @@ impl<E: WasmEngine> From<&crate::backend::Extern<E>> for Extern {
 impl<E: WasmEngine> From<&Extern> for crate::backend::Extern<E> {
     fn from(value: &Extern) -> Self {
         match value {
-            Extern::Global(x) => Self::Global(x.global.cast::<E::Global>().clone()),
+            Extern::Func(x) => Self::Func(x.func.cast::<E::Func>().clone()),
             Extern::Table(x) => Self::Table(x.table.cast::<E::Table>().clone()),
             Extern::Memory(x) => Self::Memory(x.memory.cast::<E::Memory>().clone()),
-            Extern::Func(x) => Self::Func(x.func.cast::<E::Func>().clone()),
+            Extern::Global(x) => Self::Global(x.global.cast::<E::Global>().clone()),
         }
     }
 }
@@ -805,7 +881,7 @@ impl<'a, T: 'static, E: WasmEngine> StoreContextMut<'a, T, E> {
 
     /// Access the underlying data owned by this store.
     ///
-    /// Same as [`Store::data`].    
+    /// Same as [`Store::data`].
     pub fn data(&self) -> &T {
         self.inner.data()
     }
@@ -819,14 +895,96 @@ impl<'a, T: 'static, E: WasmEngine> StoreContextMut<'a, T, E> {
 }
 
 /// Runtime representation of a value.
+#[derive(Clone)]
+pub enum Val {
+    /// Numerical value.
+    Num(Num),
+    /// Vector.
+    Vec(Vec_),
+    /// Reference.
+    Ref(Ref),
+}
+
+impl fmt::Debug for Val {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Num(n) => n.fmt(f),
+            Self::Vec(v) => v.fmt(f),
+            Self::Ref(r) => r.fmt(f),
+        }
+    }
+}
+
+impl Val {
+    /// Returns the [`ValType`] for this [`Val`].
+    #[must_use]
+    pub const fn ty(&self) -> ValType {
+        match self {
+            Self::Num(n) => ValType::Num(n.ty()),
+            Self::Vec(v) => ValType::Vec(v.ty()),
+            Self::Ref(r) => ValType::Ref(r.ty()),
+        }
+    }
+}
+
+impl PartialEq for Val {
+    fn eq(&self, o: &Self) -> bool {
+        match (self, o) {
+            (Self::Num(a), Self::Num(b)) => a == b,
+            (Self::Vec(a), Self::Vec(b)) => a == b,
+            (Self::Ref(_), Self::Ref(_)) => false,
+            _ => false,
+        }
+    }
+}
+
+impl From<Num> for Val {
+    fn from(val: Num) -> Self {
+        Self::Num(val)
+    }
+}
+
+impl From<Vec_> for Val {
+    fn from(val: Vec_) -> Self {
+        Self::Vec(val)
+    }
+}
+
+impl From<Ref> for Val {
+    fn from(val: Ref) -> Self {
+        Self::Ref(val)
+    }
+}
+
+impl<E: WasmEngine> From<&Val> for crate::backend::Val<E> {
+    fn from(value: &Val) -> Self {
+        match value {
+            Val::Num(n) => Self::Num(*n),
+            Val::Vec(v) => Self::Vec(*v),
+            Val::Ref(r) => Self::Ref(r.into()),
+        }
+    }
+}
+
+impl<E: WasmEngine> From<&backend::Val<E>> for Val {
+    fn from(value: &crate::backend::Val<E>) -> Self {
+        match value {
+            backend::Val::Num(n) => Self::Num(*n),
+            backend::Val::Vec(v) => Self::Vec(*v),
+            backend::Val::Ref(r) => Self::Ref(r.into()),
+        }
+    }
+}
+
+/// Runtime representation of a numerical value.
 ///
 /// Wasm code manipulate values of the four basic value types:
 /// integers and floating-point data of 32 or 64 bit width each, respectively.
 ///
 /// There is no distinction between signed and unsigned integer types. Instead, integers are
 /// interpreted by respective operations as either unsigned or signed in two’s complement representation.
-#[derive(Clone, Debug)]
-pub enum Value {
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Num {
     /// Value of 32-bit signed or unsigned integer.
     I32(i32),
     /// Value of 64-bit signed or unsigned integer.
@@ -835,73 +993,82 @@ pub enum Value {
     F32(f32),
     /// Value of 64-bit floating point number.
     F64(f64),
+}
+
+impl Num {
+    /// Returns the [`NumType`] for this [`Num`].
+    #[must_use]
+    pub const fn ty(&self) -> NumType {
+        match self {
+            Self::I32(_) => NumType::I32,
+            Self::I64(_) => NumType::I64,
+            Self::F32(_) => NumType::F32,
+            Self::F64(_) => NumType::F64,
+        }
+    }
+}
+
+/// Runtime representation of a vector.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Vec_ {
+    /// 128-bit SIMD vector.
+    V128(u128),
+}
+
+impl Vec_ {
+    /// Returns the [`VecType`] for this [`Vec_`].
+    #[must_use]
+    pub const fn ty(&self) -> VecType {
+        match self {
+            Self::V128(_) => VecType::V128,
+        }
+    }
+}
+
+/// Runtime representation of a reference.
+#[derive(Clone, Debug)]
+pub enum Ref {
     /// An optional function reference.
     FuncRef(Option<Func>),
     /// An optional external reference.
     ExternRef(Option<ExternRef>),
 }
 
-impl Value {
-    /// Returns the [`ValueType`] for this [`Value`].
+impl Ref {
+    /// Returns the [`RefType`] for this [`Ref`].
     #[must_use]
-    pub const fn ty(&self) -> ValueType {
+    pub const fn ty(&self) -> RefType {
         match self {
-            Value::I32(_) => ValueType::I32,
-            Value::I64(_) => ValueType::I64,
-            Value::F32(_) => ValueType::F32,
-            Value::F64(_) => ValueType::F64,
-            Value::FuncRef(_) => ValueType::FuncRef,
-            Value::ExternRef(_) => ValueType::ExternRef,
+            Self::FuncRef(_) => RefType::FuncRef,
+            Self::ExternRef(_) => RefType::ExternRef,
         }
     }
 }
 
-impl PartialEq for Value {
-    fn eq(&self, o: &Self) -> bool {
-        match (self, o) {
-            (Self::I32(a), Self::I32(b)) => a == b,
-            (Self::I64(a), Self::I64(b)) => a == b,
-            (Self::F32(a), Self::F32(b)) => a == b,
-            (Self::F64(a), Self::F64(b)) => a == b,
-            _ => false,
-        }
-    }
-}
-
-impl<E: WasmEngine> From<&Value> for crate::backend::Value<E> {
-    fn from(value: &Value) -> Self {
-        match value {
-            Value::I32(i32) => Self::I32(*i32),
-            Value::I64(i64) => Self::I64(*i64),
-            Value::F32(f32) => Self::F32(*f32),
-            Value::F64(f64) => Self::F64(*f64),
-            Value::FuncRef(None) => Self::FuncRef(None),
-            Value::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
-            Value::ExternRef(None) => Self::ExternRef(None),
-            Value::ExternRef(Some(extern_ref)) => {
+impl<E: WasmEngine> From<&Ref> for crate::backend::Ref<E> {
+    fn from(ref_: &Ref) -> Self {
+        match ref_ {
+            Ref::FuncRef(None) => Self::FuncRef(None),
+            Ref::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
+            Ref::ExternRef(None) => Self::ExternRef(None),
+            Ref::ExternRef(Some(extern_ref)) => {
                 Self::ExternRef(Some(extern_ref.extern_ref.cast::<E::ExternRef>().clone()))
             }
         }
     }
 }
 
-impl<E: WasmEngine> From<&backend::Value<E>> for Value {
-    fn from(value: &crate::backend::Value<E>) -> Self {
-        match value {
-            crate::backend::Value::I32(i32) => Self::I32(*i32),
-            crate::backend::Value::I64(i64) => Self::I64(*i64),
-            crate::backend::Value::F32(f32) => Self::F32(*f32),
-            crate::backend::Value::F64(f64) => Self::F64(*f64),
-            crate::backend::Value::FuncRef(None) => Self::FuncRef(None),
-            crate::backend::Value::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
+impl<E: WasmEngine> From<&backend::Ref<E>> for Ref {
+    fn from(ref_: &backend::Ref<E>) -> Self {
+        match ref_ {
+            backend::Ref::FuncRef(None) => Self::FuncRef(None),
+            backend::Ref::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
                 func: BackendObject::new(func.clone()),
             })),
-            crate::backend::Value::ExternRef(None) => Self::ExternRef(None),
-            crate::backend::Value::ExternRef(Some(extern_ref)) => {
-                Self::ExternRef(Some(ExternRef {
-                    extern_ref: BackendObject::new(extern_ref.clone()),
-                }))
-            }
+            backend::Ref::ExternRef(None) => Self::ExternRef(None),
+            backend::Ref::ExternRef(Some(extern_ref)) => Self::ExternRef(Some(ExternRef {
+                extern_ref: BackendObject::new(extern_ref.clone()),
+            })),
         }
     }
 }
@@ -950,7 +1117,7 @@ impl Func {
         func: impl 'static
             + Send
             + Sync
-            + Fn(StoreContextMut<'_, C::UserState, C::Engine>, &[Value], &mut [Value]) -> Result<()>,
+            + Fn(StoreContextMut<'_, C::UserState, C::Engine>, &[Val], &mut [Val]) -> Result<()>,
     ) -> Self {
         let raw_func = <<C::Engine as WasmEngine>::Func as WasmFunc<C::Engine>>::new(
             ctx.as_context_mut().inner,
@@ -990,8 +1157,8 @@ impl Func {
     pub fn call<C: AsContextMut>(
         &self,
         mut ctx: C,
-        args: &[Value],
-        results: &mut [Value],
+        args: &[Val],
+        results: &mut [Val],
     ) -> Result<()> {
         let raw_func = self.func.cast::<<C::Engine as WasmEngine>::Func>();
 
@@ -1020,7 +1187,7 @@ pub struct Global {
 
 impl Global {
     /// Creates a new global variable to the store.
-    pub fn new<C: AsContextMut>(mut ctx: C, initial_value: Value, mutable: bool) -> Self {
+    pub fn new<C: AsContextMut>(mut ctx: C, initial_value: Val, mutable: bool) -> Self {
         Self {
             global: BackendObject::new(<<C::Engine as WasmEngine>::Global as WasmGlobal<
                 C::Engine,
@@ -1040,7 +1207,7 @@ impl Global {
     }
 
     /// Returns the current value of the global variable.
-    pub fn get<C: AsContextMut>(&self, mut ctx: C) -> Value {
+    pub fn get<C: AsContextMut>(&self, mut ctx: C) -> Val {
         (&self
             .global
             .cast::<<C::Engine as WasmEngine>::Global>()
@@ -1049,7 +1216,7 @@ impl Global {
     }
 
     /// Sets a new value to the global variable.
-    pub fn set<C: AsContextMut>(&self, mut ctx: C, new_value: Value) -> Result<()> {
+    pub fn set<C: AsContextMut>(&self, mut ctx: C, new_value: Val) -> Result<()> {
         self.global
             .cast::<<C::Engine as WasmEngine>::Global>()
             .set(ctx.as_context_mut().inner, (&new_value).into())
@@ -1215,7 +1382,7 @@ pub struct Table {
 
 impl Table {
     /// Creates a new table to the store.
-    pub fn new<C: AsContextMut>(mut ctx: C, ty: TableType, init: Value) -> Result<Self> {
+    pub fn new<C: AsContextMut>(mut ctx: C, ty: TableType, init: Ref) -> Result<Self> {
         Ok(Self {
             table: BackendObject::new(<<C::Engine as WasmEngine>::Table as WasmTable<
                 C::Engine,
@@ -1242,16 +1409,16 @@ impl Table {
     /// Grows the table by the given amount of elements.
     ///
     /// Returns the old size of the [`Table`] upon success.
-    pub fn grow<C: AsContextMut>(&self, mut ctx: C, delta: u32, init: Value) -> Result<u32> {
+    pub fn grow<C: AsContextMut>(&self, mut ctx: C, delta: u32, init: Ref) -> Result<u32> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 
         <_ as WasmTable<_>>::grow(table, ctx.as_context_mut().inner, delta, (&init).into())
     }
 
-    /// Returns the [`Table`] element value at `index`.
+    /// Returns the [`Table`] element at `index`.
     ///
     /// Returns `None` if `index` is out of bounds.
-    pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Value> {
+    pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Ref> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 
         <_ as WasmTable<_>>::get(table, ctx.as_context_mut().inner, index)
@@ -1259,11 +1426,11 @@ impl Table {
             .map(Into::into)
     }
 
-    /// Sets the [`Value`] of this [`Table`] at `index`.
-    pub fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, value: Value) -> Result<()> {
+    /// Sets the element of this [`Table`] at `index`.
+    pub fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, elem: Ref) -> Result<()> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 
-        <_ as WasmTable<_>>::set(table, ctx.as_context_mut().inner, index, (&value).into())
+        <_ as WasmTable<_>>::set(table, ctx.as_context_mut().inner, index, (&elem).into())
     }
 }
 
