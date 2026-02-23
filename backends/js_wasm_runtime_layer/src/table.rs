@@ -1,11 +1,11 @@
 use core::fmt;
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_runtime_layer::{
-    backend::{AsContext, AsContextMut, Value, WasmTable},
-    TableType, ValueType,
+    backend::{AsContext, AsContextMut, Ref, WasmTable},
+    RefType, TableType,
 };
 
 use crate::{
@@ -49,7 +49,7 @@ impl Table {
         let table = value.dyn_into::<WebAssembly::Table>().ok()?;
 
         assert!(table.length() >= ty.minimum());
-        assert_eq!(ty.element(), ValueType::FuncRef);
+        assert_eq!(ty.element(), RefType::FuncRef);
 
         let inner = TableInner { ty, table };
 
@@ -60,18 +60,14 @@ impl Table {
 impl ToStoredJs for Table {
     type Repr = WebAssembly::Table;
 
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Table {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<WebAssembly::Table> {
         let inner = &store.tables[self.id];
-        inner.table.clone()
+        Ok(inner.table.clone())
     }
 }
 
 impl WasmTable<Engine> for Table {
-    fn new(
-        mut ctx: impl AsContextMut<Engine>,
-        ty: TableType,
-        init: Value<Engine>,
-    ) -> anyhow::Result<Self> {
+    fn new(mut ctx: impl AsContextMut<Engine>, ty: TableType, init: Ref<Engine>) -> Result<Self> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("Table::new", ?ty, ?init).entered();
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
@@ -88,7 +84,7 @@ impl WasmTable<Engine> for Table {
 
         for i in 0..ty.minimum() {
             table
-                .set(i, init.to_stored_js(&ctx).unchecked_ref())
+                .set(i, init.to_stored_js(&ctx)?.unchecked_ref())
                 .unwrap();
         }
 
@@ -118,10 +114,10 @@ impl WasmTable<Engine> for Table {
         &self,
         mut ctx: impl AsContextMut<Engine>,
         delta: u32,
-        init: Value<Engine>,
-    ) -> anyhow::Result<u32> {
+        init: Ref<Engine>,
+    ) -> Result<u32> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
-        let init = init.to_stored_js(ctx);
+        let init = init.to_stored_js(ctx)?;
         let init = init.unchecked_ref();
 
         let inner = &mut ctx.tables[self.id];
@@ -135,7 +131,7 @@ impl WasmTable<Engine> for Table {
     }
 
     /// Returns the table element value at `index`.
-    fn get(&self, _: impl AsContextMut<Engine>, _: u32) -> Option<Value<Engine>> {
+    fn get(&self, _: impl AsContextMut<Engine>, _: u32) -> Option<Ref<Engine>> {
         // It is not possible to determine the type or signature of the value.
         //
         // To enable this we would need to cache and intern a unique id for each value to be able
@@ -147,25 +143,20 @@ impl WasmTable<Engine> for Table {
     }
 
     /// Sets the value of this table at `index`.
-    fn set(
-        &self,
-        mut ctx: impl AsContextMut<Engine>,
-        index: u32,
-        value: Value<Engine>,
-    ) -> anyhow::Result<()> {
+    fn set(&self, mut ctx: impl AsContextMut<Engine>, index: u32, elem: Ref<Engine>) -> Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
-        // RA breaks on this and sees the wrong impl of `value.get`
+        // RA breaks on this and sees the wrong impl of `elem.get`
         //
-        // Explicitely telling it that this is a slice of Value<Engine> causes it to see the
+        // Explicitely telling it that this is a slice of Ref<Engine> causes it to see the
         // slice::get method rather than the WasmTable::get function, which shouldn't happen and is
         // a bug since &[]` does not implement `WasmTable`, but alas...
-        let value = value.to_stored_js(ctx);
+        let elem = elem.to_stored_js(ctx)?;
 
         let inner: &mut TableInner = &mut ctx.tables[self.id];
 
         inner
             .table
-            .set(index, value.unchecked_ref())
+            .set(index, elem.unchecked_ref())
             .map_err(JsErrorMsg::from)
             .context("Invalid index")?;
 

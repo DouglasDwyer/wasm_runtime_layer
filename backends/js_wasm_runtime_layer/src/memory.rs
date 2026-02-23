@@ -1,3 +1,4 @@
+use anyhow::Result;
 use js_sys::{ArrayBuffer, Object, Reflect, Uint8Array, WebAssembly};
 use wasm_bindgen::{JsCast as _, JsValue};
 use wasm_runtime_layer::{
@@ -35,10 +36,9 @@ impl MemoryInner {
 
 impl ToStoredJs for Memory {
     type Repr = WebAssembly::Memory;
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Memory {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<WebAssembly::Memory> {
         let memory = &store.memories[self.id];
-
-        memory.value.clone()
+        Ok(memory.value.clone())
     }
 }
 
@@ -59,7 +59,7 @@ impl Memory {
 }
 
 impl WasmMemory<Engine> for Memory {
-    fn new(mut ctx: impl AsContextMut<Engine>, ty: MemoryType) -> anyhow::Result<Self> {
+    fn new(mut ctx: impl AsContextMut<Engine>, ty: MemoryType) -> Result<Self> {
         let desc = Object::new();
         Reflect::set(&desc, &"initial".into(), &ty.initial_pages().into()).unwrap();
         if let Some(maximum) = ty.maximum_pages() {
@@ -77,7 +77,7 @@ impl WasmMemory<Engine> for Memory {
         ctx.as_context().memories[self.id].ty
     }
 
-    fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> anyhow::Result<u32> {
+    fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
 
         let inner = &mut ctx.memories[self.id];
@@ -88,12 +88,7 @@ impl WasmMemory<Engine> for Memory {
         todo!("Memory::current_pages is not yet supported in the js_wasm_runtime_layer backend")
     }
 
-    fn read(
-        &self,
-        ctx: impl AsContext<Engine>,
-        offset: usize,
-        buffer: &mut [u8],
-    ) -> anyhow::Result<()> {
+    fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
         let ctx: &StoreInner<_> = &*ctx.as_context();
         let memory = &ctx.memories[self.id];
 
@@ -109,7 +104,7 @@ impl WasmMemory<Engine> for Memory {
         mut ctx: impl AsContextMut<Engine>,
         offset: usize,
         buffer: &[u8],
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
 
         let inner = &mut ctx.memories[self.id];

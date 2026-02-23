@@ -1,4 +1,4 @@
-use wasm_runtime_layer::{backend::WasmEngine, Engine, Imports, Instance, Module, Store, Value};
+use wasm_runtime_layer::{backend::WasmEngine, Engine, Imports, Instance, Module, Num, Store, Val};
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
@@ -58,10 +58,10 @@ fn add_one(engine: &Engine<impl WasmEngine>) {
         .into_func()
         .unwrap();
 
-    let mut result = [crate::Value::I32(0)];
+    let mut result = [Val::Num(Num::I32(0))];
     add_one
-        .call(&mut store, &[crate::Value::I32(42)], &mut result)
+        .call(&mut store, &[Val::Num(Num::I32(42))], &mut result)
         .unwrap();
 
-    assert_eq!(result[0], crate::Value::I32(43));
+    assert_eq!(result[0], Val::Num(Num::I32(43)));
 }
