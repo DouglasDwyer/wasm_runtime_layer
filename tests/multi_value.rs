@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use wasm_runtime_layer::{
-    backend::WasmEngine, Engine, Extern, Func, FuncType, Imports, Instance, Module, Num, NumType,
-    Store, Val, ValType,
+    backend::WasmEngine, Engine, Extern, Func, FuncType, Imports, Instance, Module, Store, Val,
+    ValType,
 };
 
 #[test]
@@ -66,10 +66,10 @@ fn multi_value(engine: &Engine<impl WasmEngine>) {
 
     let func = Func::new(
         &mut store,
-        FuncType::new([], [ValType::Num(NumType::I32), ValType::Num(NumType::I32)]),
+        FuncType::new([], [ValType::I32, ValType::I32]),
         |_, _, res| {
-            res[0] = Val::Num(Num::I32(5));
-            res[1] = Val::Num(Num::I32(4));
+            res[0] = Val::I32(5);
+            res[1] = Val::I32(4);
             Ok(())
         },
     );
@@ -91,13 +91,9 @@ fn multi_value(engine: &Engine<impl WasmEngine>) {
         unreachable!()
     };
 
-    let mut result = [Val::Num(Num::I32(0)), Val::Num(Num::I32(0))];
-    func.call(
-        &mut store,
-        &[Val::Num(Num::I32(5)), Val::Num(Num::I32(7))],
-        &mut result,
-    )
-    .unwrap();
+    let mut result = [Val::I32(0), Val::I32(0)];
+    func.call(&mut store, &[Val::I32(5), Val::I32(7)], &mut result)
+        .unwrap();
 
-    assert_eq!(result, [Val::Num(Num::I32(12)), Val::Num(Num::I32(1))]);
+    assert_eq!(result, [Val::I32(12), Val::I32(1)]);
 }

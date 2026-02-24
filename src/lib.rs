@@ -849,7 +849,7 @@ impl<'a, T: 'static, E: WasmEngine> StoreContextMut<'a, T, E> {
 }
 
 /// Runtime representation of a value.
-/// 
+///
 /// Wasm code manipulate values of the four basic value types:
 /// integers and floating-point data of 32 or 64 bit width each, respectively.
 ///

@@ -5,7 +5,7 @@ use js_sys::{Array, Function};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_runtime_layer::{
     backend::{AsContext, AsContextMut, Val, WasmFunc},
-    FuncType, Num,
+    FuncType,
 };
 
 use crate::{
@@ -133,7 +133,7 @@ impl WasmFunc<Engine> for Func {
         // live as long as this closure
         let store_ptr = store_ptr as *mut ();
 
-        let mut res = vec![Val::Num(Num::I32(0)); ty.results().len()];
+        let mut res = vec![Val::I32(0); ty.results().len()];
 
         let mut func = {
             move |mut store: StoreContextMut<T>, _ty: &FuncType, args: &[Val<Engine>]| {

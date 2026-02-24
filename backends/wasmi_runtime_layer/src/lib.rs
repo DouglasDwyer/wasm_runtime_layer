@@ -22,8 +22,8 @@ use wasm_runtime_layer::{
         WasmFunc, WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
         WasmStoreContextMut, WasmTable,
     },
-    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, RefType,
-    TableType, ValType,
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, RefType, TableType,
+    ValType,
 };
 
 /// The default amount of arguments and return values for which to allocate
@@ -526,9 +526,7 @@ fn value_from(value: wasmi::Val) -> Val<Engine> {
         wasmi::Val::FuncRef(wasmi::Nullable::Null) => Val::FuncRef(None),
         wasmi::Val::FuncRef(wasmi::Nullable::Val(f)) => Val::FuncRef(Some(Func::new(f))),
         wasmi::Val::ExternRef(wasmi::Nullable::Null) => Val::ExternRef(None),
-        wasmi::Val::ExternRef(wasmi::Nullable::Val(e)) => {
-            Val::ExternRef(Some(ExternRef::new(e)))
-        }
+        wasmi::Val::ExternRef(wasmi::Nullable::Val(e)) => Val::ExternRef(Some(ExternRef::new(e))),
     }
 }
 
@@ -541,13 +539,9 @@ fn value_into(value: Val<Engine>) -> wasmi::Val {
         Val::F64(x) => wasmi::Val::F64(wasmi::F64::from_float(x)),
         Val::V128(x) => wasmi::Val::V128(wasmi::V128::from(x)),
         Val::FuncRef(None) => wasmi::Val::FuncRef(wasmi::Nullable::Null),
-        Val::FuncRef(Some(x)) => {
-            wasmi::Val::FuncRef(wasmi::Nullable::Val(x.into_inner()))
-        }
+        Val::FuncRef(Some(x)) => wasmi::Val::FuncRef(wasmi::Nullable::Val(x.into_inner())),
         Val::ExternRef(None) => wasmi::Val::ExternRef(wasmi::Nullable::Null),
-        Val::ExternRef(Some(x)) => {
-            wasmi::Val::ExternRef(wasmi::Nullable::Val(x.into_inner()))
-        }
+        Val::ExternRef(Some(x)) => wasmi::Val::ExternRef(wasmi::Nullable::Val(x.into_inner())),
     }
 }
 

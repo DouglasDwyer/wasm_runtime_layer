@@ -22,8 +22,8 @@ use wasm_runtime_layer::{
         WasmFunc, WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
         WasmStoreContextMut, WasmTable,
     },
-    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, Num, NumType, RefType,
-    TableType, ValType, VecType, Vec_,
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, RefType, TableType,
+    ValType,
 };
 use wasmer::{AsStoreMut, AsStoreRef};
 
@@ -207,13 +207,13 @@ impl WasmFunc<Engine> for Func {
     ) -> Self {
         let mut dummy_results = ArgumentVec::with_capacity(ty.results().len());
         dummy_results.extend(ty.results().iter().map(|ty| match ty {
-            ValType::Num(NumType::I32) => Val::Num(Num::I32(0)),
-            ValType::Num(NumType::I64) => Val::Num(Num::I64(0)),
-            ValType::Num(NumType::F32) => Val::Num(Num::F32(0.0)),
-            ValType::Num(NumType::F64) => Val::Num(Num::F64(0.0)),
-            ValType::Vec(VecType::V128) => Val::Vec(Vec_::V128(0)),
-            ValType::Ref(RefType::FuncRef) => Val::Ref(Ref::FuncRef(None)),
-            ValType::Ref(RefType::ExternRef) => Val::Ref(Ref::ExternRef(None)),
+            ValType::I32 => Val::I32(0),
+            ValType::I64 => Val::I64(0),
+            ValType::F32 => Val::F32(0.0),
+            ValType::F64 => Val::F64(0.0),
+            ValType::V128 => Val::V128(0),
+            ValType::FuncRef => Val::FuncRef(None),
+            ValType::ExternRef => Val::ExternRef(None),
         }));
         let ty = func_type_into(ty);
         let mut ctx: StoreContextMut<T> = ctx.as_context_mut();
@@ -670,13 +670,13 @@ impl WasmTable<Engine> for Table {
 /// Convert a [`wasmer::Value`] to a [`Val<Engine>`].
 fn value_from(value: wasmer::Value) -> Result<Val<Engine>> {
     match value {
-        wasmer::Value::I32(x) => Ok(Val::Num(Num::I32(x))),
-        wasmer::Value::I64(x) => Ok(Val::Num(Num::I64(x))),
-        wasmer::Value::F32(x) => Ok(Val::Num(Num::F32(x))),
-        wasmer::Value::F64(x) => Ok(Val::Num(Num::F64(x))),
-        wasmer::Value::V128(x) => Ok(Val::Vec(Vec_::V128(x))),
-        wasmer::Value::FuncRef(x) => Ok(Val::Ref(Ref::FuncRef(x.map(Func::new)))),
-        wasmer::Value::ExternRef(x) => Ok(Val::Ref(Ref::ExternRef(x.map(ExternRef::new)))),
+        wasmer::Value::I32(x) => Ok(Val::I32(x)),
+        wasmer::Value::I64(x) => Ok(Val::I64(x)),
+        wasmer::Value::F32(x) => Ok(Val::F32(x)),
+        wasmer::Value::F64(x) => Ok(Val::F64(x)),
+        wasmer::Value::V128(x) => Ok(Val::V128(x)),
+        wasmer::Value::FuncRef(x) => Ok(Val::FuncRef(x.map(Func::new))),
+        wasmer::Value::ExternRef(x) => Ok(Val::ExternRef(x.map(ExternRef::new))),
         wasmer::Value::ExceptionRef(_) => {
             bail!("exceptions are not supported in the wasm_runtime_layer")
         }
@@ -686,25 +686,26 @@ fn value_from(value: wasmer::Value) -> Result<Val<Engine>> {
 /// Convert a [`Value<Engine>`] to a [`wasmer::Value`].
 fn value_into(value: Val<Engine>) -> wasmer::Value {
     match value {
-        Val::Num(Num::I32(x)) => wasmer::Value::I32(x),
-        Val::Num(Num::I64(x)) => wasmer::Value::I64(x),
-        Val::Num(Num::F32(x)) => wasmer::Value::F32(x),
-        Val::Num(Num::F64(x)) => wasmer::Value::F64(x),
-        Val::Vec(Vec_::V128(x)) => wasmer::Value::V128(x),
-        Val::Ref(r) => ref_into_value(r),
+        Val::I32(x) => wasmer::Value::I32(x),
+        Val::I64(x) => wasmer::Value::I64(x),
+        Val::F32(x) => wasmer::Value::F32(x),
+        Val::F64(x) => wasmer::Value::F64(x),
+        Val::V128(x) => wasmer::Value::V128(x),
+        Val::FuncRef(x) => wasmer::Value::FuncRef(x.map(Func::into_inner)),
+        Val::ExternRef(x) => wasmer::Value::ExternRef(x.map(ExternRef::into_inner)),
     }
 }
 
 /// Convert a [`wasmer::Type`] to a [`ValType`].
 fn value_type_from(ty: wasmer::Type) -> Result<ValType> {
     match ty {
-        wasmer::Type::I32 => Ok(ValType::Num(NumType::I32)),
-        wasmer::Type::I64 => Ok(ValType::Num(NumType::I64)),
-        wasmer::Type::F32 => Ok(ValType::Num(NumType::F32)),
-        wasmer::Type::F64 => Ok(ValType::Num(NumType::F64)),
-        wasmer::Type::V128 => Ok(ValType::Vec(VecType::V128)),
-        wasmer::Type::ExternRef => Ok(ValType::Ref(RefType::ExternRef)),
-        wasmer::Type::FuncRef => Ok(ValType::Ref(RefType::FuncRef)),
+        wasmer::Type::I32 => Ok(ValType::I32),
+        wasmer::Type::I64 => Ok(ValType::I64),
+        wasmer::Type::F32 => Ok(ValType::F32),
+        wasmer::Type::F64 => Ok(ValType::F64),
+        wasmer::Type::V128 => Ok(ValType::V128),
+        wasmer::Type::ExternRef => Ok(ValType::ExternRef),
+        wasmer::Type::FuncRef => Ok(ValType::FuncRef),
         wasmer::Type::ExceptionRef => {
             bail!("exceptions are not supported in the wasm_runtime_layer")
         }
@@ -714,12 +715,13 @@ fn value_type_from(ty: wasmer::Type) -> Result<ValType> {
 /// Convert a [`ValType`] to a [`wasmer::Type`].
 fn value_type_into(ty: ValType) -> wasmer::Type {
     match ty {
-        ValType::Num(NumType::I32) => wasmer::Type::I32,
-        ValType::Num(NumType::I64) => wasmer::Type::I64,
-        ValType::Num(NumType::F32) => wasmer::Type::F32,
-        ValType::Num(NumType::F64) => wasmer::Type::F64,
-        ValType::Vec(VecType::V128) => wasmer::Type::V128,
-        ValType::Ref(r) => ref_type_into_value_type(r),
+        ValType::I32 => wasmer::Type::I32,
+        ValType::I64 => wasmer::Type::I64,
+        ValType::F32 => wasmer::Type::F32,
+        ValType::F64 => wasmer::Type::F64,
+        ValType::V128 => wasmer::Type::V128,
+        ValType::FuncRef => wasmer::Type::FuncRef,
+        ValType::ExternRef => wasmer::Type::ExternRef,
     }
 }
 

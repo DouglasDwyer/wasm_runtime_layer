@@ -10,7 +10,7 @@ use fxhash::FxHashMap;
 use js_sys::{Uint8Array, WebAssembly};
 use wasm_runtime_layer::{
     backend::WasmModule, ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType,
-    NumType, RefType, TableType, ValType, VecType,
+    RefType, TableType, ValType,
 };
 
 use crate::{ArgumentVec, Engine, JsErrorMsg};
@@ -80,12 +80,20 @@ impl WasmModule<Engine> for Module {
 /// Convert a [`wasmparser::ValType`] to a [`ValType`].
 fn value_type_from(ty: &wasmparser::ValType) -> Result<ValType> {
     match ty {
-        wasmparser::ValType::I32 => Ok(ValType::Num(NumType::I32)),
-        wasmparser::ValType::I64 => Ok(ValType::Num(NumType::I64)),
-        wasmparser::ValType::F32 => Ok(ValType::Num(NumType::F32)),
-        wasmparser::ValType::F64 => Ok(ValType::Num(NumType::F64)),
-        wasmparser::ValType::V128 => Ok(ValType::Vec(VecType::V128)),
-        wasmparser::ValType::Ref(ty) => Ok(ValType::Ref(ref_type_from(ty)?)),
+        wasmparser::ValType::I32 => Ok(ValType::I32),
+        wasmparser::ValType::I64 => Ok(ValType::I64),
+        wasmparser::ValType::F32 => Ok(ValType::F32),
+        wasmparser::ValType::F64 => Ok(ValType::F64),
+        wasmparser::ValType::V128 => Ok(ValType::V128),
+        wasmparser::ValType::Ref(ty) => {
+            if ty.is_func_ref() {
+                Ok(ValType::FuncRef)
+            } else if ty.is_extern_ref() {
+                Ok(ValType::ExternRef)
+            } else {
+                bail!("reference type {ty:?} is not supported in the wasm_runtime_layer")
+            }
+        }
     }
 }
 

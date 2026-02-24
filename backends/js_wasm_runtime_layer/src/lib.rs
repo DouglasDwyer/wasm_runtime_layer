@@ -20,7 +20,7 @@ use slab::Slab;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_runtime_layer::{
     backend::{AsContext, AsContextMut, Extern, Ref, Val, WasmEngine, WasmExternRef, WasmGlobal},
-    GlobalType, Num, NumType, RefType, ValType, VecType, Vec_,
+    GlobalType, RefType, ValType,
 };
 
 /// The default amount of arguments and return values for which to allocate
@@ -271,14 +271,21 @@ impl ToStoredJs for Val<Engine> {
     /// Convert the value enum to a JavaScript value
     fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<JsValue> {
         match self {
-            Val::Num(Num::I32(v)) => Ok((*v).into()),
-            Val::Num(Num::I64(v)) => Ok((*v).into()),
-            Val::Num(Num::F32(v)) => Ok((*v).into()),
-            Val::Num(Num::F64(v)) => Ok((*v).into()),
-            Val::Vec(Vec_::V128(_)) => {
+            Val::I32(v) => Ok((*v).into()),
+            Val::I64(v) => Ok((*v).into()),
+            Val::F32(v) => Ok((*v).into()),
+            Val::F64(v) => Ok((*v).into()),
+            Val::V128(_) => {
                 bail!("v128 values are not supported in the js_wasm_runtime_layer backend")
             }
-            Val::Ref(r) => r.to_stored_js(store),
+            Val::FuncRef(None) => Ok(JsValue::NULL),
+            Val::FuncRef(Some(func)) => {
+                let v: &JsValue = store.funcs[func.id].func.as_ref();
+                Ok(v.clone())
+            }
+            Val::ExternRef(_) => bail!(
+                "extern references are not yet supported in the js_wasm_runtime_layer backend"
+            ),
         }
     }
 }
@@ -339,13 +346,15 @@ impl ToJs for ValType {
     /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
     fn to_js(&self) -> JsString {
         match self {
-            ValType::Num(NumType::I32) => "i32".into(),
-            ValType::Num(NumType::I64) => "i64".into(),
-            ValType::Num(NumType::F32) => "f32".into(),
-            ValType::Num(NumType::F64) => "f64".into(),
-            ValType::Vec(VecType::V128) => "v128".into(),
-            ValType::Ref(r) => r.to_js(),
+            ValType::I32 => "i32",
+            ValType::I64 => "i64",
+            ValType::F32 => "f32",
+            ValType::F64 => "f64",
+            ValType::V128 => "v128",
+            ValType::FuncRef => "anyfunc",
+            ValType::ExternRef => "externref",
         }
+        .into()
     }
 }
 
@@ -371,13 +380,13 @@ impl FromJs for ValType {
         let s = value.as_string()?;
 
         let res = match &s[..] {
-            "i32" => Self::Num(NumType::I32),
-            "i64" => Self::Num(NumType::I64),
-            "f32" => Self::Num(NumType::F32),
-            "f64" => Self::Num(NumType::F64),
-            "v128" => Self::Vec(VecType::V128),
-            "anyfunc" => Self::Ref(RefType::FuncRef),
-            "externref" => Self::Ref(RefType::ExternRef),
+            "i32" => Self::I32,
+            "i64" => Self::I64,
+            "f32" => Self::F32,
+            "f64" => Self::F64,
+            "v128" => Self::V128,
+            "anyfunc" => Self::FuncRef,
+            "externref" => Self::ExternRef,
             _ => {
                 #[cfg(feature = "tracing")]
                 tracing::error!("Invalid value type {s:?}");
@@ -396,16 +405,16 @@ pub(crate) fn value_from_js_typed<T>(
     value: JsValue,
 ) -> Option<Val<Engine>> {
     match ty {
-        ValType::Num(NumType::I32) => Some(Val::Num(Num::I32(i32::from_js(value)?))),
-        ValType::Num(NumType::I64) => Some(Val::Num(Num::I64(i64::from_js(value)?))),
-        ValType::Num(NumType::F32) => Some(Val::Num(Num::F32(f32::from_js(value)?))),
-        ValType::Num(NumType::F64) => Some(Val::Num(Num::F64(f64::from_js(value)?))),
-        ValType::Vec(VecType::V128) => {
+        ValType::I32 => Some(Val::I32(i32::from_js(value)?)),
+        ValType::I64 => Some(Val::I64(i64::from_js(value)?)),
+        ValType::F32 => Some(Val::F32(f32::from_js(value)?)),
+        ValType::F64 => Some(Val::F64(f64::from_js(value)?)),
+        ValType::V128 => {
             #[cfg(feature = "tracing")]
             tracing::error!("v128 values are not supported in the js_wasm_runtime_layer backend");
             None
         }
-        ValType::Ref(RefType::FuncRef) | ValType::Ref(RefType::ExternRef) => {
+        ValType::FuncRef | ValType::ExternRef => {
             #[cfg(feature = "tracing")]
             tracing::error!(
                 "conversion to a function or extern outside of a module is not permitted"
