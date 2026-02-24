@@ -103,57 +103,8 @@ const DEFAULT_ARGUMENT_SIZE: usize = 4;
 type ArgumentVec<T> = SmallVec<[T; DEFAULT_ARGUMENT_SIZE]>;
 
 /// Type of a value.
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum ValType {
-    /// A numeric value.
-    Num(NumType),
-    /// A vector.
-    Vec(VecType),
-    /// A reference.
-    Ref(RefType),
-}
-
-impl fmt::Debug for ValType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Num(n) => n.fmt(f),
-            Self::Vec(v) => v.fmt(f),
-            Self::Ref(r) => r.fmt(f),
-        }
-    }
-}
-
-impl fmt::Display for ValType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Num(n) => n.fmt(f),
-            Self::Vec(v) => v.fmt(f),
-            Self::Ref(r) => r.fmt(f),
-        }
-    }
-}
-
-impl From<NumType> for ValType {
-    fn from(ty: NumType) -> Self {
-        Self::Num(ty)
-    }
-}
-
-impl From<VecType> for ValType {
-    fn from(ty: VecType) -> Self {
-        Self::Vec(ty)
-    }
-}
-
-impl From<RefType> for ValType {
-    fn from(ty: RefType) -> Self {
-        Self::Ref(ty)
-    }
-}
-
-/// Type of a numeric value.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum NumType {
+pub enum ValType {
     /// 32-bit signed or unsigned integer.
     I32,
     /// 64-bit signed or unsigned integer.
@@ -162,30 +113,33 @@ pub enum NumType {
     F32,
     /// 64-bit floating point number.
     F64,
+    /// 128-bit SIMD vector
+    V128,
+    /// An optional function reference.
+    FuncRef,
+    /// An optional external reference.
+    ExternRef,
 }
 
-impl fmt::Display for NumType {
+impl fmt::Display for ValType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::I32 => write!(f, "i32"),
             Self::I64 => write!(f, "i64"),
             Self::F32 => write!(f, "f32"),
             Self::F64 => write!(f, "f64"),
+            Self::V128 => write!(f, "v128"),
+            Self::FuncRef => write!(f, "funcref"),
+            Self::ExternRef => write!(f, "externref"),
         }
     }
 }
 
-/// Type of a vector.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum VecType {
-    /// 128-bit SIMD vector
-    V128,
-}
-
-impl fmt::Display for VecType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::V128 => write!(f, "v128"),
+impl From<RefType> for ValType {
+    fn from(ty: RefType) -> Self {
+        match ty {
+            RefType::FuncRef => Self::FuncRef,
+            RefType::ExternRef => Self::ExternRef,
         }
     }
 }
@@ -895,96 +849,14 @@ impl<'a, T: 'static, E: WasmEngine> StoreContextMut<'a, T, E> {
 }
 
 /// Runtime representation of a value.
-#[derive(Clone)]
-pub enum Val {
-    /// Numerical value.
-    Num(Num),
-    /// Vector.
-    Vec(Vec_),
-    /// Reference.
-    Ref(Ref),
-}
-
-impl fmt::Debug for Val {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Num(n) => n.fmt(f),
-            Self::Vec(v) => v.fmt(f),
-            Self::Ref(r) => r.fmt(f),
-        }
-    }
-}
-
-impl Val {
-    /// Returns the [`ValType`] for this [`Val`].
-    #[must_use]
-    pub const fn ty(&self) -> ValType {
-        match self {
-            Self::Num(n) => ValType::Num(n.ty()),
-            Self::Vec(v) => ValType::Vec(v.ty()),
-            Self::Ref(r) => ValType::Ref(r.ty()),
-        }
-    }
-}
-
-impl PartialEq for Val {
-    fn eq(&self, o: &Self) -> bool {
-        match (self, o) {
-            (Self::Num(a), Self::Num(b)) => a == b,
-            (Self::Vec(a), Self::Vec(b)) => a == b,
-            (Self::Ref(_), Self::Ref(_)) => false,
-            _ => false,
-        }
-    }
-}
-
-impl From<Num> for Val {
-    fn from(val: Num) -> Self {
-        Self::Num(val)
-    }
-}
-
-impl From<Vec_> for Val {
-    fn from(val: Vec_) -> Self {
-        Self::Vec(val)
-    }
-}
-
-impl From<Ref> for Val {
-    fn from(val: Ref) -> Self {
-        Self::Ref(val)
-    }
-}
-
-impl<E: WasmEngine> From<&Val> for crate::backend::Val<E> {
-    fn from(value: &Val) -> Self {
-        match value {
-            Val::Num(n) => Self::Num(*n),
-            Val::Vec(v) => Self::Vec(*v),
-            Val::Ref(r) => Self::Ref(r.into()),
-        }
-    }
-}
-
-impl<E: WasmEngine> From<&backend::Val<E>> for Val {
-    fn from(value: &crate::backend::Val<E>) -> Self {
-        match value {
-            backend::Val::Num(n) => Self::Num(*n),
-            backend::Val::Vec(v) => Self::Vec(*v),
-            backend::Val::Ref(r) => Self::Ref(r.into()),
-        }
-    }
-}
-
-/// Runtime representation of a numerical value.
-///
+/// 
 /// Wasm code manipulate values of the four basic value types:
 /// integers and floating-point data of 32 or 64 bit width each, respectively.
 ///
 /// There is no distinction between signed and unsigned integer types. Instead, integers are
 /// interpreted by respective operations as either unsigned or signed in two’s complement representation.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Num {
+#[derive(Clone, Debug)]
+pub enum Val {
     /// Value of 32-bit signed or unsigned integer.
     I32(i32),
     /// Value of 64-bit signed or unsigned integer.
@@ -993,34 +865,88 @@ pub enum Num {
     F32(f32),
     /// Value of 64-bit floating point number.
     F64(f64),
+    /// 128-bit SIMD vector.
+    V128(u128),
+    /// An optional function reference.
+    FuncRef(Option<Func>),
+    /// An optional external reference.
+    ExternRef(Option<ExternRef>),
 }
 
-impl Num {
-    /// Returns the [`NumType`] for this [`Num`].
+impl Val {
+    /// Returns the [`ValType`] for this [`Val`].
     #[must_use]
-    pub const fn ty(&self) -> NumType {
+    pub const fn ty(&self) -> ValType {
         match self {
-            Self::I32(_) => NumType::I32,
-            Self::I64(_) => NumType::I64,
-            Self::F32(_) => NumType::F32,
-            Self::F64(_) => NumType::F64,
+            Self::I32(_) => ValType::I32,
+            Self::I64(_) => ValType::I64,
+            Self::F32(_) => ValType::F32,
+            Self::F64(_) => ValType::F64,
+            Self::V128(_) => ValType::V128,
+            Self::FuncRef(_) => ValType::FuncRef,
+            Self::ExternRef(_) => ValType::ExternRef,
         }
     }
 }
 
-/// Runtime representation of a vector.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Vec_ {
-    /// 128-bit SIMD vector.
-    V128(u128),
+impl PartialEq for Val {
+    fn eq(&self, o: &Self) -> bool {
+        match (self, o) {
+            (Self::I32(a), Self::I32(b)) => a == b,
+            (Self::I64(a), Self::I64(b)) => a == b,
+            (Self::F32(a), Self::F32(b)) => a == b,
+            (Self::F64(a), Self::F64(b)) => a == b,
+            (Self::V128(a), Self::V128(b)) => a == b,
+            (Self::FuncRef(_), Self::FuncRef(_)) => false,
+            (Self::ExternRef(_), Self::ExternRef(_)) => false,
+            _ => false,
+        }
+    }
 }
 
-impl Vec_ {
-    /// Returns the [`VecType`] for this [`Vec_`].
-    #[must_use]
-    pub const fn ty(&self) -> VecType {
-        match self {
-            Self::V128(_) => VecType::V128,
+impl From<Ref> for Val {
+    fn from(ref_: Ref) -> Self {
+        match ref_ {
+            Ref::FuncRef(f) => Self::FuncRef(f),
+            Ref::ExternRef(e) => Self::ExternRef(e),
+        }
+    }
+}
+
+impl<E: WasmEngine> From<&Val> for crate::backend::Val<E> {
+    fn from(value: &Val) -> Self {
+        match value {
+            Val::I32(x) => Self::I32(*x),
+            Val::I64(x) => Self::I64(*x),
+            Val::F32(x) => Self::F32(*x),
+            Val::F64(x) => Self::F64(*x),
+            Val::V128(x) => Self::V128(*x),
+            Val::FuncRef(None) => Self::FuncRef(None),
+            Val::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
+            Val::ExternRef(None) => Self::ExternRef(None),
+            Val::ExternRef(Some(extern_ref)) => {
+                Self::ExternRef(Some(extern_ref.extern_ref.cast::<E::ExternRef>().clone()))
+            }
+        }
+    }
+}
+
+impl<E: WasmEngine> From<&backend::Val<E>> for Val {
+    fn from(value: &crate::backend::Val<E>) -> Self {
+        match value {
+            backend::Val::I32(x) => Self::I32(*x),
+            backend::Val::I64(x) => Self::I64(*x),
+            backend::Val::F32(x) => Self::F32(*x),
+            backend::Val::F64(x) => Self::F64(*x),
+            backend::Val::V128(x) => Self::V128(*x),
+            backend::Val::FuncRef(None) => Self::FuncRef(None),
+            backend::Val::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
+                func: BackendObject::new(func.clone()),
+            })),
+            backend::Val::ExternRef(None) => Self::ExternRef(None),
+            backend::Val::ExternRef(Some(extern_ref)) => Self::ExternRef(Some(ExternRef {
+                extern_ref: BackendObject::new(extern_ref.clone()),
+            })),
         }
     }
 }

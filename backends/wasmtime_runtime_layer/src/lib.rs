@@ -31,8 +31,8 @@ use wasm_runtime_layer::{
         WasmFunc, WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
         WasmStoreContextMut, WasmTable,
     },
-    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, Num, NumType, RefType,
-    TableType, ValType, VecType, Vec_,
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, RefType, TableType,
+    ValType,
 };
 
 /// The default amount of arguments and return values for which to allocate
@@ -570,13 +570,13 @@ impl WasmTable<Engine> for Table {
 /// Convert a [`wasmtime::Val`] to a [`Val<Engine>`].
 fn value_from(value: wasmtime::Val) -> Result<Val<Engine>> {
     match value {
-        wasmtime::Val::I32(x) => Ok(Val::Num(Num::I32(x))),
-        wasmtime::Val::I64(x) => Ok(Val::Num(Num::I64(x))),
-        wasmtime::Val::F32(x) => Ok(Val::Num(Num::F32(f32::from_bits(x)))),
-        wasmtime::Val::F64(x) => Ok(Val::Num(Num::F64(f64::from_bits(x)))),
-        wasmtime::Val::V128(x) => Ok(Val::Vec(Vec_::V128(x.as_u128()))),
-        wasmtime::Val::FuncRef(x) => Ok(Val::Ref(Ref::FuncRef(x.map(Func::new)))),
-        wasmtime::Val::ExternRef(x) => Ok(Val::Ref(Ref::ExternRef(x.map(ExternRef::new)))),
+        wasmtime::Val::I32(x) => Ok(Val::I32(x)),
+        wasmtime::Val::I64(x) => Ok(Val::I64(x)),
+        wasmtime::Val::F32(x) => Ok(Val::F32(f32::from_bits(x))),
+        wasmtime::Val::F64(x) => Ok(Val::F64(f64::from_bits(x))),
+        wasmtime::Val::V128(x) => Ok(Val::V128(x.as_u128())),
+        wasmtime::Val::FuncRef(x) => Ok(Val::FuncRef(x.map(Func::new))),
+        wasmtime::Val::ExternRef(x) => Ok(Val::ExternRef(x.map(ExternRef::new))),
         wasmtime::Val::AnyRef(_) => {
             bail!("anyref is not supported in the wasm_runtime_layer")
         }
@@ -592,38 +592,44 @@ fn value_from(value: wasmtime::Val) -> Result<Val<Engine>> {
 /// Convert a [`Val<Engine>`] to a [`wasmtime::Val`].
 fn value_into(value: Val<Engine>) -> wasmtime::Val {
     match value {
-        Val::Num(Num::I32(x)) => wasmtime::Val::I32(x),
-        Val::Num(Num::I64(x)) => wasmtime::Val::I64(x),
-        Val::Num(Num::F32(x)) => wasmtime::Val::F32(x.to_bits()),
-        Val::Num(Num::F64(x)) => wasmtime::Val::F64(x.to_bits()),
-        Val::Vec(Vec_::V128(x)) => wasmtime::Val::V128(x.into()),
-        Val::Ref(Ref::FuncRef(x)) => wasmtime::Val::FuncRef(x.map(Func::into_inner)),
-        Val::Ref(Ref::ExternRef(x)) => wasmtime::Val::ExternRef(x.map(ExternRef::into_inner)),
+        Val::I32(x) => wasmtime::Val::I32(x),
+        Val::I64(x) => wasmtime::Val::I64(x),
+        Val::F32(x) => wasmtime::Val::F32(x.to_bits()),
+        Val::F64(x) => wasmtime::Val::F64(x.to_bits()),
+        Val::V128(x) => wasmtime::Val::V128(x.into()),
+        Val::FuncRef(x) => wasmtime::Val::FuncRef(x.map(Func::into_inner)),
+        Val::ExternRef(x) => wasmtime::Val::ExternRef(x.map(ExternRef::into_inner)),
     }
 }
 
 /// Convert a [`wasmtime::ValType`] to a [`ValType`].
 fn value_type_from(ty: wasmtime::ValType) -> Result<ValType> {
     match ty {
-        wasmtime::ValType::I32 => Ok(ValType::Num(NumType::I32)),
-        wasmtime::ValType::I64 => Ok(ValType::Num(NumType::I64)),
-        wasmtime::ValType::F32 => Ok(ValType::Num(NumType::F32)),
-        wasmtime::ValType::F64 => Ok(ValType::Num(NumType::F64)),
-        wasmtime::ValType::V128 => Ok(ValType::Vec(VecType::V128)),
-        wasmtime::ValType::Ref(ty) => Ok(ValType::Ref(ref_type_from(&ty)?)),
+        wasmtime::ValType::I32 => Ok(ValType::I32),
+        wasmtime::ValType::I64 => Ok(ValType::I64),
+        wasmtime::ValType::F32 => Ok(ValType::F32),
+        wasmtime::ValType::F64 => Ok(ValType::F64),
+        wasmtime::ValType::V128 => Ok(ValType::V128),
+        wasmtime::ValType::Ref(ty) => match ty {
+            _ if wasmtime::RefType::eq(&ty, &wasmtime::RefType::FUNCREF) => Ok(ValType::FuncRef),
+            _ if wasmtime::RefType::eq(&ty, &wasmtime::RefType::EXTERNREF) => {
+                Ok(ValType::ExternRef)
+            }
+            ty => bail!("ref type {ty:?} is not supported in the wasm_runtime_layer"),
+        },
     }
 }
 
 /// Convert a [`ValType`] to a [`wasmtime::ValType`].
 fn value_type_into(ty: ValType) -> wasmtime::ValType {
     match ty {
-        ValType::Num(NumType::I32) => wasmtime::ValType::I32,
-        ValType::Num(NumType::I64) => wasmtime::ValType::I64,
-        ValType::Num(NumType::F32) => wasmtime::ValType::F32,
-        ValType::Num(NumType::F64) => wasmtime::ValType::F64,
-        ValType::Vec(VecType::V128) => wasmtime::ValType::V128,
-        ValType::Ref(RefType::FuncRef) => wasmtime::ValType::Ref(wasmtime::RefType::FUNCREF),
-        ValType::Ref(RefType::ExternRef) => wasmtime::ValType::Ref(wasmtime::RefType::EXTERNREF),
+        ValType::I32 => wasmtime::ValType::I32,
+        ValType::I64 => wasmtime::ValType::I64,
+        ValType::F32 => wasmtime::ValType::F32,
+        ValType::F64 => wasmtime::ValType::F64,
+        ValType::V128 => wasmtime::ValType::V128,
+        ValType::FuncRef => wasmtime::ValType::Ref(wasmtime::RefType::FUNCREF),
+        ValType::ExternRef => wasmtime::ValType::Ref(wasmtime::RefType::EXTERNREF),
     }
 }
 

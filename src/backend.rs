@@ -9,19 +9,27 @@ use fxhash::FxBuildHasher;
 use hashbrown::HashMap;
 
 use crate::{
-    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, Num, RefType, TableType,
-    ValType, Vec_,
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, RefType, TableType,
+    ValType,
 };
 
 /// Runtime representation of a value.
 #[derive(Clone)]
 pub enum Val<E: WasmEngine> {
-    /// A numeric value.
-    Num(Num),
-    /// A vector.
-    Vec(Vec_),
-    /// A reference.
-    Ref(Ref<E>),
+    /// Value of 32-bit signed or unsigned integer.
+    I32(i32),
+    /// Value of 64-bit signed or unsigned integer.
+    I64(i64),
+    /// Value of 32-bit floating point number.
+    F32(f32),
+    /// Value of 64-bit floating point number.
+    F64(f64),
+    /// 128-bit SIMD vector.
+    V128(u128),
+    /// An optional function reference.
+    FuncRef(Option<E::Func>),
+    /// An optional external reference.
+    ExternRef(Option<E::ExternRef>),
 }
 
 impl<E: WasmEngine> Val<E> {
@@ -29,9 +37,13 @@ impl<E: WasmEngine> Val<E> {
     #[must_use]
     pub const fn ty(&self) -> ValType {
         match self {
-            Self::Num(n) => ValType::Num(n.ty()),
-            Self::Vec(v) => ValType::Vec(v.ty()),
-            Self::Ref(r) => ValType::Ref(r.ty()),
+            Self::I32(_) => ValType::I32,
+            Self::I64(_) => ValType::I64,
+            Self::F32(_) => ValType::F32,
+            Self::F64(_) => ValType::F64,
+            Self::V128(_) => ValType::V128,
+            Self::FuncRef(_) => ValType::FuncRef,
+            Self::ExternRef(_) => ValType::ExternRef,
         }
     }
 }
@@ -43,28 +55,23 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Num(n) => n.fmt(f),
-            Self::Vec(v) => v.fmt(f),
-            Self::Ref(r) => r.fmt(f),
+            Self::I32(v) => f.debug_tuple("I32").field(v).finish(),
+            Self::I64(v) => f.debug_tuple("I64").field(v).finish(),
+            Self::F32(v) => f.debug_tuple("F32").field(v).finish(),
+            Self::F64(v) => f.debug_tuple("F64").field(v).finish(),
+            Self::V128(v) => f.debug_tuple("V128").field(v).finish(),
+            Self::FuncRef(v) => f.debug_tuple("FuncRef").field(v).finish(),
+            Self::ExternRef(v) => f.debug_tuple("ExternRef").field(v).finish(),
         }
     }
 }
 
-impl<E: WasmEngine> From<Num> for Val<E> {
-    fn from(val: Num) -> Self {
-        Self::Num(val)
-    }
-}
-
-impl<E: WasmEngine> From<Vec_> for Val<E> {
-    fn from(val: Vec_) -> Self {
-        Self::Vec(val)
-    }
-}
-
 impl<E: WasmEngine> From<Ref<E>> for Val<E> {
-    fn from(val: Ref<E>) -> Self {
-        Self::Ref(val)
+    fn from(ref_: Ref<E>) -> Self {
+        match ref_ {
+            Ref::FuncRef(f) => Self::FuncRef(f),
+            Ref::ExternRef(e) => Self::ExternRef(e),
+        }
     }
 }
 

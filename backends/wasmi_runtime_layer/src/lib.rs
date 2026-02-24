@@ -22,8 +22,8 @@ use wasm_runtime_layer::{
         WasmFunc, WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
         WasmStoreContextMut, WasmTable,
     },
-    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, Num, NumType, RefType,
-    TableType, ValType, VecType, Vec_,
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, RefType,
+    TableType, ValType,
 };
 
 /// The default amount of arguments and return values for which to allocate
@@ -518,16 +518,16 @@ impl WasmTable<Engine> for Table {
 /// Convert a [`wasmi::Val`] to a [`Value<Engine>`].
 fn value_from(value: wasmi::Val) -> Val<Engine> {
     match value {
-        wasmi::Val::I32(x) => Val::Num(Num::I32(x)),
-        wasmi::Val::I64(x) => Val::Num(Num::I64(x)),
-        wasmi::Val::F32(x) => Val::Num(Num::F32(x.to_float())),
-        wasmi::Val::F64(x) => Val::Num(Num::F64(x.to_float())),
-        wasmi::Val::V128(x) => Val::Vec(Vec_::V128(x.as_u128())),
-        wasmi::Val::FuncRef(wasmi::Nullable::Null) => Val::Ref(Ref::FuncRef(None)),
-        wasmi::Val::FuncRef(wasmi::Nullable::Val(f)) => Val::Ref(Ref::FuncRef(Some(Func::new(f)))),
-        wasmi::Val::ExternRef(wasmi::Nullable::Null) => Val::Ref(Ref::ExternRef(None)),
+        wasmi::Val::I32(x) => Val::I32(x),
+        wasmi::Val::I64(x) => Val::I64(x),
+        wasmi::Val::F32(x) => Val::F32(x.to_float()),
+        wasmi::Val::F64(x) => Val::F64(x.to_float()),
+        wasmi::Val::V128(x) => Val::V128(x.as_u128()),
+        wasmi::Val::FuncRef(wasmi::Nullable::Null) => Val::FuncRef(None),
+        wasmi::Val::FuncRef(wasmi::Nullable::Val(f)) => Val::FuncRef(Some(Func::new(f))),
+        wasmi::Val::ExternRef(wasmi::Nullable::Null) => Val::ExternRef(None),
         wasmi::Val::ExternRef(wasmi::Nullable::Val(e)) => {
-            Val::Ref(Ref::ExternRef(Some(ExternRef::new(e))))
+            Val::ExternRef(Some(ExternRef::new(e)))
         }
     }
 }
@@ -535,17 +535,17 @@ fn value_from(value: wasmi::Val) -> Val<Engine> {
 /// Convert a [`Value<Engine>`] to a [`wasmi::Val`].
 fn value_into(value: Val<Engine>) -> wasmi::Val {
     match value {
-        Val::Num(Num::I32(x)) => wasmi::Val::I32(x),
-        Val::Num(Num::I64(x)) => wasmi::Val::I64(x),
-        Val::Num(Num::F32(x)) => wasmi::Val::F32(wasmi::F32::from_float(x)),
-        Val::Num(Num::F64(x)) => wasmi::Val::F64(wasmi::F64::from_float(x)),
-        Val::Vec(Vec_::V128(x)) => wasmi::Val::V128(wasmi::V128::from(x)),
-        Val::Ref(Ref::FuncRef(None)) => wasmi::Val::FuncRef(wasmi::Nullable::Null),
-        Val::Ref(Ref::FuncRef(Some(x))) => {
+        Val::I32(x) => wasmi::Val::I32(x),
+        Val::I64(x) => wasmi::Val::I64(x),
+        Val::F32(x) => wasmi::Val::F32(wasmi::F32::from_float(x)),
+        Val::F64(x) => wasmi::Val::F64(wasmi::F64::from_float(x)),
+        Val::V128(x) => wasmi::Val::V128(wasmi::V128::from(x)),
+        Val::FuncRef(None) => wasmi::Val::FuncRef(wasmi::Nullable::Null),
+        Val::FuncRef(Some(x)) => {
             wasmi::Val::FuncRef(wasmi::Nullable::Val(x.into_inner()))
         }
-        Val::Ref(Ref::ExternRef(None)) => wasmi::Val::ExternRef(wasmi::Nullable::Null),
-        Val::Ref(Ref::ExternRef(Some(x))) => {
+        Val::ExternRef(None) => wasmi::Val::ExternRef(wasmi::Nullable::Null),
+        Val::ExternRef(Some(x)) => {
             wasmi::Val::ExternRef(wasmi::Nullable::Val(x.into_inner()))
         }
     }
@@ -554,13 +554,13 @@ fn value_into(value: Val<Engine>) -> wasmi::Val {
 /// Convert a [`wasmi::ValType`] to a [`ValueType`].
 fn value_type_from(ty: wasmi::ValType) -> ValType {
     match ty {
-        wasmi::ValType::I32 => ValType::Num(NumType::I32),
-        wasmi::ValType::I64 => ValType::Num(NumType::I64),
-        wasmi::ValType::F32 => ValType::Num(NumType::F32),
-        wasmi::ValType::F64 => ValType::Num(NumType::F64),
-        wasmi::ValType::V128 => ValType::Vec(VecType::V128),
-        wasmi::ValType::FuncRef => ValType::Ref(RefType::FuncRef),
-        wasmi::ValType::ExternRef => ValType::Ref(RefType::ExternRef),
+        wasmi::ValType::I32 => ValType::I32,
+        wasmi::ValType::I64 => ValType::I64,
+        wasmi::ValType::F32 => ValType::F32,
+        wasmi::ValType::F64 => ValType::F64,
+        wasmi::ValType::V128 => ValType::V128,
+        wasmi::ValType::FuncRef => ValType::FuncRef,
+        wasmi::ValType::ExternRef => ValType::ExternRef,
     }
 }
 
@@ -607,13 +607,13 @@ fn ref_type_into(ty: RefType) -> wasmi::RefType {
 /// Convert a [`ValType`] to a [`wasmi::ValType`].
 fn value_type_into(ty: ValType) -> wasmi::ValType {
     match ty {
-        ValType::Num(NumType::I32) => wasmi::ValType::I32,
-        ValType::Num(NumType::I64) => wasmi::ValType::I64,
-        ValType::Num(NumType::F32) => wasmi::ValType::F32,
-        ValType::Num(NumType::F64) => wasmi::ValType::F64,
-        ValType::Vec(VecType::V128) => wasmi::ValType::V128,
-        ValType::Ref(RefType::FuncRef) => wasmi::ValType::FuncRef,
-        ValType::Ref(RefType::ExternRef) => wasmi::ValType::ExternRef,
+        ValType::I32 => wasmi::ValType::I32,
+        ValType::I64 => wasmi::ValType::I64,
+        ValType::F32 => wasmi::ValType::F32,
+        ValType::F64 => wasmi::ValType::F64,
+        ValType::V128 => wasmi::ValType::V128,
+        ValType::FuncRef => wasmi::ValType::FuncRef,
+        ValType::ExternRef => wasmi::ValType::ExternRef,
     }
 }
 
