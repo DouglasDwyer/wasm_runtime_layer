@@ -39,12 +39,12 @@
 //!     .into_func()
 //!     .unwrap();
 //!
-//! let mut result = [Val::Num(Num::I32(0))];
+//! let mut result = [Val::I32(0)];
 //! add_one
-//!     .call(&mut store, &[Val::Num(Num::I32(42))], &mut result)
+//!     .call(&mut store, &[Val::I32(42)], &mut result)
 //!     .unwrap();
 //!
-//! assert_eq!(result[0], Val::Num(Num::I32(43)));
+//! assert_eq!(result[0], Val::I32(43));
 //! ```
 //!
 //! ## Backends
