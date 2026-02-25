@@ -406,7 +406,17 @@ impl WasmMemory<Engine> for Memory {
 
 impl WasmModule<Engine> for Module {
     fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
-        wasmtime::Module::from_binary(engine, bytes).map(Self::new)
+        let module = wasmtime::Module::from_binary(engine, bytes)?;
+
+        // pre-validate the module imports and exports
+        for import in module.imports() {
+            extern_type_from(import.ty().clone())?;
+        }
+        for export in module.exports() {
+            extern_type_from(export.ty().clone())?;
+        }
+
+        Ok(Self::new(module))
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {

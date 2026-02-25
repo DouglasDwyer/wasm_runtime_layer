@@ -350,9 +350,17 @@ impl WasmMemory<Engine> for Memory {
 
 impl WasmModule<Engine> for Module {
     fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
-        Ok(Self::new(
-            wasmi::Module::new(engine.as_ref(), bytes).map_err(Error::new)?,
-        ))
+        let module = wasmi::Module::new(engine.as_ref(), bytes).map_err(Error::new)?;
+
+        // pre-validate the module imports and exports
+        for import in module.imports() {
+            extern_type_from(import.ty().clone())?;
+        }
+        for export in module.exports() {
+            extern_type_from(export.ty().clone())?;
+        }
+
+        Ok(Self::new(module))
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {

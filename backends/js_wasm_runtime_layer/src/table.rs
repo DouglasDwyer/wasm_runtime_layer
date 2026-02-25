@@ -80,13 +80,8 @@ impl WasmTable<Engine> for Table {
             Reflect::set(&desc, &"initial".into(), &max.into()).unwrap();
         }
 
-        let table = WebAssembly::Table::new(&desc).map_err(JsErrorMsg::from)?;
-
-        for i in 0..ty.minimum() {
-            table
-                .set(i, init.to_stored_js(&ctx)?.unchecked_ref())
-                .unwrap();
-        }
+        let table = WebAssembly::Table::new_with_value(&desc, init.to_stored_js(&ctx)?)
+            .map_err(JsErrorMsg::from)?;
 
         let table = TableInner {
             // values: std::iter::repeat(init).take(ty.min as usize).collect(),

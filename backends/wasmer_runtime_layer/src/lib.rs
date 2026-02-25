@@ -329,14 +329,11 @@ impl WasmInstance<Engine> for Instance {
             self.as_ref()
                 .exports
                 .iter()
-                .map(|(n, e)| {
-                    Ok(Export {
-                        name: n.clone(),
-                        value: extern_from(e.clone())?,
-                    })
+                .map(|(n, e)| Export {
+                    name: n.clone(),
+                    value: extern_from(e.clone()).unwrap(),
                 })
-                .collect::<Result<Vec<_>>>()
-                .unwrap()
+                .collect::<Vec<_>>()
                 .into_iter(),
         )
     }
@@ -410,8 +407,20 @@ pub struct Module {
 impl WasmModule<Engine> for Module {
     fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
         let module = wasmer::Module::from_binary(engine, bytes)?;
-        let imports = module.imports().collect();
-        let exports = module.exports().map(|e| (e.name().to_owned(), e)).collect();
+        let imports = module.imports().collect::<Vec<_>>();
+        let exports = module
+            .exports()
+            .map(|e| (e.name().to_owned(), e))
+            .collect::<FxHashMap<_, _>>();
+
+        // pre-validate the module imports and exports
+        for import in &imports {
+            extern_type_from(import.ty().clone())?;
+        }
+        for export in exports.values() {
+            extern_type_from(export.ty().clone())?;
+        }
+
         Ok(Self {
             module,
             imports,
