@@ -67,8 +67,8 @@ where
 }
 
 impl<E: WasmEngine> From<Ref<E>> for Val<E> {
-    fn from(ref_: Ref<E>) -> Self {
-        match ref_ {
+    fn from(r#ref: Ref<E>) -> Self {
+        match r#ref {
             Ref::FuncRef(f) => Self::FuncRef(f),
             Ref::ExternRef(e) => Self::ExternRef(e),
         }
@@ -274,8 +274,8 @@ impl<E: WasmEngine> Imports<E> {
         ns: &str,
         contents: impl IntoIterator<Item = (String, Extern<E>)>,
     ) {
-        for (name, extern_) in contents.into_iter() {
-            self.map.insert((ns.to_string(), name.clone()), extern_);
+        for (name, r#extern) in contents.into_iter() {
+            self.map.insert((ns.to_string(), name.clone()), r#extern);
         }
     }
 

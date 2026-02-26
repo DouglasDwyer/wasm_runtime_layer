@@ -567,8 +567,8 @@ fn value_type_from(ty: wasmi::ValType) -> ValType {
 }
 
 /// Convert a [`Ref<Engine>`] to a [`wasmi::Ref`].
-fn ref_into(ref_: Ref<Engine>) -> wasmi::Ref {
-    match ref_ {
+fn ref_into(r#ref: Ref<Engine>) -> wasmi::Ref {
+    match r#ref {
         Ref::FuncRef(x) => wasmi::Ref::Func(match x {
             None => wasmi::Nullable::Null,
             Some(x) => wasmi::Nullable::Val(x.into_inner()),
@@ -581,8 +581,8 @@ fn ref_into(ref_: Ref<Engine>) -> wasmi::Ref {
 }
 
 /// Convert a [`wasmi::Ref`] to a [`Ref<Engine>`].
-fn ref_from(ref_: wasmi::Ref) -> Ref<Engine> {
-    match ref_ {
+fn ref_from(r#ref: wasmi::Ref) -> Ref<Engine> {
+    match r#ref {
         wasmi::Ref::Func(wasmi::Nullable::Null) => Ref::FuncRef(None),
         wasmi::Ref::Func(wasmi::Nullable::Val(x)) => Ref::FuncRef(Some(Func::new(x))),
         wasmi::Ref::Extern(wasmi::Nullable::Null) => Ref::ExternRef(None),

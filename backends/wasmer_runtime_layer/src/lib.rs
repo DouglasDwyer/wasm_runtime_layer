@@ -753,8 +753,8 @@ fn ref_from_value(value: wasmer::Value) -> Result<Ref<Engine>> {
 }
 
 /// Convert a [`Ref<Engine>`] to a [`wasmer::Value`].
-fn ref_into_value(ref_: Ref<Engine>) -> wasmer::Value {
-    match ref_ {
+fn ref_into_value(r#ref: Ref<Engine>) -> wasmer::Value {
+    match r#ref {
         Ref::FuncRef(x) => wasmer::Value::FuncRef(x.map(Func::into_inner)),
         Ref::ExternRef(x) => wasmer::Value::ExternRef(x.map(ExternRef::into_inner)),
     }

@@ -644,16 +644,16 @@ fn value_type_into(ty: ValType) -> wasmtime::ValType {
 }
 
 /// Convert a [`Ref<Engine>`] to a [`wasmtime::Ref`].
-fn ref_into(ref_: Ref<Engine>) -> wasmtime::Ref {
-    match ref_ {
+fn ref_into(r#ref: Ref<Engine>) -> wasmtime::Ref {
+    match r#ref {
         Ref::FuncRef(x) => wasmtime::Ref::Func(x.map(Func::into_inner)),
         Ref::ExternRef(x) => wasmtime::Ref::Extern(x.map(ExternRef::into_inner)),
     }
 }
 
 /// Convert a [`wasmtime::Ref`] to a [`Ref<Engine>`].
-fn ref_from(ref_: wasmtime::Ref) -> Result<Ref<Engine>> {
-    match ref_ {
+fn ref_from(r#ref: wasmtime::Ref) -> Result<Ref<Engine>> {
+    match r#ref {
         wasmtime::Ref::Func(x) => Ok(Ref::FuncRef(x.map(Func::from))),
         wasmtime::Ref::Extern(x) => Ok(Ref::ExternRef(x.map(ExternRef::from))),
         wasmtime::Ref::Any(_) => {

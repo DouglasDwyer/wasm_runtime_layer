@@ -668,8 +668,8 @@ impl Imports {
         ns: &str,
         contents: impl IntoIterator<Item = (String, Extern)>,
     ) {
-        for (name, extern_) in contents.into_iter() {
-            self.map.insert((ns.to_string(), name.clone()), extern_);
+        for (name, r#extern) in contents.into_iter() {
+            self.map.insert((ns.to_string(), name.clone()), r#extern);
         }
     }
 
@@ -905,8 +905,8 @@ impl PartialEq for Val {
 }
 
 impl From<Ref> for Val {
-    fn from(ref_: Ref) -> Self {
-        match ref_ {
+    fn from(r#ref: Ref) -> Self {
+        match r#ref {
             Ref::FuncRef(f) => Self::FuncRef(f),
             Ref::ExternRef(e) => Self::ExternRef(e),
         }
@@ -972,8 +972,8 @@ impl Ref {
 }
 
 impl<E: WasmEngine> From<&Ref> for crate::backend::Ref<E> {
-    fn from(ref_: &Ref) -> Self {
-        match ref_ {
+    fn from(r#ref: &Ref) -> Self {
+        match r#ref {
             Ref::FuncRef(None) => Self::FuncRef(None),
             Ref::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
             Ref::ExternRef(None) => Self::ExternRef(None),
@@ -985,8 +985,8 @@ impl<E: WasmEngine> From<&Ref> for crate::backend::Ref<E> {
 }
 
 impl<E: WasmEngine> From<&backend::Ref<E>> for Ref {
-    fn from(ref_: &backend::Ref<E>) -> Self {
-        match ref_ {
+    fn from(r#ref: &backend::Ref<E>) -> Self {
+        match r#ref {
             backend::Ref::FuncRef(None) => Self::FuncRef(None),
             backend::Ref::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
                 func: BackendObject::new(func.clone()),
