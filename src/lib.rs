@@ -39,12 +39,12 @@
 //!     .into_func()
 //!     .unwrap();
 //!         
-//! let mut result = [Value::I32(0)];
+//! let mut result = [Val::I32(0)];
 //! add_one
-//!     .call(&mut store, &[Value::I32(42)], &mut result)
+//!     .call(&mut store, &[Val::I32(42)], &mut result)
 //!     .unwrap();
 //!
-//! assert_eq!(result[0], Value::I32(43));
+//! assert_eq!(result[0], Val::I32(43));
 //! ```
 //!
 //! ## Backends
@@ -104,7 +104,7 @@ type ArgumentVec<T> = SmallVec<[T; DEFAULT_ARGUMENT_SIZE]>;
 
 /// Type of a value.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ValueType {
+pub enum ValType {
     /// 32-bit signed or unsigned integer.
     I32,
     /// 64-bit signed or unsigned integer.
@@ -119,15 +119,15 @@ pub enum ValueType {
     ExternRef,
 }
 
-impl fmt::Display for ValueType {
+impl fmt::Display for ValType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ValueType::I32 => write!(f, "i32"),
-            ValueType::I64 => write!(f, "i64"),
-            ValueType::F32 => write!(f, "f32"),
-            ValueType::F64 => write!(f, "f64"),
-            ValueType::FuncRef => write!(f, "funcref"),
-            ValueType::ExternRef => write!(f, "externref"),
+            ValType::I32 => write!(f, "i32"),
+            ValType::I64 => write!(f, "i64"),
+            ValType::F32 => write!(f, "f32"),
+            ValType::F64 => write!(f, "f64"),
+            ValType::FuncRef => write!(f, "funcref"),
+            ValType::ExternRef => write!(f, "externref"),
         }
     }
 }
@@ -136,19 +136,19 @@ impl fmt::Display for ValueType {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct GlobalType {
     /// The value type of the global variable.
-    content: ValueType,
+    content: ValType,
     /// The mutability of the global variable.
     mutable: bool,
 }
 
 impl GlobalType {
-    /// Creates a new [`GlobalType`] from the given [`ValueType`] and mutability.
-    pub fn new(content: ValueType, mutable: bool) -> Self {
+    /// Creates a new [`GlobalType`] from the given [`ValType`] and mutability.
+    pub fn new(content: ValType, mutable: bool) -> Self {
         Self { content, mutable }
     }
 
-    /// Returns the [`ValueType`] of the global variable.
-    pub fn content(&self) -> ValueType {
+    /// Returns the [`ValType`] of the global variable.
+    pub fn content(&self) -> ValType {
         self.content
     }
 
@@ -162,7 +162,7 @@ impl GlobalType {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TableType {
     /// The type of values stored in the [`Table`].
-    element: ValueType,
+    element: ValType,
     /// The minimum number of elements the [`Table`] must have.
     min: u32,
     /// The optional maximum number of elements the [`Table`] can have.
@@ -177,15 +177,15 @@ impl TableType {
     /// # Panics
     ///
     /// If `min` is greater than `max`.
-    pub fn new(element: ValueType, min: u32, max: Option<u32>) -> Self {
+    pub fn new(element: ValType, min: u32, max: Option<u32>) -> Self {
         if let Some(max) = max {
             assert!(min <= max);
         }
         Self { element, min, max }
     }
 
-    /// Returns the [`ValueType`] of elements stored in the [`Table`].
-    pub fn element(&self) -> ValueType {
+    /// Returns the [`ValType`] of elements stored in the [`Table`].
+    pub fn element(&self) -> ValType {
         self.element
     }
 
@@ -251,7 +251,7 @@ pub struct FuncType {
     /// by results in their order.
     /// The `len_params` field denotes how many parameters there are in
     /// the head of the vector before the results.
-    params_results: Arc<[ValueType]>,
+    params_results: Arc<[ValType]>,
     /// A debug name used for debugging or tracing purposes.
     name: Option<Arc<str>>,
 }
@@ -311,8 +311,8 @@ impl FuncType {
     /// Creates a new [`FuncType`].
     pub fn new<P, R>(params: P, results: R) -> Self
     where
-        P: IntoIterator<Item = ValueType>,
-        R: IntoIterator<Item = ValueType>,
+        P: IntoIterator<Item = ValType>,
+        R: IntoIterator<Item = ValType>,
     {
         let mut params_results = params.into_iter().collect::<Vec<_>>();
         let len_params = params_results.len();
@@ -325,12 +325,12 @@ impl FuncType {
     }
 
     /// Returns the parameter types of the function type.
-    pub fn params(&self) -> &[ValueType] {
+    pub fn params(&self) -> &[ValType] {
         &self.params_results[..self.len_params]
     }
 
     /// Returns the result types of the function type.
-    pub fn results(&self) -> &[ValueType] {
+    pub fn results(&self) -> &[ValType] {
         &self.params_results[self.len_params..]
     }
 
@@ -826,7 +826,7 @@ impl<'a, T: 'static, E: WasmEngine> StoreContextMut<'a, T, E> {
 /// There is no distinction between signed and unsigned integer types. Instead, integers are
 /// interpreted by respective operations as either unsigned or signed in two’s complement representation.
 #[derive(Clone, Debug)]
-pub enum Value {
+pub enum Val {
     /// Value of 32-bit signed or unsigned integer.
     I32(i32),
     /// Value of 64-bit signed or unsigned integer.
@@ -841,22 +841,22 @@ pub enum Value {
     ExternRef(Option<ExternRef>),
 }
 
-impl Value {
-    /// Returns the [`ValueType`] for this [`Value`].
+impl Val {
+    /// Returns the [`ValType`] for this [`Val`].
     #[must_use]
-    pub const fn ty(&self) -> ValueType {
+    pub const fn ty(&self) -> ValType {
         match self {
-            Value::I32(_) => ValueType::I32,
-            Value::I64(_) => ValueType::I64,
-            Value::F32(_) => ValueType::F32,
-            Value::F64(_) => ValueType::F64,
-            Value::FuncRef(_) => ValueType::FuncRef,
-            Value::ExternRef(_) => ValueType::ExternRef,
+            Val::I32(_) => ValType::I32,
+            Val::I64(_) => ValType::I64,
+            Val::F32(_) => ValType::F32,
+            Val::F64(_) => ValType::F64,
+            Val::FuncRef(_) => ValType::FuncRef,
+            Val::ExternRef(_) => ValType::ExternRef,
         }
     }
 }
 
-impl PartialEq for Value {
+impl PartialEq for Val {
     fn eq(&self, o: &Self) -> bool {
         match (self, o) {
             (Self::I32(a), Self::I32(b)) => a == b,
@@ -868,40 +868,38 @@ impl PartialEq for Value {
     }
 }
 
-impl<E: WasmEngine> From<&Value> for crate::backend::Value<E> {
-    fn from(value: &Value) -> Self {
+impl<E: WasmEngine> From<&Val> for crate::backend::Val<E> {
+    fn from(value: &Val) -> Self {
         match value {
-            Value::I32(i32) => Self::I32(*i32),
-            Value::I64(i64) => Self::I64(*i64),
-            Value::F32(f32) => Self::F32(*f32),
-            Value::F64(f64) => Self::F64(*f64),
-            Value::FuncRef(None) => Self::FuncRef(None),
-            Value::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
-            Value::ExternRef(None) => Self::ExternRef(None),
-            Value::ExternRef(Some(extern_ref)) => {
+            Val::I32(i32) => Self::I32(*i32),
+            Val::I64(i64) => Self::I64(*i64),
+            Val::F32(f32) => Self::F32(*f32),
+            Val::F64(f64) => Self::F64(*f64),
+            Val::FuncRef(None) => Self::FuncRef(None),
+            Val::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
+            Val::ExternRef(None) => Self::ExternRef(None),
+            Val::ExternRef(Some(extern_ref)) => {
                 Self::ExternRef(Some(extern_ref.extern_ref.cast::<E::ExternRef>().clone()))
             }
         }
     }
 }
 
-impl<E: WasmEngine> From<&backend::Value<E>> for Value {
-    fn from(value: &crate::backend::Value<E>) -> Self {
+impl<E: WasmEngine> From<&backend::Val<E>> for Val {
+    fn from(value: &crate::backend::Val<E>) -> Self {
         match value {
-            crate::backend::Value::I32(i32) => Self::I32(*i32),
-            crate::backend::Value::I64(i64) => Self::I64(*i64),
-            crate::backend::Value::F32(f32) => Self::F32(*f32),
-            crate::backend::Value::F64(f64) => Self::F64(*f64),
-            crate::backend::Value::FuncRef(None) => Self::FuncRef(None),
-            crate::backend::Value::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
+            crate::backend::Val::I32(i32) => Self::I32(*i32),
+            crate::backend::Val::I64(i64) => Self::I64(*i64),
+            crate::backend::Val::F32(f32) => Self::F32(*f32),
+            crate::backend::Val::F64(f64) => Self::F64(*f64),
+            crate::backend::Val::FuncRef(None) => Self::FuncRef(None),
+            crate::backend::Val::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
                 func: BackendObject::new(func.clone()),
             })),
-            crate::backend::Value::ExternRef(None) => Self::ExternRef(None),
-            crate::backend::Value::ExternRef(Some(extern_ref)) => {
-                Self::ExternRef(Some(ExternRef {
-                    extern_ref: BackendObject::new(extern_ref.clone()),
-                }))
-            }
+            crate::backend::Val::ExternRef(None) => Self::ExternRef(None),
+            crate::backend::Val::ExternRef(Some(extern_ref)) => Self::ExternRef(Some(ExternRef {
+                extern_ref: BackendObject::new(extern_ref.clone()),
+            })),
         }
     }
 }
@@ -950,7 +948,7 @@ impl Func {
         func: impl 'static
             + Send
             + Sync
-            + Fn(StoreContextMut<'_, C::UserState, C::Engine>, &[Value], &mut [Value]) -> Result<()>,
+            + Fn(StoreContextMut<'_, C::UserState, C::Engine>, &[Val], &mut [Val]) -> Result<()>,
     ) -> Self {
         let raw_func = <<C::Engine as WasmEngine>::Func as WasmFunc<C::Engine>>::new(
             ctx.as_context_mut().inner,
@@ -990,8 +988,8 @@ impl Func {
     pub fn call<C: AsContextMut>(
         &self,
         mut ctx: C,
-        args: &[Value],
-        results: &mut [Value],
+        args: &[Val],
+        results: &mut [Val],
     ) -> Result<()> {
         let raw_func = self.func.cast::<<C::Engine as WasmEngine>::Func>();
 
@@ -1020,7 +1018,7 @@ pub struct Global {
 
 impl Global {
     /// Creates a new global variable to the store.
-    pub fn new<C: AsContextMut>(mut ctx: C, initial_value: Value, mutable: bool) -> Self {
+    pub fn new<C: AsContextMut>(mut ctx: C, initial_value: Val, mutable: bool) -> Self {
         Self {
             global: BackendObject::new(<<C::Engine as WasmEngine>::Global as WasmGlobal<
                 C::Engine,
@@ -1040,7 +1038,7 @@ impl Global {
     }
 
     /// Returns the current value of the global variable.
-    pub fn get<C: AsContextMut>(&self, mut ctx: C) -> Value {
+    pub fn get<C: AsContextMut>(&self, mut ctx: C) -> Val {
         (&self
             .global
             .cast::<<C::Engine as WasmEngine>::Global>()
@@ -1049,7 +1047,7 @@ impl Global {
     }
 
     /// Sets a new value to the global variable.
-    pub fn set<C: AsContextMut>(&self, mut ctx: C, new_value: Value) -> Result<()> {
+    pub fn set<C: AsContextMut>(&self, mut ctx: C, new_value: Val) -> Result<()> {
         self.global
             .cast::<<C::Engine as WasmEngine>::Global>()
             .set(ctx.as_context_mut().inner, (&new_value).into())
@@ -1215,7 +1213,7 @@ pub struct Table {
 
 impl Table {
     /// Creates a new table to the store.
-    pub fn new<C: AsContextMut>(mut ctx: C, ty: TableType, init: Value) -> Result<Self> {
+    pub fn new<C: AsContextMut>(mut ctx: C, ty: TableType, init: Val) -> Result<Self> {
         Ok(Self {
             table: BackendObject::new(<<C::Engine as WasmEngine>::Table as WasmTable<
                 C::Engine,
@@ -1242,7 +1240,7 @@ impl Table {
     /// Grows the table by the given amount of elements.
     ///
     /// Returns the old size of the [`Table`] upon success.
-    pub fn grow<C: AsContextMut>(&self, mut ctx: C, delta: u32, init: Value) -> Result<u32> {
+    pub fn grow<C: AsContextMut>(&self, mut ctx: C, delta: u32, init: Val) -> Result<u32> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 
         <_ as WasmTable<_>>::grow(table, ctx.as_context_mut().inner, delta, (&init).into())
@@ -1251,7 +1249,7 @@ impl Table {
     /// Returns the [`Table`] element value at `index`.
     ///
     /// Returns `None` if `index` is out of bounds.
-    pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Value> {
+    pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Val> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 
         <_ as WasmTable<_>>::get(table, ctx.as_context_mut().inner, index)
@@ -1259,8 +1257,8 @@ impl Table {
             .map(Into::into)
     }
 
-    /// Sets the [`Value`] of this [`Table`] at `index`.
-    pub fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, value: Value) -> Result<()> {
+    /// Sets the [`Val`] of this [`Table`] at `index`.
+    pub fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, value: Val) -> Result<()> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 
         <_ as WasmTable<_>>::set(table, ctx.as_context_mut().inner, index, (&value).into())

@@ -4,7 +4,7 @@ use anyhow::Context;
 use js_sys::{Array, Function};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_runtime_layer::{
-    backend::{AsContext, AsContextMut, Value, WasmFunc},
+    backend::{AsContext, AsContextMut, Val, WasmFunc},
     FuncType,
 };
 
@@ -108,7 +108,7 @@ impl WasmFunc<Engine> for Func {
         func: impl 'static
             + Send
             + Sync
-            + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> anyhow::Result<()>,
+            + Fn(StoreContextMut<T>, &[Val<Engine>], &mut [Val<Engine>]) -> anyhow::Result<()>,
     ) -> Self {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("Func::new").entered();
@@ -133,10 +133,10 @@ impl WasmFunc<Engine> for Func {
         // live as long as this closure
         let store_ptr = store_ptr as *mut ();
 
-        let mut res = vec![Value::I32(0); ty.results().len()];
+        let mut res = vec![Val::I32(0); ty.results().len()];
 
         let mut func = {
-            move |mut store: StoreContextMut<T>, _ty: &FuncType, args: &[Value<Engine>]| {
+            move |mut store: StoreContextMut<T>, _ty: &FuncType, args: &[Val<Engine>]| {
                 #[cfg(feature = "tracing")]
                 let _span = tracing::debug_span!("call_host", ty=%_ty, ?args).entered();
 
@@ -201,8 +201,8 @@ impl WasmFunc<Engine> for Func {
     fn call<T>(
         &self,
         mut ctx: impl AsContextMut<Engine>,
-        args: &[Value<Engine>],
-        results: &mut [Value<Engine>],
+        args: &[Val<Engine>],
+        results: &mut [Val<Engine>],
     ) -> anyhow::Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let inner: &FuncInner = &ctx.funcs[self.id];

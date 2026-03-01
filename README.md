@@ -38,12 +38,12 @@ let add_one = instance
     .into_func()
     .unwrap();
         
-let mut result = [Value::I32(0)];
+let mut result = [Val::I32(0)];
 add_one
-    .call(&mut store, &[Value::I32(42)], &mut result)
+    .call(&mut store, &[Val::I32(42)], &mut result)
     .unwrap();
 
-assert_eq!(result[0], Value::I32(43));
+assert_eq!(result[0], Val::I32(43));
 ```
 
 ## Backends

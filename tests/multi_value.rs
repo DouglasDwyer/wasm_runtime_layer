@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use wasm_runtime_layer::{
-    backend::WasmEngine, Engine, Extern, Func, FuncType, Imports, Instance, Module, Store, Value,
-    ValueType,
+    backend::WasmEngine, Engine, Extern, Func, FuncType, Imports, Instance, Module, Store, Val,
+    ValType,
 };
 
 #[test]
@@ -66,10 +66,10 @@ fn multi_value(engine: &Engine<impl WasmEngine>) {
 
     let func = Func::new(
         &mut store,
-        FuncType::new([], [ValueType::I32, ValueType::I32]),
+        FuncType::new([], [ValType::I32, ValType::I32]),
         |_, _, res| {
-            res[0] = crate::Value::I32(5);
-            res[1] = crate::Value::I32(4);
+            res[0] = crate::Val::I32(5);
+            res[1] = crate::Val::I32(4);
             Ok(())
         },
     );
@@ -91,9 +91,9 @@ fn multi_value(engine: &Engine<impl WasmEngine>) {
         unreachable!()
     };
 
-    let mut result = [Value::I32(0), Value::I32(0)];
-    func.call(&mut store, &[Value::I32(5), Value::I32(7)], &mut result)
+    let mut result = [Val::I32(0), Val::I32(0)];
+    func.call(&mut store, &[Val::I32(5), Val::I32(7)], &mut result)
         .unwrap();
 
-    assert_eq!(result, [Value::I32(12), Value::I32(1)],);
+    assert_eq!(result, [Val::I32(12), Val::I32(1)],);
 }

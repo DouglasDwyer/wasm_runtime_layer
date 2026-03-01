@@ -27,11 +27,11 @@ use ref_cast::RefCast;
 use smallvec::SmallVec;
 use wasm_runtime_layer::{
     backend::{
-        AsContext, AsContextMut, Export, Extern, Imports, Value, WasmEngine, WasmExternRef,
-        WasmFunc, WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
+        AsContext, AsContextMut, Export, Extern, Imports, Val, WasmEngine, WasmExternRef, WasmFunc,
+        WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
         WasmStoreContextMut, WasmTable,
     },
-    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, TableType, ValueType,
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, TableType, ValType,
 };
 
 /// The default amount of arguments and return values for which to allocate
@@ -177,7 +177,7 @@ impl WasmFunc<Engine> for Func {
         func: impl 'static
             + Send
             + Sync
-            + Fn(StoreContextMut<T>, &[Value<Engine>], &mut [Value<Engine>]) -> Result<()>,
+            + Fn(StoreContextMut<T>, &[Val<Engine>], &mut [Val<Engine>]) -> Result<()>,
     ) -> Self {
         let ty = func_type_into(ctx.as_context().engine(), ty);
         Self::new(wasmtime::Func::new(
@@ -212,8 +212,8 @@ impl WasmFunc<Engine> for Func {
     fn call<T>(
         &self,
         mut ctx: impl AsContextMut<Engine>,
-        args: &[Value<Engine>],
-        results: &mut [Value<Engine>],
+        args: &[Val<Engine>],
+        results: &mut [Val<Engine>],
     ) -> Result<()> {
         let mut input = ArgumentVec::with_capacity(args.len());
         input.extend(args.iter().cloned().map(value_into));
@@ -236,7 +236,7 @@ impl WasmFunc<Engine> for Func {
 }
 
 impl WasmGlobal<Engine> for Global {
-    fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
+    fn new(mut ctx: impl AsContextMut<Engine>, value: Val<Engine>, mutable: bool) -> Self {
         let ty = value_type_into(value.ty());
         let value = value_into(value);
         Self::new(
@@ -260,12 +260,12 @@ impl WasmGlobal<Engine> for Global {
         global_type_from(self.as_ref().ty(ctx.as_context().into_inner()))
     }
 
-    fn set(&self, mut ctx: impl AsContextMut<Engine>, new_value: Value<Engine>) -> Result<()> {
+    fn set(&self, mut ctx: impl AsContextMut<Engine>, new_value: Val<Engine>) -> Result<()> {
         self.as_ref()
             .set(ctx.as_context_mut().into_inner(), value_into(new_value))
     }
 
-    fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Value<Engine> {
+    fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Val<Engine> {
         value_from(self.as_ref().get(ctx.as_context_mut().into_inner()))
     }
 }
@@ -508,7 +508,7 @@ impl<'a, T: 'static> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, 
 }
 
 impl WasmTable<Engine> for Table {
-    fn new(mut ctx: impl AsContextMut<Engine>, ty: TableType, init: Value<Engine>) -> Result<Self> {
+    fn new(mut ctx: impl AsContextMut<Engine>, ty: TableType, init: Val<Engine>) -> Result<Self> {
         wasmtime::Table::new(
             ctx.as_context_mut().into_inner(),
             table_type_into(ty),
@@ -529,7 +529,7 @@ impl WasmTable<Engine> for Table {
         &self,
         mut ctx: impl AsContextMut<Engine>,
         delta: u32,
-        init: Value<Engine>,
+        init: Val<Engine>,
     ) -> Result<u32> {
         self.as_ref()
             .grow(
@@ -540,7 +540,7 @@ impl WasmTable<Engine> for Table {
             .map(expect_table32)
     }
 
-    fn get(&self, mut ctx: impl AsContextMut<Engine>, index: u32) -> Option<Value<Engine>> {
+    fn get(&self, mut ctx: impl AsContextMut<Engine>, index: u32) -> Option<Val<Engine>> {
         self.as_ref()
             .get(ctx.as_context_mut().into_inner(), u64::from(index))
             .map(value_from_ref)
@@ -550,7 +550,7 @@ impl WasmTable<Engine> for Table {
         &self,
         mut ctx: impl AsContextMut<Engine>,
         index: u32,
-        value: Value<Engine>,
+        value: Val<Engine>,
     ) -> Result<()> {
         self.as_ref().set(
             ctx.as_context_mut().into_inner(),
@@ -560,15 +560,15 @@ impl WasmTable<Engine> for Table {
     }
 }
 
-/// Convert a [`wasmtime::Val`] to a [`Value<Engine>`].
-fn value_from(value: wasmtime::Val) -> Value<Engine> {
+/// Convert a [`wasmtime::Val`] to a [`Val<Engine>`].
+fn value_from(value: wasmtime::Val) -> Val<Engine> {
     match value {
-        wasmtime::Val::I32(x) => Value::I32(x),
-        wasmtime::Val::I64(x) => Value::I64(x),
-        wasmtime::Val::F32(x) => Value::F32(f32::from_bits(x)),
-        wasmtime::Val::F64(x) => Value::F64(f64::from_bits(x)),
-        wasmtime::Val::FuncRef(x) => Value::FuncRef(x.map(Func::new)),
-        wasmtime::Val::ExternRef(x) => Value::ExternRef(x.map(ExternRef::new)),
+        wasmtime::Val::I32(x) => Val::I32(x),
+        wasmtime::Val::I64(x) => Val::I64(x),
+        wasmtime::Val::F32(x) => Val::F32(f32::from_bits(x)),
+        wasmtime::Val::F64(x) => Val::F64(f64::from_bits(x)),
+        wasmtime::Val::FuncRef(x) => Val::FuncRef(x.map(Func::new)),
+        wasmtime::Val::ExternRef(x) => Val::ExternRef(x.map(ExternRef::new)),
         wasmtime::Val::V128(_) => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
         wasmtime::Val::AnyRef(_) => {
             unimplemented!("anyref is not supported in the wasm_runtime_layer")
@@ -582,25 +582,25 @@ fn value_from(value: wasmtime::Val) -> Value<Engine> {
     }
 }
 
-/// Convert a [`Value<Engine>`] to a [`wasmtime::Val`].
-fn value_into(value: Value<Engine>) -> wasmtime::Val {
+/// Convert a [`Val<Engine>`] to a [`wasmtime::Val`].
+fn value_into(value: Val<Engine>) -> wasmtime::Val {
     match value {
-        Value::I32(x) => wasmtime::Val::I32(x),
-        Value::I64(x) => wasmtime::Val::I64(x),
-        Value::F32(x) => wasmtime::Val::F32(x.to_bits()),
-        Value::F64(x) => wasmtime::Val::F64(x.to_bits()),
-        Value::FuncRef(x) => wasmtime::Val::FuncRef(x.map(Func::into_inner)),
-        Value::ExternRef(x) => wasmtime::Val::ExternRef(x.map(ExternRef::into_inner)),
+        Val::I32(x) => wasmtime::Val::I32(x),
+        Val::I64(x) => wasmtime::Val::I64(x),
+        Val::F32(x) => wasmtime::Val::F32(x.to_bits()),
+        Val::F64(x) => wasmtime::Val::F64(x.to_bits()),
+        Val::FuncRef(x) => wasmtime::Val::FuncRef(x.map(Func::into_inner)),
+        Val::ExternRef(x) => wasmtime::Val::ExternRef(x.map(ExternRef::into_inner)),
     }
 }
 
-/// Convert a [`wasmtime::ValType`] to a [`ValueType`].
-fn value_type_from(ty: wasmtime::ValType) -> ValueType {
+/// Convert a [`wasmtime::ValType`] to a [`ValType`].
+fn value_type_from(ty: wasmtime::ValType) -> ValType {
     match ty {
-        wasmtime::ValType::I32 => ValueType::I32,
-        wasmtime::ValType::I64 => ValueType::I64,
-        wasmtime::ValType::F32 => ValueType::F32,
-        wasmtime::ValType::F64 => ValueType::F64,
+        wasmtime::ValType::I32 => ValType::I32,
+        wasmtime::ValType::I64 => ValType::I64,
+        wasmtime::ValType::F32 => ValType::F32,
+        wasmtime::ValType::F64 => ValType::F64,
         wasmtime::ValType::V128 => {
             unimplemented!("v128 is not supported in the wasm_runtime_layer")
         }
@@ -608,34 +608,34 @@ fn value_type_from(ty: wasmtime::ValType) -> ValueType {
     }
 }
 
-/// Convert a [`ValueType`] to a [`wasmtime::ValType`].
-fn value_type_into(ty: ValueType) -> wasmtime::ValType {
+/// Convert a [`ValType`] to a [`wasmtime::ValType`].
+fn value_type_into(ty: ValType) -> wasmtime::ValType {
     match ty {
-        ValueType::I32 => wasmtime::ValType::I32,
-        ValueType::I64 => wasmtime::ValType::I64,
-        ValueType::F32 => wasmtime::ValType::F32,
-        ValueType::F64 => wasmtime::ValType::F64,
-        ValueType::FuncRef => wasmtime::ValType::Ref(wasmtime::RefType::FUNCREF),
-        ValueType::ExternRef => wasmtime::ValType::Ref(wasmtime::RefType::EXTERNREF),
+        ValType::I32 => wasmtime::ValType::I32,
+        ValType::I64 => wasmtime::ValType::I64,
+        ValType::F32 => wasmtime::ValType::F32,
+        ValType::F64 => wasmtime::ValType::F64,
+        ValType::FuncRef => wasmtime::ValType::Ref(wasmtime::RefType::FUNCREF),
+        ValType::ExternRef => wasmtime::ValType::Ref(wasmtime::RefType::EXTERNREF),
     }
 }
 
-/// Convert a [`Value<Engine>`] to a [`wasmtime::Ref`].
-fn value_into_ref(value: Value<Engine>) -> wasmtime::Ref {
+/// Convert a [`Val<Engine>`] to a [`wasmtime::Ref`].
+fn value_into_ref(value: Val<Engine>) -> wasmtime::Ref {
     match value {
-        Value::FuncRef(x) => wasmtime::Ref::Func(x.map(Func::into_inner)),
-        Value::ExternRef(x) => wasmtime::Ref::Extern(x.map(ExternRef::into_inner)),
-        Value::I32(_) | Value::I64(_) | Value::F32(_) | Value::F64(_) => {
+        Val::FuncRef(x) => wasmtime::Ref::Func(x.map(Func::into_inner)),
+        Val::ExternRef(x) => wasmtime::Ref::Extern(x.map(ExternRef::into_inner)),
+        Val::I32(_) | Val::I64(_) | Val::F32(_) | Val::F64(_) => {
             panic!("Attempt to convert non-reference value to a reference")
         }
     }
 }
 
-/// Convert a [`wasmtime::Ref`] to a [`Value<Engine>`].
-fn value_from_ref(ref_: wasmtime::Ref) -> Value<Engine> {
+/// Convert a [`wasmtime::Ref`] to a [`Val<Engine>`].
+fn value_from_ref(ref_: wasmtime::Ref) -> Val<Engine> {
     match ref_ {
-        wasmtime::Ref::Func(x) => Value::FuncRef(x.map(Func::from)),
-        wasmtime::Ref::Extern(x) => Value::ExternRef(x.map(ExternRef::from)),
+        wasmtime::Ref::Func(x) => Val::FuncRef(x.map(Func::from)),
+        wasmtime::Ref::Extern(x) => Val::ExternRef(x.map(ExternRef::from)),
         wasmtime::Ref::Any(_) => {
             unimplemented!("anyref is not supported in the wasm_runtime_layer")
         }
@@ -645,22 +645,22 @@ fn value_from_ref(ref_: wasmtime::Ref) -> Value<Engine> {
     }
 }
 
-/// Convert a [`wasmtime::RefType`] to a [`ValueType`].
-fn value_type_from_ref_type(ty: &wasmtime::RefType) -> ValueType {
+/// Convert a [`wasmtime::RefType`] to a [`ValType`].
+fn value_type_from_ref_type(ty: &wasmtime::RefType) -> ValType {
     match ty {
-        _ if wasmtime::RefType::eq(ty, &wasmtime::RefType::FUNCREF) => ValueType::FuncRef,
-        _ if wasmtime::RefType::eq(ty, &wasmtime::RefType::EXTERNREF) => ValueType::ExternRef,
+        _ if wasmtime::RefType::eq(ty, &wasmtime::RefType::FUNCREF) => ValType::FuncRef,
+        _ if wasmtime::RefType::eq(ty, &wasmtime::RefType::EXTERNREF) => ValType::ExternRef,
         // TODO: is the matching against FuncRef correct here
         _ => unimplemented!("anyref is not supported in the wasm_runtime_layer"),
     }
 }
 
-/// Convert a [`ValueType`] to a [`wasmtime::RefType`].
-fn value_type_into_ref_type(ty: ValueType) -> wasmtime::RefType {
+/// Convert a [`ValType`] to a [`wasmtime::RefType`].
+fn value_type_into_ref_type(ty: ValType) -> wasmtime::RefType {
     match ty {
-        ValueType::FuncRef => wasmtime::RefType::FUNCREF,
-        ValueType::ExternRef => wasmtime::RefType::EXTERNREF,
-        ValueType::I32 | ValueType::I64 | ValueType::F32 | ValueType::F64 => {
+        ValType::FuncRef => wasmtime::RefType::FUNCREF,
+        ValType::ExternRef => wasmtime::RefType::EXTERNREF,
+        ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 => {
             panic!("Attempt to convert non-reference type to a reference type")
         }
     }
