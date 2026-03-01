@@ -210,6 +210,7 @@ impl WasmFunc<Engine> for Func {
             ValType::I64 => Val::I64(0),
             ValType::F32 => Val::F32(0.0),
             ValType::F64 => Val::F64(0.0),
+            ValType::V128 => Val::V128(0),
             ValType::FuncRef => Val::FuncRef(None),
             ValType::ExternRef => Val::ExternRef(None),
         }));
@@ -662,9 +663,9 @@ fn value_from(value: wasmer::Value) -> Val<Engine> {
         wasmer::Value::I64(x) => Val::I64(x),
         wasmer::Value::F32(x) => Val::F32(x),
         wasmer::Value::F64(x) => Val::F64(x),
+        wasmer::Value::V128(x) => Val::V128(x),
         wasmer::Value::FuncRef(x) => Val::FuncRef(x.map(Func::new)),
         wasmer::Value::ExternRef(x) => Val::ExternRef(x.map(ExternRef::new)),
-        wasmer::Value::V128(_) => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
         wasmer::Value::ExceptionRef(_) => {
             unimplemented!("exceptions are not supported in the wasm_runtime_layer")
         }
@@ -678,6 +679,7 @@ fn value_into(value: Val<Engine>) -> wasmer::Value {
         Val::I64(x) => wasmer::Value::I64(x),
         Val::F32(x) => wasmer::Value::F32(x),
         Val::F64(x) => wasmer::Value::F64(x),
+        Val::V128(x) => wasmer::Value::V128(x),
         Val::FuncRef(x) => wasmer::Value::FuncRef(x.map(Func::into_inner)),
         Val::ExternRef(x) => wasmer::Value::ExternRef(x.map(ExternRef::into_inner)),
     }
@@ -690,7 +692,7 @@ fn value_type_from(ty: wasmer::Type) -> ValType {
         wasmer::Type::I64 => ValType::I64,
         wasmer::Type::F32 => ValType::F32,
         wasmer::Type::F64 => ValType::F64,
-        wasmer::Type::V128 => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
+        wasmer::Type::V128 => ValType::V128,
         wasmer::Type::ExternRef => ValType::ExternRef,
         wasmer::Type::FuncRef => ValType::FuncRef,
         wasmer::Type::ExceptionRef => {
@@ -706,6 +708,7 @@ fn value_type_into(ty: ValType) -> wasmer::Type {
         ValType::I64 => wasmer::Type::I64,
         ValType::F32 => wasmer::Type::F32,
         ValType::F64 => wasmer::Type::F64,
+        ValType::V128 => wasmer::Type::V128,
         ValType::FuncRef => wasmer::Type::FuncRef,
         ValType::ExternRef => wasmer::Type::ExternRef,
     }

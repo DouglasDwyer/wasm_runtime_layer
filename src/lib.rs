@@ -38,7 +38,7 @@
 //!     .unwrap()
 //!     .into_func()
 //!     .unwrap();
-//!         
+//!
 //! let mut result = [Val::I32(0)];
 //! add_one
 //!     .call(&mut store, &[Val::I32(42)], &mut result)
@@ -113,6 +113,8 @@ pub enum ValType {
     F32,
     /// 64-bit floating point number.
     F64,
+    /// 128-bit SIMD vector
+    V128,
     /// An optional function reference.
     FuncRef,
     /// An optional external reference.
@@ -122,12 +124,13 @@ pub enum ValType {
 impl fmt::Display for ValType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ValType::I32 => write!(f, "i32"),
-            ValType::I64 => write!(f, "i64"),
-            ValType::F32 => write!(f, "f32"),
-            ValType::F64 => write!(f, "f64"),
-            ValType::FuncRef => write!(f, "funcref"),
-            ValType::ExternRef => write!(f, "externref"),
+            Self::I32 => write!(f, "i32"),
+            Self::I64 => write!(f, "i64"),
+            Self::F32 => write!(f, "f32"),
+            Self::F64 => write!(f, "f64"),
+            Self::V128 => write!(f, "v128"),
+            Self::FuncRef => write!(f, "funcref"),
+            Self::ExternRef => write!(f, "externref"),
         }
     }
 }
@@ -805,7 +808,7 @@ impl<'a, T: 'static, E: WasmEngine> StoreContextMut<'a, T, E> {
 
     /// Access the underlying data owned by this store.
     ///
-    /// Same as [`Store::data`].    
+    /// Same as [`Store::data`].
     pub fn data(&self) -> &T {
         self.inner.data()
     }
@@ -835,6 +838,8 @@ pub enum Val {
     F32(f32),
     /// Value of 64-bit floating point number.
     F64(f64),
+    /// Value of 128-bit SIMD vector.
+    V128(u128),
     /// An optional function reference.
     FuncRef(Option<Func>),
     /// An optional external reference.
@@ -850,6 +855,7 @@ impl Val {
             Val::I64(_) => ValType::I64,
             Val::F32(_) => ValType::F32,
             Val::F64(_) => ValType::F64,
+            Val::V128(_) => ValType::V128,
             Val::FuncRef(_) => ValType::FuncRef,
             Val::ExternRef(_) => ValType::ExternRef,
         }
@@ -863,6 +869,7 @@ impl PartialEq for Val {
             (Self::I64(a), Self::I64(b)) => a == b,
             (Self::F32(a), Self::F32(b)) => a == b,
             (Self::F64(a), Self::F64(b)) => a == b,
+            (Self::V128(a), Self::V128(b)) => a == b,
             _ => false,
         }
     }
@@ -875,6 +882,7 @@ impl<E: WasmEngine> From<&Val> for crate::backend::Val<E> {
             Val::I64(i64) => Self::I64(*i64),
             Val::F32(f32) => Self::F32(*f32),
             Val::F64(f64) => Self::F64(*f64),
+            Val::V128(v128) => Self::V128(*v128),
             Val::FuncRef(None) => Self::FuncRef(None),
             Val::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
             Val::ExternRef(None) => Self::ExternRef(None),
@@ -892,6 +900,7 @@ impl<E: WasmEngine> From<&backend::Val<E>> for Val {
             crate::backend::Val::I64(i64) => Self::I64(*i64),
             crate::backend::Val::F32(f32) => Self::F32(*f32),
             crate::backend::Val::F64(f64) => Self::F64(*f64),
+            crate::backend::Val::V128(v128) => Self::V128(*v128),
             crate::backend::Val::FuncRef(None) => Self::FuncRef(None),
             crate::backend::Val::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
                 func: BackendObject::new(func.clone()),
