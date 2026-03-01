@@ -9,7 +9,7 @@ use fxhash::FxHashMap;
 use js_sys::{Uint8Array, WebAssembly};
 use wasm_runtime_layer::{
     backend::WasmModule, ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType,
-    TableType, ValueType,
+    TableType, ValType,
 };
 use wasmparser::RefType;
 
@@ -77,24 +77,24 @@ impl WasmModule<Engine> for Module {
     }
 }
 
-/// Convert a [`wasmparser::ValType`] to a [`ValueType`].
-fn value_type_from(ty: &wasmparser::ValType) -> ValueType {
+/// Convert a [`wasmparser::ValType`] to a [`ValType`].
+fn value_type_from(ty: &wasmparser::ValType) -> ValType {
     match ty {
-        wasmparser::ValType::I32 => ValueType::I32,
-        wasmparser::ValType::I64 => ValueType::I64,
-        wasmparser::ValType::F32 => ValueType::F32,
-        wasmparser::ValType::F64 => ValueType::F64,
+        wasmparser::ValType::I32 => ValType::I32,
+        wasmparser::ValType::I64 => ValType::I64,
+        wasmparser::ValType::F32 => ValType::F32,
+        wasmparser::ValType::F64 => ValType::F64,
         wasmparser::ValType::V128 => unimplemented!("v128 is not supported"),
         wasmparser::ValType::Ref(ty) => value_type_from_ref_type(ty),
     }
 }
 
-/// Convert a [`RefType`] to a [`ValueType`].
-fn value_type_from_ref_type(ty: &RefType) -> ValueType {
+/// Convert a [`RefType`] to a [`ValType`].
+fn value_type_from_ref_type(ty: &RefType) -> ValType {
     if ty.is_func_ref() {
-        ValueType::FuncRef
+        ValType::FuncRef
     } else if ty.is_extern_ref() {
-        ValueType::ExternRef
+        ValType::ExternRef
     } else {
         unimplemented!("unsupported reference type {ty:?}")
     }

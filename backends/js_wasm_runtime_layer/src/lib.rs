@@ -17,8 +17,8 @@ use js_sys::{JsString, Object, Reflect, WebAssembly};
 use slab::Slab;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_runtime_layer::{
-    backend::{AsContext, AsContextMut, Extern, Value, WasmEngine, WasmExternRef, WasmGlobal},
-    GlobalType, ValueType,
+    backend::{AsContext, AsContextMut, Extern, Val, WasmEngine, WasmExternRef, WasmGlobal},
+    GlobalType, ValType,
 };
 
 /// Conversion to and from JavaScript
@@ -206,14 +206,14 @@ impl Global {
 }
 
 impl WasmGlobal<Engine> for Global {
-    fn new(mut ctx: impl AsContextMut<Engine>, value: Value<Engine>, mutable: bool) -> Self {
+    fn new(mut ctx: impl AsContextMut<Engine>, value: Val<Engine>, mutable: bool) -> Self {
         let mut ctx = ctx.as_context_mut();
 
-        let ty = GlobalType::new(value_ty(&value), mutable);
+        let ty = GlobalType::new(value.ty(), mutable);
 
         let desc = Object::new();
 
-        Reflect::set(&desc, &"value".into(), &value_ty(&value).to_js()).unwrap();
+        Reflect::set(&desc, &"value".into(), &value.ty().to_js()).unwrap();
         Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
 
         let value = value.to_stored_js(&ctx);
@@ -233,7 +233,7 @@ impl WasmGlobal<Engine> for Global {
     fn set(
         &self,
         mut ctx: impl AsContextMut<Engine>,
-        new_value: Value<Engine>,
+        new_value: Val<Engine>,
     ) -> anyhow::Result<()> {
         let store: &mut StoreInner<_> = &mut ctx.as_context_mut();
 
@@ -250,7 +250,7 @@ impl WasmGlobal<Engine> for Global {
         Ok(())
     }
 
-    fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Value<Engine> {
+    fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Val<Engine> {
         let store: &mut StoreInner<_> = &mut ctx.as_context_mut();
         let inner = &mut store.globals[self.id];
 
@@ -261,21 +261,21 @@ impl WasmGlobal<Engine> for Global {
     }
 }
 
-impl ToStoredJs for Value<Engine> {
+impl ToStoredJs for Val<Engine> {
     type Repr = JsValue;
     /// Convert the value enum to a JavaScript value
     fn to_stored_js<T>(&self, store: &StoreInner<T>) -> JsValue {
         match self {
-            &Value::I32(v) => v.into(),
-            &Value::I64(v) => v.into(),
-            &Value::F32(v) => v.into(),
-            &Value::F64(v) => v.into(),
-            Value::FuncRef(Some(func)) => {
+            &Val::I32(v) => v.into(),
+            &Val::I64(v) => v.into(),
+            &Val::F32(v) => v.into(),
+            &Val::F64(v) => v.into(),
+            Val::FuncRef(Some(func)) => {
                 let v: &JsValue = store.funcs[func.id].func.as_ref();
                 v.clone()
             }
-            Value::FuncRef(None) => JsValue::NULL,
-            Value::ExternRef(_) => todo!(),
+            Val::FuncRef(None) => JsValue::NULL,
+            Val::ExternRef(_) => todo!(),
         }
     }
 }
@@ -309,25 +309,25 @@ impl ToStoredJs for Extern<Engine> {
     }
 }
 
-impl ToJs for ValueType {
+impl ToJs for ValType {
     type Repr = JsString;
     /// Convert the value enum to a JavaScript descriptor
     ///
     /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
     fn to_js(&self) -> JsString {
         match self {
-            ValueType::I32 => "i32",
-            ValueType::I64 => "i64",
-            ValueType::F32 => "f32",
-            ValueType::F64 => "f64",
-            ValueType::FuncRef => "anyfunc",
-            ValueType::ExternRef => "externref",
+            ValType::I32 => "i32",
+            ValType::I64 => "i64",
+            ValType::F32 => "f32",
+            ValType::F64 => "f64",
+            ValType::FuncRef => "anyfunc",
+            ValType::ExternRef => "externref",
         }
         .into()
     }
 }
 
-impl FromJs for ValueType {
+impl FromJs for ValType {
     fn from_js(value: JsValue) -> Option<Self>
     where
         Self: Sized,
@@ -355,30 +355,18 @@ impl FromJs for ValueType {
 /// Convert the JsValue into a Value of the supplied type
 pub(crate) fn value_from_js_typed<T>(
     _: &mut StoreInner<T>,
-    ty: &ValueType,
+    ty: &ValType,
     value: JsValue,
-) -> Option<Value<Engine>> {
+) -> Option<Val<Engine>> {
     match ty {
-        ValueType::I32 => Some(Value::I32(i32::from_js(value)?)),
-        ValueType::I64 => Some(Value::I64(i64::from_js(value)?)),
-        ValueType::F32 => Some(Value::F32(f32::from_js(value)?)),
-        ValueType::F64 => Some(Value::F64(f64::from_js(value)?)),
-        ValueType::FuncRef | ValueType::ExternRef => {
+        ValType::I32 => Some(Val::I32(i32::from_js(value)?)),
+        ValType::I64 => Some(Val::I64(i64::from_js(value)?)),
+        ValType::F32 => Some(Val::F32(f32::from_js(value)?)),
+        ValType::F64 => Some(Val::F64(f64::from_js(value)?)),
+        ValType::FuncRef | ValType::ExternRef => {
             #[cfg(feature = "tracing")]
             tracing::error!("conversion to a function or extern outside of a module not permitted");
             None
         }
-    }
-}
-
-/// Convert a value to its type
-fn value_ty(value: &Value<Engine>) -> ValueType {
-    match value {
-        Value::I32(_) => ValueType::I32,
-        Value::I64(_) => ValueType::I64,
-        Value::F32(_) => ValueType::F32,
-        Value::F64(_) => ValueType::F64,
-        Value::FuncRef(_) => ValueType::FuncRef,
-        Value::ExternRef(_) => ValueType::ExternRef,
     }
 }

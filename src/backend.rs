@@ -9,12 +9,12 @@ use fxhash::FxBuildHasher;
 use hashbrown::HashMap;
 
 use crate::{
-    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, TableType, ValueType,
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, TableType, ValType,
 };
 
 /// Runtime representation of a value.
 #[derive(Clone)]
-pub enum Value<E: WasmEngine> {
+pub enum Val<E: WasmEngine> {
     /// Value of 32-bit signed or unsigned integer.
     I32(i32),
     /// Value of 64-bit signed or unsigned integer.
@@ -29,34 +29,34 @@ pub enum Value<E: WasmEngine> {
     ExternRef(Option<E::ExternRef>),
 }
 
-impl<E: WasmEngine> Value<E> {
-    /// Returns the [`ValueType`] for this [`Value`].
+impl<E: WasmEngine> Val<E> {
+    /// Returns the [`ValType`] for this [`Val`].
     #[must_use]
-    pub const fn ty(&self) -> ValueType {
+    pub const fn ty(&self) -> ValType {
         match self {
-            Value::I32(_) => ValueType::I32,
-            Value::I64(_) => ValueType::I64,
-            Value::F32(_) => ValueType::F32,
-            Value::F64(_) => ValueType::F64,
-            Value::FuncRef(_) => ValueType::FuncRef,
-            Value::ExternRef(_) => ValueType::ExternRef,
+            Val::I32(_) => ValType::I32,
+            Val::I64(_) => ValType::I64,
+            Val::F32(_) => ValType::F32,
+            Val::F64(_) => ValType::F64,
+            Val::FuncRef(_) => ValType::FuncRef,
+            Val::ExternRef(_) => ValType::ExternRef,
         }
     }
 }
 
-impl<E: WasmEngine> fmt::Debug for Value<E>
+impl<E: WasmEngine> fmt::Debug for Val<E>
 where
     E::Func: fmt::Debug,
     E::ExternRef: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Value::I32(v) => f.debug_tuple("I32").field(v).finish(),
-            Value::I64(v) => f.debug_tuple("I64").field(v).finish(),
-            Value::F32(v) => f.debug_tuple("F32").field(v).finish(),
-            Value::F64(v) => f.debug_tuple("F64").field(v).finish(),
-            Value::FuncRef(v) => f.debug_tuple("FuncRef").field(v).finish(),
-            Value::ExternRef(v) => f.debug_tuple("ExternRef").field(v).finish(),
+            Val::I32(v) => f.debug_tuple("I32").field(v).finish(),
+            Val::I64(v) => f.debug_tuple("I64").field(v).finish(),
+            Val::F32(v) => f.debug_tuple("F32").field(v).finish(),
+            Val::F64(v) => f.debug_tuple("F64").field(v).finish(),
+            Val::FuncRef(v) => f.debug_tuple("FuncRef").field(v).finish(),
+            Val::ExternRef(v) => f.debug_tuple("ExternRef").field(v).finish(),
         }
     }
 }
@@ -371,7 +371,7 @@ pub trait WasmFunc<E: WasmEngine>: Clone + Sized + Send + Sync {
         func: impl 'static
             + Send
             + Sync
-            + Fn(E::StoreContextMut<'_, T>, &[Value<E>], &mut [Value<E>]) -> Result<()>,
+            + Fn(E::StoreContextMut<'_, T>, &[Val<E>], &mut [Val<E>]) -> Result<()>,
     ) -> Self;
     /// Gets the function type of this object.
     fn ty(&self, ctx: impl AsContext<E>) -> FuncType;
@@ -379,21 +379,21 @@ pub trait WasmFunc<E: WasmEngine>: Clone + Sized + Send + Sync {
     fn call<T>(
         &self,
         ctx: impl AsContextMut<E>,
-        args: &[Value<E>],
-        results: &mut [Value<E>],
+        args: &[Val<E>],
+        results: &mut [Val<E>],
     ) -> Result<()>;
 }
 
 /// Provides a Wasm global variable reference.
 pub trait WasmGlobal<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new global variable to the store.
-    fn new(ctx: impl AsContextMut<E>, value: Value<E>, mutable: bool) -> Self;
+    fn new(ctx: impl AsContextMut<E>, value: Val<E>, mutable: bool) -> Self;
     /// Returns the type of the global variable.
     fn ty(&self, ctx: impl AsContext<E>) -> GlobalType;
     /// Sets the value of the global variable.
-    fn set(&self, ctx: impl AsContextMut<E>, new_value: Value<E>) -> Result<()>;
+    fn set(&self, ctx: impl AsContextMut<E>, new_value: Val<E>) -> Result<()>;
     /// Gets the value of the global variable.
-    fn get(&self, ctx: impl AsContextMut<E>) -> Value<E>;
+    fn get(&self, ctx: impl AsContextMut<E>) -> Val<E>;
 }
 
 /// Provides a Wasm linear memory reference.
@@ -417,17 +417,17 @@ pub trait WasmMemory<E: WasmEngine>: Clone + Sized + Send + Sync {
 /// Provides a Wasm table reference.
 pub trait WasmTable<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new table to the store.
-    fn new(ctx: impl AsContextMut<E>, ty: TableType, init: Value<E>) -> Result<Self>;
+    fn new(ctx: impl AsContextMut<E>, ty: TableType, init: Val<E>) -> Result<Self>;
     /// Returns the type and limits of the table.
     fn ty(&self, ctx: impl AsContext<E>) -> TableType;
     /// Returns the current size of the table.
     fn size(&self, ctx: impl AsContext<E>) -> u32;
     /// Grows the table by the given amount of elements.
-    fn grow(&self, ctx: impl AsContextMut<E>, delta: u32, init: Value<E>) -> Result<u32>;
+    fn grow(&self, ctx: impl AsContextMut<E>, delta: u32, init: Val<E>) -> Result<u32>;
     /// Returns the table element value at `index`.
-    fn get(&self, ctx: impl AsContextMut<E>, index: u32) -> Option<Value<E>>;
+    fn get(&self, ctx: impl AsContextMut<E>, index: u32) -> Option<Val<E>>;
     /// Sets the value of this table at `index`.
-    fn set(&self, ctx: impl AsContextMut<E>, index: u32, value: Value<E>) -> Result<()>;
+    fn set(&self, ctx: impl AsContextMut<E>, index: u32, value: Val<E>) -> Result<()>;
 }
 
 /// Provides an instantiated WASM module.

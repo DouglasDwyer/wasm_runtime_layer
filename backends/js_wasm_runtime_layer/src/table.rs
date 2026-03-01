@@ -4,8 +4,8 @@ use anyhow::Context;
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_runtime_layer::{
-    backend::{AsContext, AsContextMut, Value, WasmTable},
-    TableType, ValueType,
+    backend::{AsContext, AsContextMut, Val, WasmTable},
+    TableType, ValType,
 };
 
 use crate::{
@@ -49,7 +49,7 @@ impl Table {
         let table = value.dyn_into::<WebAssembly::Table>().ok()?;
 
         assert!(table.length() >= ty.minimum());
-        assert_eq!(ty.element(), ValueType::FuncRef);
+        assert_eq!(ty.element(), ValType::FuncRef);
 
         let inner = TableInner { ty, table };
 
@@ -70,7 +70,7 @@ impl WasmTable<Engine> for Table {
     fn new(
         mut ctx: impl AsContextMut<Engine>,
         ty: TableType,
-        init: Value<Engine>,
+        init: Val<Engine>,
     ) -> anyhow::Result<Self> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("Table::new", ?ty, ?init).entered();
@@ -118,7 +118,7 @@ impl WasmTable<Engine> for Table {
         &self,
         mut ctx: impl AsContextMut<Engine>,
         delta: u32,
-        init: Value<Engine>,
+        init: Val<Engine>,
     ) -> anyhow::Result<u32> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let init = init.to_stored_js(ctx);
@@ -135,7 +135,7 @@ impl WasmTable<Engine> for Table {
     }
 
     /// Returns the table element value at `index`.
-    fn get(&self, _: impl AsContextMut<Engine>, _: u32) -> Option<Value<Engine>> {
+    fn get(&self, _: impl AsContextMut<Engine>, _: u32) -> Option<Val<Engine>> {
         // It is not possible to determine the type or signature of the value.
         //
         // To enable this we would need to cache and intern a unique id for each value to be able
@@ -151,12 +151,12 @@ impl WasmTable<Engine> for Table {
         &self,
         mut ctx: impl AsContextMut<Engine>,
         index: u32,
-        value: Value<Engine>,
+        value: Val<Engine>,
     ) -> anyhow::Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         // RA breaks on this and sees the wrong impl of `value.get`
         //
-        // Explicitely telling it that this is a slice of Value<Engine> causes it to see the
+        // Explicitely telling it that this is a slice of Val<Engine> causes it to see the
         // slice::get method rather than the WasmTable::get function, which shouldn't happen and is
         // a bug since &[]` does not implement `WasmTable`, but alas...
         let value = value.to_stored_js(ctx);
