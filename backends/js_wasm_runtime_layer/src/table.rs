@@ -4,8 +4,8 @@ use anyhow::Context;
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_runtime_layer::{
-    backend::{AsContext, AsContextMut, Val, WasmTable},
-    TableType, ValType,
+    backend::{AsContext, AsContextMut, Ref, WasmTable},
+    RefType, TableType,
 };
 
 use crate::{
@@ -49,7 +49,7 @@ impl Table {
         let table = value.dyn_into::<WebAssembly::Table>().ok()?;
 
         assert!(table.length() >= ty.minimum());
-        assert_eq!(ty.element(), ValType::FuncRef);
+        assert_eq!(ty.element(), RefType::FuncRef);
 
         let inner = TableInner { ty, table };
 
@@ -70,7 +70,7 @@ impl WasmTable<Engine> for Table {
     fn new(
         mut ctx: impl AsContextMut<Engine>,
         ty: TableType,
-        init: Val<Engine>,
+        init: Ref<Engine>,
     ) -> anyhow::Result<Self> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("Table::new", ?ty, ?init).entered();
@@ -118,7 +118,7 @@ impl WasmTable<Engine> for Table {
         &self,
         mut ctx: impl AsContextMut<Engine>,
         delta: u32,
-        init: Val<Engine>,
+        init: Ref<Engine>,
     ) -> anyhow::Result<u32> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let init = init.to_stored_js(ctx);
@@ -134,13 +134,13 @@ impl WasmTable<Engine> for Table {
         Ok(old_len)
     }
 
-    /// Returns the table element value at `index`.
-    fn get(&self, _: impl AsContextMut<Engine>, _: u32) -> Option<Val<Engine>> {
-        // It is not possible to determine the type or signature of the value.
+    /// Returns the table element at `index`.
+    fn get(&self, _: impl AsContextMut<Engine>, _: u32) -> Option<Ref<Engine>> {
+        // It is not possible to determine the type or signature of the element.
         //
-        // To enable this we would need to cache and intern a unique id for each value to be able
-        // to reconcile the signature and existing Store value. This would also avoid duplicating
-        // values
+        // To enable this we would need to cache and intern a unique id for each element to be able
+        // to reconcile the signature and existing Store element. This would also avoid duplicating
+        // elements
         #[cfg(feature = "tracing")]
         tracing::error!("get is not implemented");
         None
@@ -151,21 +151,21 @@ impl WasmTable<Engine> for Table {
         &self,
         mut ctx: impl AsContextMut<Engine>,
         index: u32,
-        value: Val<Engine>,
+        elem: Ref<Engine>,
     ) -> anyhow::Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
-        // RA breaks on this and sees the wrong impl of `value.get`
+        // RA breaks on this and sees the wrong impl of `elem.get`
         //
-        // Explicitely telling it that this is a slice of Val<Engine> causes it to see the
+        // Explicitely telling it that this is a slice of Ref<Engine> causes it to see the
         // slice::get method rather than the WasmTable::get function, which shouldn't happen and is
         // a bug since &[]` does not implement `WasmTable`, but alas...
-        let value = value.to_stored_js(ctx);
+        let elem = elem.to_stored_js(ctx);
 
         let inner: &mut TableInner = &mut ctx.tables[self.id];
 
         inner
             .table
-            .set(index, value.unchecked_ref())
+            .set(index, elem.unchecked_ref())
             .map_err(JsErrorMsg::from)
             .context("Invalid index")?;
 

@@ -9,7 +9,8 @@ use fxhash::FxBuildHasher;
 use hashbrown::HashMap;
 
 use crate::{
-    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, TableType, ValType,
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, RefType, TableType,
+    ValType,
 };
 
 /// Runtime representation of a value.
@@ -59,6 +60,48 @@ where
             Self::F32(v) => f.debug_tuple("F32").field(v).finish(),
             Self::F64(v) => f.debug_tuple("F64").field(v).finish(),
             Self::V128(v) => f.debug_tuple("V128").field(v).finish(),
+            Self::FuncRef(v) => f.debug_tuple("FuncRef").field(v).finish(),
+            Self::ExternRef(v) => f.debug_tuple("ExternRef").field(v).finish(),
+        }
+    }
+}
+
+impl<E: WasmEngine> From<Ref<E>> for Val<E> {
+    fn from(r#ref: Ref<E>) -> Self {
+        match r#ref {
+            Ref::FuncRef(f) => Self::FuncRef(f),
+            Ref::ExternRef(e) => Self::ExternRef(e),
+        }
+    }
+}
+
+/// Runtime representation of a reference.
+#[derive(Clone)]
+pub enum Ref<E: WasmEngine> {
+    /// An optional function reference.
+    FuncRef(Option<E::Func>),
+    /// An optional external reference.
+    ExternRef(Option<E::ExternRef>),
+}
+
+impl<E: WasmEngine> Ref<E> {
+    /// Returns the [`RefType`] for this [`Ref`].
+    #[must_use]
+    pub const fn ty(&self) -> RefType {
+        match self {
+            Self::FuncRef(_) => RefType::FuncRef,
+            Self::ExternRef(_) => RefType::ExternRef,
+        }
+    }
+}
+
+impl<E: WasmEngine> fmt::Debug for Ref<E>
+where
+    E::Func: fmt::Debug,
+    E::ExternRef: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
             Self::FuncRef(v) => f.debug_tuple("FuncRef").field(v).finish(),
             Self::ExternRef(v) => f.debug_tuple("ExternRef").field(v).finish(),
         }
@@ -421,17 +464,17 @@ pub trait WasmMemory<E: WasmEngine>: Clone + Sized + Send + Sync {
 /// Provides a Wasm table reference.
 pub trait WasmTable<E: WasmEngine>: Clone + Sized + Send + Sync {
     /// Creates a new table to the store.
-    fn new(ctx: impl AsContextMut<E>, ty: TableType, init: Val<E>) -> Result<Self>;
+    fn new(ctx: impl AsContextMut<E>, ty: TableType, init: Ref<E>) -> Result<Self>;
     /// Returns the type and limits of the table.
     fn ty(&self, ctx: impl AsContext<E>) -> TableType;
     /// Returns the current size of the table.
     fn size(&self, ctx: impl AsContext<E>) -> u32;
     /// Grows the table by the given amount of elements.
-    fn grow(&self, ctx: impl AsContextMut<E>, delta: u32, init: Val<E>) -> Result<u32>;
-    /// Returns the table element value at `index`.
-    fn get(&self, ctx: impl AsContextMut<E>, index: u32) -> Option<Val<E>>;
-    /// Sets the value of this table at `index`.
-    fn set(&self, ctx: impl AsContextMut<E>, index: u32, value: Val<E>) -> Result<()>;
+    fn grow(&self, ctx: impl AsContextMut<E>, delta: u32, init: Ref<E>) -> Result<u32>;
+    /// Returns the table element at `index`.
+    fn get(&self, ctx: impl AsContextMut<E>, index: u32) -> Option<Ref<E>>;
+    /// Sets the element of this table at `index`.
+    fn set(&self, ctx: impl AsContextMut<E>, index: u32, elem: Ref<E>) -> Result<()>;
 }
 
 /// Provides an instantiated WASM module.

@@ -18,11 +18,12 @@ use ref_cast::RefCast;
 use smallvec::SmallVec;
 use wasm_runtime_layer::{
     backend::{
-        AsContext, AsContextMut, Export, Extern, Imports, Val, WasmEngine, WasmExternRef, WasmFunc,
-        WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
+        AsContext, AsContextMut, Export, Extern, Imports, Ref, Val, WasmEngine, WasmExternRef,
+        WasmFunc, WasmGlobal, WasmInstance, WasmMemory, WasmModule, WasmStore, WasmStoreContext,
         WasmStoreContextMut, WasmTable,
     },
-    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, TableType, ValType,
+    ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType, RefType, TableType,
+    ValType,
 };
 use wasmer::{AsStoreMut, AsStoreRef};
 
@@ -605,11 +606,11 @@ impl<'a, T: 'static> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, 
 }
 
 impl WasmTable<Engine> for Table {
-    fn new(mut ctx: impl AsContextMut<Engine>, ty: TableType, init: Val<Engine>) -> Result<Self> {
+    fn new(mut ctx: impl AsContextMut<Engine>, ty: TableType, init: Ref<Engine>) -> Result<Self> {
         wasmer::Table::new(
             ctx.as_context_mut().as_store_mut(),
             table_type_into(ty),
-            value_into(init),
+            ref_into_value(init),
         )
         .map(Self::new)
         .map_err(Error::new)
@@ -627,30 +628,29 @@ impl WasmTable<Engine> for Table {
         &self,
         mut ctx: impl AsContextMut<Engine>,
         delta: u32,
-        init: Val<Engine>,
+        init: Ref<Engine>,
     ) -> Result<u32> {
         self.as_ref()
-            .grow(ctx.as_context_mut().as_store_mut(), delta, value_into(init))
+            .grow(
+                ctx.as_context_mut().as_store_mut(),
+                delta,
+                ref_into_value(init),
+            )
             .map_err(Error::new)
     }
 
-    fn get(&self, mut ctx: impl AsContextMut<Engine>, index: u32) -> Option<Val<Engine>> {
+    fn get(&self, mut ctx: impl AsContextMut<Engine>, index: u32) -> Option<Ref<Engine>> {
         self.as_ref()
             .get(ctx.as_context_mut().as_store_mut(), index)
-            .map(value_from)
+            .map(ref_from_value)
     }
 
-    fn set(
-        &self,
-        mut ctx: impl AsContextMut<Engine>,
-        index: u32,
-        value: Val<Engine>,
-    ) -> Result<()> {
+    fn set(&self, mut ctx: impl AsContextMut<Engine>, index: u32, elem: Ref<Engine>) -> Result<()> {
         self.as_ref()
             .set(
                 ctx.as_context_mut().as_store_mut(),
                 index,
-                value_into(value),
+                ref_into_value(elem),
             )
             .map_err(Error::new)
     }
@@ -714,6 +714,58 @@ fn value_type_into(ty: ValType) -> wasmer::Type {
     }
 }
 
+/// Convert a [`wasmer::Value`] to a [`Ref<Engine>`].
+fn ref_from_value(value: wasmer::Value) -> Ref<Engine> {
+    match value {
+        wasmer::Value::I32(_)
+        | wasmer::Value::I64(_)
+        | wasmer::Value::F32(_)
+        | wasmer::Value::F64(_)
+        | wasmer::Value::V128(_) => {
+            unimplemented!("cannot convert from a i32|i64|f32|f64|v128 to a reference")
+        }
+        wasmer::Value::FuncRef(x) => Ref::FuncRef(x.map(Func::new)),
+        wasmer::Value::ExternRef(x) => Ref::ExternRef(x.map(ExternRef::new)),
+        wasmer::Value::ExceptionRef(_) => {
+            unimplemented!("exceptions are not supported in the wasm_runtime_layer")
+        }
+    }
+}
+
+/// Convert a [`Ref<Engine>`] to a [`wasmer::Value`].
+fn ref_into_value(r#ref: Ref<Engine>) -> wasmer::Value {
+    match r#ref {
+        Ref::FuncRef(x) => wasmer::Value::FuncRef(x.map(Func::into_inner)),
+        Ref::ExternRef(x) => wasmer::Value::ExternRef(x.map(ExternRef::into_inner)),
+    }
+}
+
+/// Convert a [`RefType`] to a [`wasmer::Type`].
+fn ref_type_into_value_type(ty: RefType) -> wasmer::Type {
+    match ty {
+        RefType::FuncRef => wasmer::Type::FuncRef,
+        RefType::ExternRef => wasmer::Type::ExternRef,
+    }
+}
+
+/// Convert a [`wasmer::Type`] to a [`RefType`].
+fn ref_type_from_value_type(ty: wasmer::Type) -> RefType {
+    match ty {
+        wasmer::Type::I32
+        | wasmer::Type::I64
+        | wasmer::Type::F32
+        | wasmer::Type::F64
+        | wasmer::Type::V128 => {
+            unimplemented!("cannot convert from i32|i64|f32|f64|v128 to reference type")
+        }
+        wasmer::Type::ExternRef => RefType::ExternRef,
+        wasmer::Type::FuncRef => RefType::FuncRef,
+        wasmer::Type::ExceptionRef => {
+            unimplemented!("exceptions are not supported in the wasm_runtime_layer")
+        }
+    }
+}
+
 /// Convert a [`wasmer::FunctionType`] to a [`FuncType`].
 fn func_type_from(ty: wasmer::FunctionType) -> FuncType {
     FuncType::new(
@@ -758,12 +810,16 @@ fn memory_type_into(ty: MemoryType) -> wasmer::MemoryType {
 
 /// Convert a [`wasmer::TableType`] to a [`TableType`].
 fn table_type_from(ty: wasmer::TableType) -> TableType {
-    TableType::new(value_type_from(ty.ty), ty.minimum, ty.maximum)
+    TableType::new(ref_type_from_value_type(ty.ty), ty.minimum, ty.maximum)
 }
 
 /// Convert a [`TableType`] to a [`wasmer::TableType`].
 fn table_type_into(ty: TableType) -> wasmer::TableType {
-    wasmer::TableType::new(value_type_into(ty.element()), ty.minimum(), ty.maximum())
+    wasmer::TableType::new(
+        ref_type_into_value_type(ty.element()),
+        ty.minimum(),
+        ty.maximum(),
+    )
 }
 
 /// Convert a [`wasmer::Extern`] to an [`Extern<Engine>`].

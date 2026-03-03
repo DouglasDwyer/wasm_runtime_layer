@@ -17,8 +17,8 @@ use js_sys::{JsString, Object, Reflect, WebAssembly};
 use slab::Slab;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_runtime_layer::{
-    backend::{AsContext, AsContextMut, Extern, Val, WasmEngine, WasmExternRef, WasmGlobal},
-    GlobalType, ValType,
+    backend::{AsContext, AsContextMut, Extern, Ref, Val, WasmEngine, WasmExternRef, WasmGlobal},
+    GlobalType, RefType, ValType,
 };
 
 /// Conversion to and from JavaScript
@@ -278,7 +278,27 @@ impl ToStoredJs for Val<Engine> {
                 v.clone()
             }
             Val::FuncRef(None) => JsValue::NULL,
-            Val::ExternRef(_) => todo!(),
+            Val::ExternRef(_) => unimplemented!(
+                "extern references are not yet supported in the js_wasm_runtime_layer backend"
+            ),
+        }
+    }
+}
+
+impl ToStoredJs for Ref<Engine> {
+    type Repr = JsValue;
+
+    /// Convert the value enum to a JavaScript value
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+        match self {
+            Ref::FuncRef(None) => JsValue::NULL,
+            Ref::FuncRef(Some(func)) => {
+                let v: &JsValue = store.funcs[func.id].func.as_ref();
+                v.clone()
+            }
+            Ref::ExternRef(_) => unimplemented!(
+                "extern references are not yet supported in the js_wasm_runtime_layer backend"
+            ),
         }
     }
 }
@@ -326,6 +346,20 @@ impl ToJs for ValType {
             ValType::V128 => "v128",
             ValType::FuncRef => "anyfunc",
             ValType::ExternRef => "externref",
+        }
+        .into()
+    }
+}
+
+impl ToJs for RefType {
+    type Repr = JsString;
+    /// Convert the value enum to a JavaScript descriptor
+    ///
+    /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
+    fn to_js(&self) -> JsString {
+        match self {
+            RefType::FuncRef => "anyfunc",
+            RefType::ExternRef => "externref",
         }
         .into()
     }

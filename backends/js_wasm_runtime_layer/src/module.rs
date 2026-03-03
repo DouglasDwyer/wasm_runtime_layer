@@ -9,9 +9,8 @@ use fxhash::FxHashMap;
 use js_sys::{Uint8Array, WebAssembly};
 use wasm_runtime_layer::{
     backend::WasmModule, ExportType, ExternType, FuncType, GlobalType, ImportType, MemoryType,
-    TableType, ValType,
+    RefType, TableType, ValType,
 };
-use wasmparser::RefType;
 
 use crate::{Engine, JsErrorMsg};
 
@@ -85,16 +84,16 @@ fn value_type_from(ty: &wasmparser::ValType) -> ValType {
         wasmparser::ValType::F32 => ValType::F32,
         wasmparser::ValType::F64 => ValType::F64,
         wasmparser::ValType::V128 => ValType::V128,
-        wasmparser::ValType::Ref(ty) => value_type_from_ref_type(ty),
+        wasmparser::ValType::Ref(ty) => value_type_from_ref_type(ty).into(),
     }
 }
 
-/// Convert a [`RefType`] to a [`ValType`].
-fn value_type_from_ref_type(ty: &RefType) -> ValType {
+/// Convert a [`wasmparser::RefType`] to a [`RefType`].
+fn value_type_from_ref_type(ty: &wasmparser::RefType) -> RefType {
     if ty.is_func_ref() {
-        ValType::FuncRef
+        RefType::FuncRef
     } else if ty.is_extern_ref() {
-        ValType::ExternRef
+        RefType::ExternRef
     } else {
         unimplemented!("unsupported reference type {ty:?}")
     }
