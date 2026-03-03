@@ -23,6 +23,8 @@ pub enum Val<E: WasmEngine> {
     F32(f32),
     /// Value of 64-bit floating point number.
     F64(f64),
+    /// Value of 128-bit SIMD vector.
+    V128(u128),
     /// An optional function reference.
     FuncRef(Option<E::Func>),
     /// An optional external reference.
@@ -38,6 +40,7 @@ impl<E: WasmEngine> Val<E> {
             Val::I64(_) => ValType::I64,
             Val::F32(_) => ValType::F32,
             Val::F64(_) => ValType::F64,
+            Val::V128(_) => ValType::V128,
             Val::FuncRef(_) => ValType::FuncRef,
             Val::ExternRef(_) => ValType::ExternRef,
         }
@@ -51,12 +54,13 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Val::I32(v) => f.debug_tuple("I32").field(v).finish(),
-            Val::I64(v) => f.debug_tuple("I64").field(v).finish(),
-            Val::F32(v) => f.debug_tuple("F32").field(v).finish(),
-            Val::F64(v) => f.debug_tuple("F64").field(v).finish(),
-            Val::FuncRef(v) => f.debug_tuple("FuncRef").field(v).finish(),
-            Val::ExternRef(v) => f.debug_tuple("ExternRef").field(v).finish(),
+            Self::I32(v) => f.debug_tuple("I32").field(v).finish(),
+            Self::I64(v) => f.debug_tuple("I64").field(v).finish(),
+            Self::F32(v) => f.debug_tuple("F32").field(v).finish(),
+            Self::F64(v) => f.debug_tuple("F64").field(v).finish(),
+            Self::V128(v) => f.debug_tuple("V128").field(v).finish(),
+            Self::FuncRef(v) => f.debug_tuple("FuncRef").field(v).finish(),
+            Self::ExternRef(v) => f.debug_tuple("ExternRef").field(v).finish(),
         }
     }
 }

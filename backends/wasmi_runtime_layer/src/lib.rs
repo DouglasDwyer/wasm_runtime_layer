@@ -517,7 +517,7 @@ fn value_from(value: wasmi::Val) -> Val<Engine> {
         wasmi::Val::I64(x) => Val::I64(x),
         wasmi::Val::F32(x) => Val::F32(x.to_float()),
         wasmi::Val::F64(x) => Val::F64(x.to_float()),
-        wasmi::Val::V128(_) => unimplemented!("v128 is not supported in the wasm_runtime_layer"),
+        wasmi::Val::V128(x) => Val::V128(x.as_u128()),
         wasmi::Val::FuncRef(wasmi::Nullable::Null) => Val::FuncRef(None),
         wasmi::Val::FuncRef(wasmi::Nullable::Val(f)) => Val::FuncRef(Some(Func::new(f))),
         wasmi::Val::ExternRef(wasmi::Nullable::Null) => Val::ExternRef(None),
@@ -532,6 +532,7 @@ fn value_into(value: Val<Engine>) -> wasmi::Val {
         Val::I64(x) => wasmi::Val::I64(x),
         Val::F32(x) => wasmi::Val::F32(wasmi::F32::from_float(x)),
         Val::F64(x) => wasmi::Val::F64(wasmi::F64::from_float(x)),
+        Val::V128(x) => wasmi::Val::V128(x.into()),
         Val::FuncRef(None) => wasmi::Val::FuncRef(wasmi::Nullable::Null),
         Val::FuncRef(Some(x)) => wasmi::Val::FuncRef(wasmi::Nullable::Val(x.into_inner())),
         Val::ExternRef(None) => wasmi::Val::ExternRef(wasmi::Nullable::Null),
@@ -546,9 +547,7 @@ fn value_type_from(ty: wasmi::ValType) -> ValType {
         wasmi::ValType::I64 => ValType::I64,
         wasmi::ValType::F32 => ValType::F32,
         wasmi::ValType::F64 => ValType::F64,
-        wasmi::ValType::V128 => {
-            unimplemented!("v128 is not supported in the wasm_runtime_layer")
-        }
+        wasmi::ValType::V128 => ValType::V128,
         wasmi::ValType::FuncRef => ValType::FuncRef,
         wasmi::ValType::ExternRef => ValType::ExternRef,
     }
@@ -565,7 +564,7 @@ fn value_into_ref(value: Val<Engine>) -> wasmi::Ref {
             None => wasmi::Nullable::Null,
             Some(x) => wasmi::Nullable::Val(x.into_inner()),
         }),
-        Val::I32(_) | Val::I64(_) | Val::F32(_) | Val::F64(_) => {
+        Val::I32(_) | Val::I64(_) | Val::F32(_) | Val::F64(_) | Val::V128(_) => {
             panic!("Attempt to convert non-reference value to a reference")
         }
     }
@@ -594,7 +593,7 @@ fn value_type_into_ref_type(ty: ValType) -> wasmi::RefType {
     match ty {
         ValType::FuncRef => wasmi::RefType::Func,
         ValType::ExternRef => wasmi::RefType::Extern,
-        ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 => {
+        ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => {
             panic!("Attempt to convert non-reference type to a reference type")
         }
     }
@@ -607,6 +606,7 @@ fn value_type_into(ty: ValType) -> wasmi::ValType {
         ValType::I64 => wasmi::ValType::I64,
         ValType::F32 => wasmi::ValType::F32,
         ValType::F64 => wasmi::ValType::F64,
+        ValType::V128 => wasmi::ValType::V128,
         ValType::FuncRef => wasmi::ValType::FuncRef,
         ValType::ExternRef => wasmi::ValType::ExternRef,
     }

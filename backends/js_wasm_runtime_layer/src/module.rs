@@ -84,7 +84,7 @@ fn value_type_from(ty: &wasmparser::ValType) -> ValType {
         wasmparser::ValType::I64 => ValType::I64,
         wasmparser::ValType::F32 => ValType::F32,
         wasmparser::ValType::F64 => ValType::F64,
-        wasmparser::ValType::V128 => unimplemented!("v128 is not supported"),
+        wasmparser::ValType::V128 => ValType::V128,
         wasmparser::ValType::Ref(ty) => value_type_from_ref_type(ty),
     }
 }

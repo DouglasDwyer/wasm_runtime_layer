@@ -270,6 +270,9 @@ impl ToStoredJs for Val<Engine> {
             &Val::I64(v) => v.into(),
             &Val::F32(v) => v.into(),
             &Val::F64(v) => v.into(),
+            &Val::V128(_) => {
+                unimplemented!("v128 values are not supported in the js_wasm_runtime_layer backend")
+            }
             Val::FuncRef(Some(func)) => {
                 let v: &JsValue = store.funcs[func.id].func.as_ref();
                 v.clone()
@@ -320,6 +323,7 @@ impl ToJs for ValType {
             ValType::I64 => "i64",
             ValType::F32 => "f32",
             ValType::F64 => "f64",
+            ValType::V128 => "v128",
             ValType::FuncRef => "anyfunc",
             ValType::ExternRef => "externref",
         }
@@ -363,6 +367,11 @@ pub(crate) fn value_from_js_typed<T>(
         ValType::I64 => Some(Val::I64(i64::from_js(value)?)),
         ValType::F32 => Some(Val::F32(f32::from_js(value)?)),
         ValType::F64 => Some(Val::F64(f64::from_js(value)?)),
+        ValType::V128 => {
+            #[cfg(feature = "tracing")]
+            tracing::error!("v128 values are not supported in the js_wasm_runtime_layer backend");
+            None
+        }
         ValType::FuncRef | ValType::ExternRef => {
             #[cfg(feature = "tracing")]
             tracing::error!("conversion to a function or extern outside of a module not permitted");
