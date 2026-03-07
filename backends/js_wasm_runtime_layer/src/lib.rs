@@ -293,7 +293,7 @@ impl ToStoredJs for Val<Engine> {
 impl ToStoredJs for Ref<Engine> {
     type Repr = JsValue;
 
-    /// Convert the value enum to a JavaScript value
+    /// Convert the reference enum to a JavaScript value
     fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<JsValue> {
         match self {
             Ref::FuncRef(None) => Ok(JsValue::NULL),
@@ -341,7 +341,7 @@ impl ToStoredJs for Extern<Engine> {
 
 impl ToJs for ValType {
     type Repr = JsString;
-    /// Convert the value enum to a JavaScript descriptor
+    /// Convert the value type enum to a JavaScript descriptor
     ///
     /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
     fn to_js(&self) -> JsString {
@@ -360,7 +360,7 @@ impl ToJs for ValType {
 
 impl ToJs for RefType {
     type Repr = JsString;
-    /// Convert the value enum to a JavaScript descriptor
+    /// Convert the reference type enum to a JavaScript descriptor
     ///
     /// See: <https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Global/Global>
     fn to_js(&self) -> JsString {

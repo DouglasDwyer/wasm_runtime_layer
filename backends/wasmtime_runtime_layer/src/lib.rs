@@ -620,13 +620,7 @@ fn value_type_from(ty: wasmtime::ValType) -> Result<ValType> {
         wasmtime::ValType::F32 => Ok(ValType::F32),
         wasmtime::ValType::F64 => Ok(ValType::F64),
         wasmtime::ValType::V128 => Ok(ValType::V128),
-        wasmtime::ValType::Ref(ty) => match ty {
-            _ if wasmtime::RefType::eq(&ty, &wasmtime::RefType::FUNCREF) => Ok(ValType::FuncRef),
-            _ if wasmtime::RefType::eq(&ty, &wasmtime::RefType::EXTERNREF) => {
-                Ok(ValType::ExternRef)
-            }
-            ty => bail!("ref type {ty:?} is not supported in the wasm_runtime_layer"),
-        },
+        wasmtime::ValType::Ref(ty) => Ok(ref_type_from(&ty)?.into()),
     }
 }
 

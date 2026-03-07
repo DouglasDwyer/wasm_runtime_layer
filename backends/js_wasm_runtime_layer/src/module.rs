@@ -85,15 +85,7 @@ fn value_type_from(ty: &wasmparser::ValType) -> Result<ValType> {
         wasmparser::ValType::F32 => Ok(ValType::F32),
         wasmparser::ValType::F64 => Ok(ValType::F64),
         wasmparser::ValType::V128 => Ok(ValType::V128),
-        wasmparser::ValType::Ref(ty) => {
-            if ty.is_func_ref() {
-                Ok(ValType::FuncRef)
-            } else if ty.is_extern_ref() {
-                Ok(ValType::ExternRef)
-            } else {
-                bail!("reference type {ty:?} is not supported in the wasm_runtime_layer")
-            }
-        }
+        wasmparser::ValType::Ref(ty) => Ok(ref_type_from(ty)?.into()),
     }
 }
 
