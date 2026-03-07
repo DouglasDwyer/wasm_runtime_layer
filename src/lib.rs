@@ -135,6 +135,33 @@ impl fmt::Display for ValType {
     }
 }
 
+impl From<RefType> for ValType {
+    fn from(ty: RefType) -> Self {
+        match ty {
+            RefType::FuncRef => Self::FuncRef,
+            RefType::ExternRef => Self::ExternRef,
+        }
+    }
+}
+
+/// Type of a reference.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum RefType {
+    /// An optional function reference.
+    FuncRef,
+    /// An optional external reference.
+    ExternRef,
+}
+
+impl fmt::Display for RefType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FuncRef => write!(f, "funcref"),
+            Self::ExternRef => write!(f, "externref"),
+        }
+    }
+}
+
 /// The type of a global variable.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct GlobalType {
@@ -164,8 +191,8 @@ impl GlobalType {
 /// A descriptor for a [`Table`] instance.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TableType {
-    /// The type of values stored in the [`Table`].
-    element: ValType,
+    /// The type of elements stored in the [`Table`].
+    element: RefType,
     /// The minimum number of elements the [`Table`] must have.
     min: u32,
     /// The optional maximum number of elements the [`Table`] can have.
@@ -180,15 +207,15 @@ impl TableType {
     /// # Panics
     ///
     /// If `min` is greater than `max`.
-    pub fn new(element: ValType, min: u32, max: Option<u32>) -> Self {
+    pub fn new(element: RefType, min: u32, max: Option<u32>) -> Self {
         if let Some(max) = max {
             assert!(min <= max);
         }
         Self { element, min, max }
     }
 
-    /// Returns the [`ValType`] of elements stored in the [`Table`].
-    pub fn element(&self) -> ValType {
+    /// Returns the [`RefType`] of elements stored in the [`Table`].
+    pub fn element(&self) -> RefType {
         self.element
     }
 
@@ -490,7 +517,7 @@ pub enum Extern {
     ///
     /// [`Cell<T>`]: https://doc.rust-lang.org/core/cell/struct.Cell.html
     Global(Global),
-    /// A WebAssembly table which is an array of funtion references.
+    /// A WebAssembly table which is an array of function references.
     Table(Table),
     /// A WebAssembly linear memory.
     Memory(Memory),
@@ -875,6 +902,15 @@ impl PartialEq for Val {
     }
 }
 
+impl From<Ref> for Val {
+    fn from(r#ref: Ref) -> Self {
+        match r#ref {
+            Ref::FuncRef(f) => Self::FuncRef(f),
+            Ref::ExternRef(e) => Self::ExternRef(e),
+        }
+    }
+}
+
 impl<E: WasmEngine> From<&Val> for crate::backend::Val<E> {
     fn from(value: &Val) -> Self {
         match value {
@@ -907,6 +943,54 @@ impl<E: WasmEngine> From<&backend::Val<E>> for Val {
             })),
             crate::backend::Val::ExternRef(None) => Self::ExternRef(None),
             crate::backend::Val::ExternRef(Some(extern_ref)) => Self::ExternRef(Some(ExternRef {
+                extern_ref: BackendObject::new(extern_ref.clone()),
+            })),
+        }
+    }
+}
+
+/// Runtime representation of a reference.
+#[derive(Clone, Debug)]
+pub enum Ref {
+    /// An optional function reference.
+    FuncRef(Option<Func>),
+    /// An optional external reference.
+    ExternRef(Option<ExternRef>),
+}
+
+impl Ref {
+    /// Returns the [`RefType`] for this [`Ref`].
+    #[must_use]
+    pub const fn ty(&self) -> RefType {
+        match self {
+            Self::FuncRef(_) => RefType::FuncRef,
+            Self::ExternRef(_) => RefType::ExternRef,
+        }
+    }
+}
+
+impl<E: WasmEngine> From<&Ref> for crate::backend::Ref<E> {
+    fn from(r#ref: &Ref) -> Self {
+        match r#ref {
+            Ref::FuncRef(None) => Self::FuncRef(None),
+            Ref::FuncRef(Some(func)) => Self::FuncRef(Some(func.func.cast::<E::Func>().clone())),
+            Ref::ExternRef(None) => Self::ExternRef(None),
+            Ref::ExternRef(Some(extern_ref)) => {
+                Self::ExternRef(Some(extern_ref.extern_ref.cast::<E::ExternRef>().clone()))
+            }
+        }
+    }
+}
+
+impl<E: WasmEngine> From<&backend::Ref<E>> for Ref {
+    fn from(r#ref: &backend::Ref<E>) -> Self {
+        match r#ref {
+            backend::Ref::FuncRef(None) => Self::FuncRef(None),
+            backend::Ref::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
+                func: BackendObject::new(func.clone()),
+            })),
+            backend::Ref::ExternRef(None) => Self::ExternRef(None),
+            backend::Ref::ExternRef(Some(extern_ref)) => Self::ExternRef(Some(ExternRef {
                 extern_ref: BackendObject::new(extern_ref.clone()),
             })),
         }
@@ -1222,7 +1306,7 @@ pub struct Table {
 
 impl Table {
     /// Creates a new table to the store.
-    pub fn new<C: AsContextMut>(mut ctx: C, ty: TableType, init: Val) -> Result<Self> {
+    pub fn new<C: AsContextMut>(mut ctx: C, ty: TableType, init: Ref) -> Result<Self> {
         Ok(Self {
             table: BackendObject::new(<<C::Engine as WasmEngine>::Table as WasmTable<
                 C::Engine,
@@ -1249,7 +1333,7 @@ impl Table {
     /// Grows the table by the given amount of elements.
     ///
     /// Returns the old size of the [`Table`] upon success.
-    pub fn grow<C: AsContextMut>(&self, mut ctx: C, delta: u32, init: Val) -> Result<u32> {
+    pub fn grow<C: AsContextMut>(&self, mut ctx: C, delta: u32, init: Ref) -> Result<u32> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 
         <_ as WasmTable<_>>::grow(table, ctx.as_context_mut().inner, delta, (&init).into())
@@ -1258,7 +1342,7 @@ impl Table {
     /// Returns the [`Table`] element value at `index`.
     ///
     /// Returns `None` if `index` is out of bounds.
-    pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Val> {
+    pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Ref> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 
         <_ as WasmTable<_>>::get(table, ctx.as_context_mut().inner, index)
@@ -1266,11 +1350,11 @@ impl Table {
             .map(Into::into)
     }
 
-    /// Sets the [`Val`] of this [`Table`] at `index`.
-    pub fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, value: Val) -> Result<()> {
+    /// Sets the [`Ref`] of this [`Table`] at `index`.
+    pub fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, elem: Ref) -> Result<()> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 
-        <_ as WasmTable<_>>::set(table, ctx.as_context_mut().inner, index, (&value).into())
+        <_ as WasmTable<_>>::set(table, ctx.as_context_mut().inner, index, (&elem).into())
     }
 }
 

@@ -20,7 +20,7 @@ pub struct Func {
     pub(crate) id: usize,
 }
 
-/// Internal represenation of [`Func`]
+/// Internal representation of [`Func`]
 #[derive(Debug)]
 pub(crate) struct FuncInner {
     /// The inner Js function
@@ -54,7 +54,7 @@ impl Func {
     }
 }
 
-/// Converst any repeated argument to `JsValue`
+/// Converts any repeated argument to `JsValue`
 macro_rules! to_ty {
     ($v: ident) => {
         JsValue

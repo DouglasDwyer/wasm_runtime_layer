@@ -176,7 +176,7 @@ pub struct StoreInner<T: 'static> {
     /// **Note**: append ONLY. No resource must be dropped or removed from this vector as long as
     /// the store is still alive.
     ///
-    /// Dropping a resource too early is safe, but the resulting behavior is not specifed and may
+    /// Dropping a resource too early is safe, but the resulting behavior is not specified and may
     /// include incorrect results, memory leaks or panics, etc.
     drop_resources: Vec<DropResource>,
 }
