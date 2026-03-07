@@ -53,7 +53,7 @@ fn multi_value(engine: &Engine<impl WasmEngine>) {
                   i32.sub
 
                   local.set $c
-                    
+
                   local.get $a
                   local.get $b
                   i32.add
@@ -68,8 +68,8 @@ fn multi_value(engine: &Engine<impl WasmEngine>) {
         &mut store,
         FuncType::new([], [ValType::I32, ValType::I32]),
         |_, _, res| {
-            res[0] = crate::Val::I32(5);
-            res[1] = crate::Val::I32(4);
+            res[0] = Val::I32(5);
+            res[1] = Val::I32(4);
             Ok(())
         },
     );
@@ -95,5 +95,5 @@ fn multi_value(engine: &Engine<impl WasmEngine>) {
     func.call(&mut store, &[Val::I32(5), Val::I32(7)], &mut result)
         .unwrap();
 
-    assert_eq!(result, [Val::I32(12), Val::I32(1)],);
+    assert_eq!(result, [Val::I32(12), Val::I32(1)]);
 }

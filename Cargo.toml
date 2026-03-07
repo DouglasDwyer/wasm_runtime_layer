@@ -13,7 +13,7 @@ fxhash = { version = "0.2", default-features = false }
 hashbrown = { version = "0.16", default-features = false }
 ref-cast = { version = "1.0", default-features = false }
 smallvec = { version = "1.11", default-features = false }
-wasm_runtime_layer = { path = ".", version = "0.6", default-features = false }
+wasm_runtime_layer = { path = ".", version = "0.7", default-features = false }
 
 [workspace.package]
 edition = "2021"
@@ -22,7 +22,7 @@ repository = "https://github.com/DouglasDwyer/wasm_runtime_layer"
 
 [package]
 name = "wasm_runtime_layer"
-version = "0.6.0"
+version = "0.7.0"
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -43,8 +43,8 @@ default = [ "std" ]
 std = [ "anyhow/std" ]
 
 [dev-dependencies]
-js_wasm_runtime_layer = { version = "0.6", path = "backends/js_wasm_runtime_layer" }
-wasmi_runtime_layer = { version = "2.0.0-beta.2", path = "backends/wasmi_runtime_layer" }
+js_wasm_runtime_layer = { version = "0.7", path = "backends/js_wasm_runtime_layer" }
+wasmi_runtime_layer = { version = "2.0.0-beta.1", path = "backends/wasmi_runtime_layer" }
 wasm-bindgen-test = { version = "0.3" }
 wat = { version = "1.0" }
 

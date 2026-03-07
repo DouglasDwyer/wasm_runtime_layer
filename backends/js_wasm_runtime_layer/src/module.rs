@@ -5,6 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
+use anyhow::{bail, Result};
 use fxhash::FxHashMap;
 use js_sys::{Uint8Array, WebAssembly};
 use wasm_runtime_layer::{
@@ -12,7 +13,7 @@ use wasm_runtime_layer::{
     RefType, TableType, ValType,
 };
 
-use crate::{Engine, JsErrorMsg};
+use crate::{ArgumentVec, Engine, JsErrorMsg};
 
 #[derive(Debug, Clone)]
 /// A WebAssembly Module.
@@ -33,7 +34,7 @@ pub(crate) struct ModuleInner {
 }
 
 impl WasmModule<Engine> for Module {
-    fn new(engine: &Engine, bytes: &[u8]) -> anyhow::Result<Self> {
+    fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
         let parsed = parse_module(bytes)?;
 
         let module =
@@ -77,35 +78,43 @@ impl WasmModule<Engine> for Module {
 }
 
 /// Convert a [`wasmparser::ValType`] to a [`ValType`].
-fn value_type_from(ty: &wasmparser::ValType) -> ValType {
+fn value_type_from(ty: &wasmparser::ValType) -> Result<ValType> {
     match ty {
-        wasmparser::ValType::I32 => ValType::I32,
-        wasmparser::ValType::I64 => ValType::I64,
-        wasmparser::ValType::F32 => ValType::F32,
-        wasmparser::ValType::F64 => ValType::F64,
-        wasmparser::ValType::V128 => ValType::V128,
-        wasmparser::ValType::Ref(ty) => value_type_from_ref_type(ty).into(),
+        wasmparser::ValType::I32 => Ok(ValType::I32),
+        wasmparser::ValType::I64 => Ok(ValType::I64),
+        wasmparser::ValType::F32 => Ok(ValType::F32),
+        wasmparser::ValType::F64 => Ok(ValType::F64),
+        wasmparser::ValType::V128 => Ok(ValType::V128),
+        wasmparser::ValType::Ref(ty) => {
+            if ty.is_func_ref() {
+                Ok(ValType::FuncRef)
+            } else if ty.is_extern_ref() {
+                Ok(ValType::ExternRef)
+            } else {
+                bail!("reference type {ty:?} is not supported in the wasm_runtime_layer")
+            }
+        }
     }
 }
 
 /// Convert a [`wasmparser::RefType`] to a [`RefType`].
-fn value_type_from_ref_type(ty: &wasmparser::RefType) -> RefType {
+fn ref_type_from(ty: &wasmparser::RefType) -> Result<RefType> {
     if ty.is_func_ref() {
-        RefType::FuncRef
+        Ok(RefType::FuncRef)
     } else if ty.is_extern_ref() {
-        RefType::ExternRef
+        Ok(RefType::ExternRef)
     } else {
-        unimplemented!("unsupported reference type {ty:?}")
+        bail!("reference type {ty:?} is not supported in the wasm_runtime_layer")
     }
 }
 
 /// Convert a [`wasmparser::TableType`] to a [`TableType`].
-fn table_type_from(ty: &wasmparser::TableType) -> TableType {
-    TableType::new(
-        value_type_from_ref_type(&ty.element_type),
+fn table_type_from(ty: &wasmparser::TableType) -> Result<TableType> {
+    Ok(TableType::new(
+        ref_type_from(&ty.element_type)?,
         ty.initial.try_into().expect("table size"),
         ty.maximum.map(|v| v.try_into().expect("table size")),
-    )
+    ))
 }
 
 #[derive(Debug)]
@@ -118,7 +127,7 @@ pub(crate) struct ParsedModule {
 }
 
 /// Parses a module from bytes and extracts import and export signatures
-pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
+pub(crate) fn parse_module(bytes: &[u8]) -> Result<ParsedModule> {
     let parser = wasmparser::Parser::new(0);
 
     let mut imports = FxHashMap::default();
@@ -147,10 +156,19 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                                 shared: false,
                                 describes_idx: None,
                                 descriptor_idx: None,
-                            } => FuncType::new(
-                                func_type.params().iter().map(value_type_from),
-                                func_type.results().iter().map(value_type_from),
-                            ),
+                            } => {
+                                let params = func_type
+                                    .params()
+                                    .iter()
+                                    .map(value_type_from)
+                                    .collect::<Result<ArgumentVec<_>>>()?;
+                                let results = func_type
+                                    .results()
+                                    .iter()
+                                    .map(value_type_from)
+                                    .collect::<Result<ArgumentVec<_>>>()?;
+                                FuncType::new(params, results)
+                            }
                             _ => unreachable!(),
                         },
                         _ => unimplemented!(),
@@ -172,7 +190,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                 for table in section {
                     let table = table?;
 
-                    tables.push(table_type_from(&table.ty));
+                    tables.push(table_type_from(&table.ty)?);
                 }
             }
             wasmparser::Payload::MemorySection(section) => {
@@ -189,7 +207,7 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                 for global in section {
                     let global = global?;
 
-                    let ty = value_type_from(&global.ty.content_type);
+                    let ty = value_type_from(&global.ty.content_type)?;
                     let mutable = global.ty.mutable;
 
                     globals.push(GlobalType::new(ty, mutable));
@@ -215,8 +233,8 @@ pub(crate) fn parse_module(bytes: &[u8]) -> anyhow::Result<ParsedModule> {
                         }
                         wasmparser::TypeRef::Table(ty) => {
                             // functions.push(sig.clone());
-                            tables.push(table_type_from(&ty));
-                            ExternType::Table(table_type_from(&ty))
+                            tables.push(table_type_from(&ty)?);
+                            ExternType::Table(table_type_from(&ty)?)
                         }
                         wasmparser::TypeRef::Memory(_) => todo!(),
                         wasmparser::TypeRef::Global(_) => todo!(),

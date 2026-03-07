@@ -37,13 +37,13 @@ impl<E: WasmEngine> Val<E> {
     #[must_use]
     pub const fn ty(&self) -> ValType {
         match self {
-            Val::I32(_) => ValType::I32,
-            Val::I64(_) => ValType::I64,
-            Val::F32(_) => ValType::F32,
-            Val::F64(_) => ValType::F64,
-            Val::V128(_) => ValType::V128,
-            Val::FuncRef(_) => ValType::FuncRef,
-            Val::ExternRef(_) => ValType::ExternRef,
+            Self::I32(_) => ValType::I32,
+            Self::I64(_) => ValType::I64,
+            Self::F32(_) => ValType::F32,
+            Self::F64(_) => ValType::F64,
+            Self::V128(_) => ValType::V128,
+            Self::FuncRef(_) => ValType::FuncRef,
+            Self::ExternRef(_) => ValType::ExternRef,
         }
     }
 }
@@ -274,8 +274,8 @@ impl<E: WasmEngine> Imports<E> {
         ns: &str,
         contents: impl IntoIterator<Item = (String, Extern<E>)>,
     ) {
-        for (name, extern_) in contents.into_iter() {
-            self.map.insert((ns.to_string(), name.clone()), extern_);
+        for (name, r#extern) in contents.into_iter() {
+            self.map.insert((ns.to_string(), name.clone()), r#extern);
         }
     }
 
