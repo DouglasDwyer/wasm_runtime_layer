@@ -156,7 +156,7 @@ impl WasmTable<Engine> for Table {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         // RA breaks on this and sees the wrong impl of `elem.get`
         //
-        // Explicitely telling it that this is a slice of Ref<Engine> causes it to see the
+        // Explicitly telling it that this is a slice of Ref<Engine> causes it to see the
         // slice::get method rather than the WasmTable::get function, which shouldn't happen and is
         // a bug since &[]` does not implement `WasmTable`, but alas...
         let elem = elem.to_stored_js(ctx);

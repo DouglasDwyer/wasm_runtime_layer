@@ -161,7 +161,7 @@ impl EngineInner {
     }
 }
 
-/// A global variable accesible as an import or export in a module
+/// A global variable accessible as an import or export in a module
 ///
 /// Stored within the store
 #[derive(Debug, Clone)]

@@ -117,7 +117,7 @@ pub enum Extern<E: WasmEngine> {
     ///
     /// [`Cell<T>`]: https://doc.rust-lang.org/core/cell/struct.Cell.html
     Global(E::Global),
-    /// A WebAssembly table which is an array of funtion references.
+    /// A WebAssembly table which is an array of function references.
     Table(E::Table),
     /// A WebAssembly linear memory.
     Memory(E::Memory),
