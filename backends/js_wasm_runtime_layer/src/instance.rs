@@ -77,8 +77,6 @@ impl WasmInstance<Engine> for Instance {
         &self,
         store: impl super::AsContext<Engine>,
     ) -> Box<dyn Iterator<Item = Export<Engine>>> {
-        // TODO: modify this trait to make the lifetime of the returned iterator depend on the
-        // anonymous lifetime of the store
         let instance: &InstanceInner = &store.as_context().instances[self.id];
         Box::new(
             instance
