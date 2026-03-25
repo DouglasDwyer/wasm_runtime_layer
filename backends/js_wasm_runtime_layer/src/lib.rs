@@ -12,7 +12,9 @@ use core::{
     error::Error,
     fmt,
 };
+use smallvec::SmallVec;
 
+use anyhow::{bail, Result};
 use js_sys::{JsString, Object, Reflect, WebAssembly};
 use slab::Slab;
 use wasm_bindgen::{JsCast, JsValue};
@@ -20,6 +22,13 @@ use wasm_runtime_layer::{
     backend::{AsContext, AsContextMut, Extern, Ref, Val, WasmEngine, WasmExternRef, WasmGlobal},
     GlobalType, RefType, ValType,
 };
+
+/// The default amount of arguments and return values for which to allocate
+/// stack space.
+const DEFAULT_ARGUMENT_SIZE: usize = 4;
+
+/// A vector which allocates up to the default number of arguments on the stack.
+type ArgumentVec<T> = SmallVec<[T; DEFAULT_ARGUMENT_SIZE]>;
 
 /// Conversion to and from JavaScript
 mod conversion;
@@ -182,10 +191,9 @@ pub(crate) struct GlobalInner {
 impl ToStoredJs for Global {
     type Repr = WebAssembly::Global;
 
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Global {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<WebAssembly::Global> {
         let global = &store.globals[self.id];
-
-        global.value.clone()
+        Ok(global.value.clone())
     }
 }
 
@@ -216,7 +224,7 @@ impl WasmGlobal<Engine> for Global {
         Reflect::set(&desc, &"value".into(), &value.ty().to_js()).unwrap();
         Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
 
-        let value = value.to_stored_js(&ctx);
+        let value = value.to_stored_js(&ctx).unwrap();
 
         let global = GlobalInner {
             value: WebAssembly::Global::new(&desc, &value).unwrap(),
@@ -230,19 +238,15 @@ impl WasmGlobal<Engine> for Global {
         ctx.as_context().globals[self.id].ty
     }
 
-    fn set(
-        &self,
-        mut ctx: impl AsContextMut<Engine>,
-        new_value: Val<Engine>,
-    ) -> anyhow::Result<()> {
+    fn set(&self, mut ctx: impl AsContextMut<Engine>, new_value: Val<Engine>) -> Result<()> {
         let store: &mut StoreInner<_> = &mut ctx.as_context_mut();
 
-        let value = &new_value.to_stored_js(store);
+        let value = &new_value.to_stored_js(store)?;
 
         let inner = &mut store.globals[self.id];
 
         if !inner.ty.mutable() {
-            return Err(anyhow::anyhow!("Global is not mutable"));
+            bail!("Global is not mutable");
         }
 
         inner.value.set_value(value);
@@ -263,22 +267,23 @@ impl WasmGlobal<Engine> for Global {
 
 impl ToStoredJs for Val<Engine> {
     type Repr = JsValue;
+
     /// Convert the value enum to a JavaScript value
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<JsValue> {
         match self {
-            &Val::I32(v) => v.into(),
-            &Val::I64(v) => v.into(),
-            &Val::F32(v) => v.into(),
-            &Val::F64(v) => v.into(),
-            &Val::V128(_) => {
-                unimplemented!("v128 values are not supported in the js_wasm_runtime_layer backend")
+            Val::I32(v) => Ok((*v).into()),
+            Val::I64(v) => Ok((*v).into()),
+            Val::F32(v) => Ok((*v).into()),
+            Val::F64(v) => Ok((*v).into()),
+            Val::V128(_) => {
+                bail!("v128 values are not supported in the js_wasm_runtime_layer backend")
             }
+            Val::FuncRef(None) => Ok(JsValue::NULL),
             Val::FuncRef(Some(func)) => {
                 let v: &JsValue = store.funcs[func.id].func.as_ref();
-                v.clone()
+                Ok(v.clone())
             }
-            Val::FuncRef(None) => JsValue::NULL,
-            Val::ExternRef(_) => unimplemented!(
+            Val::ExternRef(_) => bail!(
                 "extern references are not yet supported in the js_wasm_runtime_layer backend"
             ),
         }
@@ -289,14 +294,14 @@ impl ToStoredJs for Ref<Engine> {
     type Repr = JsValue;
 
     /// Convert the reference enum to a JavaScript value
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<JsValue> {
         match self {
-            Ref::FuncRef(None) => JsValue::NULL,
+            Ref::FuncRef(None) => Ok(JsValue::NULL),
             Ref::FuncRef(Some(func)) => {
                 let v: &JsValue = store.funcs[func.id].func.as_ref();
-                v.clone()
+                Ok(v.clone())
             }
-            Ref::ExternRef(_) => unimplemented!(
+            Ref::ExternRef(_) => bail!(
                 "extern references are not yet supported in the js_wasm_runtime_layer backend"
             ),
         }
@@ -309,25 +314,27 @@ pub struct ExternRef {}
 
 impl WasmExternRef<Engine> for ExternRef {
     fn new<T: 'static + Send + Sync>(_: impl AsContextMut<Engine>, _: T) -> Self {
-        unimplemented!("ExternRef is not supported in the js_wasm_runtime_layer backend")
+        unimplemented!(
+            "extern references are not yet supported in the js_wasm_runtime_layer backend"
+        )
     }
 
     fn downcast<'a, 's: 'a, T: 'static, S: 'static>(
         &self,
         _: <Engine as WasmEngine>::StoreContext<'s, S>,
-    ) -> anyhow::Result<&'a T> {
-        unimplemented!("ExternRef is not supported in the js_wasm_runtime_layer backend")
+    ) -> Result<&'a T> {
+        bail!("extern references are not yet supported in the js_wasm_runtime_layer backend")
     }
 }
 
 impl ToStoredJs for Extern<Engine> {
     type Repr = JsValue;
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> JsValue {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<JsValue> {
         match self {
-            Extern::Global(v) => v.to_stored_js(store).into(),
-            Extern::Table(v) => v.to_stored_js(store).into(),
-            Extern::Memory(v) => v.to_stored_js(store).into(),
-            Extern::Func(v) => v.to_stored_js(store).into(),
+            Extern::Global(v) => Ok(v.to_stored_js(store)?.into()),
+            Extern::Table(v) => Ok(v.to_stored_js(store)?.into()),
+            Extern::Memory(v) => Ok(v.to_stored_js(store)?.into()),
+            Extern::Func(v) => Ok(v.to_stored_js(store)?.into()),
         }
     }
 }
@@ -377,6 +384,7 @@ impl FromJs for ValType {
             "i64" => Self::I64,
             "f32" => Self::F32,
             "f64" => Self::F64,
+            "v128" => Self::V128,
             "anyfunc" => Self::FuncRef,
             "externref" => Self::ExternRef,
             _ => {
@@ -408,7 +416,9 @@ pub(crate) fn value_from_js_typed<T>(
         }
         ValType::FuncRef | ValType::ExternRef => {
             #[cfg(feature = "tracing")]
-            tracing::error!("conversion to a function or extern outside of a module not permitted");
+            tracing::error!(
+                "conversion to a function or extern outside of a module is not permitted"
+            );
             None
         }
     }

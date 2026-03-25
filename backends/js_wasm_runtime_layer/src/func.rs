@@ -1,6 +1,6 @@
 use alloc::vec;
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use js_sys::{Array, Function};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use wasm_runtime_layer::{
@@ -31,9 +31,9 @@ pub(crate) struct FuncInner {
 
 impl ToStoredJs for Func {
     type Repr = Function;
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Function {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<Function> {
         let func = &store.funcs[self.id];
-        func.func.clone()
+        Ok(func.func.clone())
     }
 }
 
@@ -108,7 +108,7 @@ impl WasmFunc<Engine> for Func {
         func: impl 'static
             + Send
             + Sync
-            + Fn(StoreContextMut<T>, &[Val<Engine>], &mut [Val<Engine>]) -> anyhow::Result<()>,
+            + Fn(StoreContextMut<T>, &[Val<Engine>], &mut [Val<Engine>]) -> Result<()>,
     ) -> Self {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("Func::new").entered();
@@ -154,15 +154,15 @@ impl WasmFunc<Engine> for Func {
 
                 let results = match &res[..] {
                     [] => JsValue::UNDEFINED,
-                    [res] => res.to_stored_js(&*store),
+                    [res] => res.to_stored_js(&*store)?,
                     res => res
                         .iter()
                         .map(|v| v.to_stored_js(&*store))
-                        .collect::<Array>()
+                        .collect::<Result<Array>>()?
                         .into(),
                 };
 
-                anyhow::Ok(results)
+                Ok(results)
             }
         };
 
@@ -203,7 +203,7 @@ impl WasmFunc<Engine> for Func {
         mut ctx: impl AsContextMut<Engine>,
         args: &[Val<Engine>],
         results: &mut [Val<Engine>],
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         let inner: &FuncInner = &ctx.funcs[self.id];
         let ty = inner.ty.clone();
@@ -211,7 +211,10 @@ impl WasmFunc<Engine> for Func {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("call_guest", ?args, %ty).entered();
 
-        let args = args.iter().map(|v| v.to_stored_js(ctx)).collect::<Array>();
+        let args = args
+            .iter()
+            .map(|v| v.to_stored_js(ctx))
+            .collect::<Result<Array>>()?;
 
         let res = inner
             .func

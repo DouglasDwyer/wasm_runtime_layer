@@ -13,7 +13,7 @@ use core::{
     ops::{Deref, DerefMut},
 };
 
-use anyhow::{Error, Result};
+use anyhow::{bail, Error, Result};
 use ref_cast::RefCast;
 use smallvec::SmallVec;
 use wasm_runtime_layer::{
@@ -176,11 +176,16 @@ impl WasmFunc<Engine> for Func {
             ctx.as_context_mut().into_inner(),
             func_type_into(ty),
             move |mut caller, args, results| {
-                let mut input = ArgumentVec::with_capacity(args.len());
-                input.extend(args.iter().cloned().map(value_from));
-
-                let mut output = ArgumentVec::with_capacity(results.len());
-                output.extend(results.iter().cloned().map(value_from));
+                let input = args
+                    .iter()
+                    .cloned()
+                    .map(value_from)
+                    .collect::<ArgumentVec<_>>();
+                let mut output = results
+                    .iter()
+                    .cloned()
+                    .map(value_from)
+                    .collect::<ArgumentVec<_>>();
 
                 func(
                     StoreContextMut::new(wasmi::AsContextMut::as_context_mut(&mut caller)),
@@ -311,18 +316,18 @@ impl WasmMemory<Engine> for Memory {
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> MemoryType {
-        memory_type_from(self.as_ref().ty(ctx.as_context().into_inner()))
+        memory_type_from(self.as_ref().ty(ctx.as_context().into_inner())).unwrap()
     }
 
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
         self.as_ref()
-            .grow(ctx.as_context_mut().into_inner(), additional as u64)
-            .map(expect_memory32)
+            .grow(ctx.as_context_mut().into_inner(), u64::from(additional))
             .map_err(Error::new)
+            .and_then(expect_memory32)
     }
 
     fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
-        expect_memory32(self.as_ref().size(ctx.as_context().into_inner()))
+        expect_memory32(self.as_ref().size(ctx.as_context().into_inner())).unwrap()
     }
 
     fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
@@ -345,27 +350,39 @@ impl WasmMemory<Engine> for Memory {
 
 impl WasmModule<Engine> for Module {
     fn new(engine: &Engine, bytes: &[u8]) -> Result<Self> {
-        Ok(Self::new(
-            wasmi::Module::new(engine.as_ref(), bytes).map_err(Error::new)?,
-        ))
+        let module = wasmi::Module::new(engine.as_ref(), bytes).map_err(Error::new)?;
+
+        // pre-validate the module imports and exports
+        for import in module.imports() {
+            extern_type_from(import.ty().clone())?;
+        }
+        for export in module.exports() {
+            extern_type_from(export.ty().clone())?;
+        }
+
+        Ok(Self::new(module))
     }
 
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
         Box::new(self.as_ref().exports().map(|x| ExportType {
             name: x.name(),
-            ty: extern_type_from(x.ty().clone()),
+            ty: extern_type_from(x.ty().clone()).unwrap(),
         }))
     }
 
     fn get_export(&self, name: &str) -> Option<ExternType> {
-        self.as_ref().get_export(name).map(extern_type_from)
+        self.as_ref()
+            .get_export(name)
+            .map(extern_type_from)
+            .transpose()
+            .unwrap()
     }
 
     fn imports(&self) -> Box<dyn '_ + Iterator<Item = ImportType<'_>>> {
         Box::new(self.as_ref().imports().map(|x| ImportType {
             module: x.module(),
             name: x.name(),
-            ty: extern_type_from(x.ty().clone()),
+            ty: extern_type_from(x.ty().clone()).unwrap(),
         }))
     }
 }
@@ -466,11 +483,11 @@ impl WasmTable<Engine> for Table {
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> TableType {
-        table_type_from(self.as_ref().ty(ctx.as_context().into_inner()))
+        table_type_from(self.as_ref().ty(ctx.as_context().into_inner())).unwrap()
     }
 
     fn size(&self, ctx: impl AsContext<Engine>) -> u32 {
-        expect_table32(self.as_ref().size(ctx.as_context().into_inner()))
+        expect_table32(self.as_ref().size(ctx.as_context().into_inner())).unwrap()
     }
 
     fn grow(
@@ -482,16 +499,16 @@ impl WasmTable<Engine> for Table {
         self.as_ref()
             .grow(
                 ctx.as_context_mut().into_inner(),
-                delta as u64,
+                u64::from(delta),
                 ref_into(init),
             )
-            .map(expect_table32)
             .map_err(Error::new)
+            .and_then(expect_table32)
     }
 
     fn get(&self, ctx: impl AsContextMut<Engine>, index: u32) -> Option<Ref<Engine>> {
         self.as_ref()
-            .get(ctx.as_context().into_inner(), index as u64)
+            .get(ctx.as_context().into_inner(), u64::from(index))
             .map(ref_from)
     }
 
@@ -499,7 +516,7 @@ impl WasmTable<Engine> for Table {
         self.as_ref()
             .set(
                 ctx.as_context_mut().into_inner(),
-                index as u64,
+                u64::from(index),
                 ref_into(elem),
             )
             .map_err(Error::new)
@@ -528,7 +545,7 @@ fn value_into(value: Val<Engine>) -> wasmi::Val {
         Val::I64(x) => wasmi::Val::I64(x),
         Val::F32(x) => wasmi::Val::F32(wasmi::F32::from_float(x)),
         Val::F64(x) => wasmi::Val::F64(wasmi::F64::from_float(x)),
-        Val::V128(x) => wasmi::Val::V128(x.into()),
+        Val::V128(x) => wasmi::Val::V128(wasmi::V128::from(x)),
         Val::FuncRef(None) => wasmi::Val::FuncRef(wasmi::Nullable::Null),
         Val::FuncRef(Some(x)) => wasmi::Val::FuncRef(wasmi::Nullable::Val(x.into_inner())),
         Val::ExternRef(None) => wasmi::Val::ExternRef(wasmi::Nullable::Null),
@@ -624,16 +641,19 @@ fn global_type_from(ty: wasmi::GlobalType) -> GlobalType {
 }
 
 /// Convert a [`wasmi::MemoryType`] to a [`MemoryType`].
-fn memory_type_from(ty: wasmi::MemoryType) -> MemoryType {
-    MemoryType::new(
-        expect_memory32(ty.minimum()),
-        ty.maximum().map(expect_memory32),
-    )
+fn memory_type_from(ty: wasmi::MemoryType) -> Result<MemoryType> {
+    Ok(MemoryType::new(
+        expect_memory32(ty.minimum())?,
+        ty.maximum().map(expect_memory32).transpose()?,
+    ))
 }
 
-/// Convert a memory size `u64` to a `u32` or panic
-fn expect_memory32(x: u64) -> u32 {
-    x.try_into().expect("memory64 is not supported")
+/// Convert a memory size `u64` to a `u32` or return an error
+fn expect_memory32(x: u64) -> Result<u32> {
+    match x.try_into() {
+        Ok(x) => Ok(x),
+        Err(_) => bail!("memory64 is not supported in the wasm_runtime_layer"),
+    }
 }
 
 /// Convert a [`MemoryType`] to a [`wasmi::MemoryType`].
@@ -642,17 +662,20 @@ fn memory_type_into(ty: MemoryType) -> wasmi::MemoryType {
 }
 
 /// Convert a [`wasmi::TableType`] to a [`TableType`].
-fn table_type_from(ty: wasmi::TableType) -> TableType {
-    TableType::new(
+fn table_type_from(ty: wasmi::TableType) -> Result<TableType> {
+    Ok(TableType::new(
         ref_type_from(ty.element()),
-        expect_table32(ty.minimum()),
-        ty.maximum().map(expect_table32),
-    )
+        expect_table32(ty.minimum())?,
+        ty.maximum().map(expect_table32).transpose()?,
+    ))
 }
 
-/// Convert a table size `u64` to a `u32` or panic
-fn expect_table32(x: u64) -> u32 {
-    x.try_into().expect("table64 is not supported")
+/// Convert a table size `u64` to a `u32` or return an error
+fn expect_table32(x: u64) -> Result<u32> {
+    match x.try_into() {
+        Ok(x) => Ok(x),
+        Err(_) => bail!("table64 is not supported in the wasm_runtime_layer"),
+    }
 }
 
 /// Convert a [`TableType`] to a [`wasmi::TableType`].
@@ -681,12 +704,12 @@ fn extern_into(value: Extern<Engine>) -> wasmi::Extern {
 }
 
 /// Convert a [`wasmi::ExternType`] to an [`ExternType`].
-fn extern_type_from(ty: wasmi::ExternType) -> ExternType {
+fn extern_type_from(ty: wasmi::ExternType) -> Result<ExternType> {
     match ty {
-        wasmi::ExternType::Func(x) => ExternType::Func(func_type_from(x)),
-        wasmi::ExternType::Global(x) => ExternType::Global(global_type_from(x)),
-        wasmi::ExternType::Memory(x) => ExternType::Memory(memory_type_from(x)),
-        wasmi::ExternType::Table(x) => ExternType::Table(table_type_from(x)),
+        wasmi::ExternType::Func(x) => Ok(ExternType::Func(func_type_from(x))),
+        wasmi::ExternType::Global(x) => Ok(ExternType::Global(global_type_from(x))),
+        wasmi::ExternType::Memory(x) => Ok(ExternType::Memory(memory_type_from(x)?)),
+        wasmi::ExternType::Table(x) => Ok(ExternType::Table(table_type_from(x)?)),
     }
 }
 

@@ -668,8 +668,8 @@ impl Imports {
         ns: &str,
         contents: impl IntoIterator<Item = (String, Extern)>,
     ) {
-        for (name, extern_) in contents.into_iter() {
-            self.map.insert((ns.to_string(), name.clone()), extern_);
+        for (name, r#extern) in contents.into_iter() {
+            self.map.insert((ns.to_string(), name.clone()), r#extern);
         }
     }
 
@@ -878,13 +878,13 @@ impl Val {
     #[must_use]
     pub const fn ty(&self) -> ValType {
         match self {
-            Val::I32(_) => ValType::I32,
-            Val::I64(_) => ValType::I64,
-            Val::F32(_) => ValType::F32,
-            Val::F64(_) => ValType::F64,
-            Val::V128(_) => ValType::V128,
-            Val::FuncRef(_) => ValType::FuncRef,
-            Val::ExternRef(_) => ValType::ExternRef,
+            Self::I32(_) => ValType::I32,
+            Self::I64(_) => ValType::I64,
+            Self::F32(_) => ValType::F32,
+            Self::F64(_) => ValType::F64,
+            Self::V128(_) => ValType::V128,
+            Self::FuncRef(_) => ValType::FuncRef,
+            Self::ExternRef(_) => ValType::ExternRef,
         }
     }
 }
@@ -897,6 +897,8 @@ impl PartialEq for Val {
             (Self::F32(a), Self::F32(b)) => a == b,
             (Self::F64(a), Self::F64(b)) => a == b,
             (Self::V128(a), Self::V128(b)) => a == b,
+            (Self::FuncRef(_), Self::FuncRef(_)) => false,
+            (Self::ExternRef(_), Self::ExternRef(_)) => false,
             _ => false,
         }
     }
@@ -932,17 +934,17 @@ impl<E: WasmEngine> From<&Val> for crate::backend::Val<E> {
 impl<E: WasmEngine> From<&backend::Val<E>> for Val {
     fn from(value: &crate::backend::Val<E>) -> Self {
         match value {
-            crate::backend::Val::I32(i32) => Self::I32(*i32),
-            crate::backend::Val::I64(i64) => Self::I64(*i64),
-            crate::backend::Val::F32(f32) => Self::F32(*f32),
-            crate::backend::Val::F64(f64) => Self::F64(*f64),
-            crate::backend::Val::V128(v128) => Self::V128(*v128),
-            crate::backend::Val::FuncRef(None) => Self::FuncRef(None),
-            crate::backend::Val::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
+            backend::Val::I32(i32) => Self::I32(*i32),
+            backend::Val::I64(i64) => Self::I64(*i64),
+            backend::Val::F32(f32) => Self::F32(*f32),
+            backend::Val::F64(f64) => Self::F64(*f64),
+            backend::Val::V128(v128) => Self::V128(*v128),
+            backend::Val::FuncRef(None) => Self::FuncRef(None),
+            backend::Val::FuncRef(Some(func)) => Self::FuncRef(Some(Func {
                 func: BackendObject::new(func.clone()),
             })),
-            crate::backend::Val::ExternRef(None) => Self::ExternRef(None),
-            crate::backend::Val::ExternRef(Some(extern_ref)) => Self::ExternRef(Some(ExternRef {
+            backend::Val::ExternRef(None) => Self::ExternRef(None),
+            backend::Val::ExternRef(Some(extern_ref)) => Self::ExternRef(Some(ExternRef {
                 extern_ref: BackendObject::new(extern_ref.clone()),
             })),
         }
@@ -1339,7 +1341,7 @@ impl Table {
         <_ as WasmTable<_>>::grow(table, ctx.as_context_mut().inner, delta, (&init).into())
     }
 
-    /// Returns the [`Table`] element value at `index`.
+    /// Returns the [`Table`] element at `index`.
     ///
     /// Returns `None` if `index` is out of bounds.
     pub fn get<C: AsContextMut>(&self, mut ctx: C, index: u32) -> Option<Ref> {
@@ -1350,7 +1352,7 @@ impl Table {
             .map(Into::into)
     }
 
-    /// Sets the [`Ref`] of this [`Table`] at `index`.
+    /// Sets the element of this [`Table`] at `index`.
     pub fn set<C: AsContextMut>(&self, mut ctx: C, index: u32, elem: Ref) -> Result<()> {
         let table = self.table.cast::<<C::Engine as WasmEngine>::Table>();
 

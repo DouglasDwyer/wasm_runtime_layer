@@ -1,3 +1,4 @@
+use anyhow::Result;
 use js_sys::Number;
 use wasm_bindgen::JsValue;
 
@@ -21,7 +22,7 @@ pub trait ToStoredJs {
     type Repr: Into<JsValue>;
 
     /// Convert this value to JavaScript
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Self::Repr;
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<Self::Repr>;
 }
 
 /// Converts a Rust type to JavaScript
@@ -41,8 +42,8 @@ where
 {
     type Repr = V::Repr;
 
-    fn to_stored_js<T>(&self, _: &StoreInner<T>) -> Self::Repr {
-        self.to_js()
+    fn to_stored_js<T>(&self, _: &StoreInner<T>) -> Result<Self::Repr> {
+        Ok(self.to_js())
     }
 }
 

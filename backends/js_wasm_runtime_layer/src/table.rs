@@ -1,6 +1,6 @@
 use core::fmt;
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use js_sys::{Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_runtime_layer::{
@@ -60,18 +60,14 @@ impl Table {
 impl ToStoredJs for Table {
     type Repr = WebAssembly::Table;
 
-    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> WebAssembly::Table {
+    fn to_stored_js<T>(&self, store: &StoreInner<T>) -> Result<WebAssembly::Table> {
         let inner = &store.tables[self.id];
-        inner.table.clone()
+        Ok(inner.table.clone())
     }
 }
 
 impl WasmTable<Engine> for Table {
-    fn new(
-        mut ctx: impl AsContextMut<Engine>,
-        ty: TableType,
-        init: Ref<Engine>,
-    ) -> anyhow::Result<Self> {
+    fn new(mut ctx: impl AsContextMut<Engine>, ty: TableType, init: Ref<Engine>) -> Result<Self> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("Table::new", ?ty, ?init).entered();
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
@@ -84,13 +80,8 @@ impl WasmTable<Engine> for Table {
             Reflect::set(&desc, &"initial".into(), &max.into()).unwrap();
         }
 
-        let table = WebAssembly::Table::new(&desc).map_err(JsErrorMsg::from)?;
-
-        for i in 0..ty.minimum() {
-            table
-                .set(i, init.to_stored_js(&ctx).unchecked_ref())
-                .unwrap();
-        }
+        let table = WebAssembly::Table::new_with_value(&desc, init.to_stored_js(&ctx)?)
+            .map_err(JsErrorMsg::from)?;
 
         let table = TableInner {
             // values: std::iter::repeat(init).take(ty.min as usize).collect(),
@@ -119,9 +110,9 @@ impl WasmTable<Engine> for Table {
         mut ctx: impl AsContextMut<Engine>,
         delta: u32,
         init: Ref<Engine>,
-    ) -> anyhow::Result<u32> {
+    ) -> Result<u32> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
-        let init = init.to_stored_js(ctx);
+        let init = init.to_stored_js(ctx)?;
         let init = init.unchecked_ref();
 
         let inner = &mut ctx.tables[self.id];
@@ -147,19 +138,14 @@ impl WasmTable<Engine> for Table {
     }
 
     /// Sets the value of this table at `index`.
-    fn set(
-        &self,
-        mut ctx: impl AsContextMut<Engine>,
-        index: u32,
-        elem: Ref<Engine>,
-    ) -> anyhow::Result<()> {
+    fn set(&self, mut ctx: impl AsContextMut<Engine>, index: u32, elem: Ref<Engine>) -> Result<()> {
         let ctx: &mut StoreInner<_> = &mut *ctx.as_context_mut();
         // RA breaks on this and sees the wrong impl of `elem.get`
         //
         // Explicitly telling it that this is a slice of Ref<Engine> causes it to see the
         // slice::get method rather than the WasmTable::get function, which shouldn't happen and is
         // a bug since &[]` does not implement `WasmTable`, but alas...
-        let elem = elem.to_stored_js(ctx);
+        let elem = elem.to_stored_js(ctx)?;
 
         let inner: &mut TableInner = &mut ctx.tables[self.id];
 

@@ -1,6 +1,6 @@
 use alloc::{boxed::Box, collections::BTreeMap, string::String, vec::Vec};
 
-use anyhow::{bail, Context};
+use anyhow::{bail, Context, Result};
 use fxhash::FxHashMap;
 use js_sys::{JsString, Object, Reflect, WebAssembly};
 use wasm_bindgen::{JsCast, JsValue};
@@ -36,7 +36,7 @@ impl WasmInstance<Engine> for Instance {
         mut store: impl super::AsContextMut<Engine>,
         module: &Module,
         imports: &Imports<Engine>,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("Instance::new").entered();
         let store: &mut StoreInner<_> = &mut *store.as_context_mut();
@@ -50,7 +50,7 @@ impl WasmInstance<Engine> for Instance {
             let module = &mut engine.modules[module.id];
             parsed = module.parsed.clone();
 
-            imports_object = create_imports_object(store, imports);
+            imports_object = create_imports_object(store, imports)?;
 
             // TODO: async instantiation, possibly through a `.ready().await` call on the returned
             // module
@@ -104,7 +104,7 @@ impl WasmInstance<Engine> for Instance {
 }
 
 /// Creates the js import map
-fn create_imports_object<T>(store: &StoreInner<T>, imports: &Imports<Engine>) -> Object {
+fn create_imports_object<T>(store: &StoreInner<T>, imports: &Imports<Engine>) -> Result<Object> {
     #[cfg(feature = "tracing")]
     let _span = tracing::debug_span!("process_imports").entered();
 
@@ -113,19 +113,21 @@ fn create_imports_object<T>(store: &StoreInner<T>, imports: &Imports<Engine>) ->
         .map(|((module, name), imp)| {
             #[cfg(feature = "tracing")]
             tracing::trace!(?module, ?name, ?imp, "import");
-            let js = imp.to_stored_js(store);
+            let js = imp.to_stored_js(store)?;
 
             #[cfg(feature = "tracing")]
             tracing::trace!(module, name, "export");
 
-            (module, (JsString::from(&*name), js))
+            anyhow::Ok((module, (JsString::from(&*name), js)))
         })
-        .fold(BTreeMap::<String, Vec<_>>::new(), |mut acc, (m, value)| {
+        .fold(anyhow::Ok(BTreeMap::<String, Vec<_>>::new()), |acc, x| {
+            let mut acc = acc?;
+            let (m, value) = x?;
             acc.entry(m).or_default().push(value);
-            acc
-        });
+            Ok(acc)
+        })?;
 
-    imports
+    let imports = imports
         .iter()
         .map(|(module, imports)| {
             let obj = Object::new();
@@ -139,7 +141,9 @@ fn create_imports_object<T>(store: &StoreInner<T>, imports: &Imports<Engine>) ->
         .fold(Object::new(), |acc, (m, imports)| {
             Reflect::set(&acc, &(m).into(), &imports).unwrap();
             acc
-        })
+        });
+
+    Ok(imports)
 }
 
 /// Processes a wasm module's exports into a hashmap
@@ -147,7 +151,7 @@ fn process_exports<T>(
     store: &mut StoreInner<T>,
     exports: JsValue,
     parsed: &ParsedModule,
-) -> anyhow::Result<FxHashMap<String, Extern<Engine>>> {
+) -> Result<FxHashMap<String, Extern<Engine>>> {
     #[cfg(feature = "tracing")]
     let _span = tracing::debug_span!("process_exports", ?exports).entered();
     if !exports.is_object() {
