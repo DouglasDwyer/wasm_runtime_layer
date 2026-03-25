@@ -249,7 +249,7 @@ impl WasmFunc<Engine> for Func {
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> FuncType {
-        func_type_from(self.as_ref().ty(ctx.as_context().as_store_ref())).unwrap()
+        func_type_from(self.as_ref().ty(ctx.as_context().as_store_ref())).expect("failed to convert type")
     }
 
     fn call<T>(
@@ -289,7 +289,7 @@ impl WasmGlobal<Engine> for Global {
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> GlobalType {
-        global_type_from(self.as_ref().ty(ctx.as_context().as_store_ref())).unwrap()
+        global_type_from(self.as_ref().ty(ctx.as_context().as_store_ref())).expect("failed to convert type")
     }
 
     fn set(&self, mut ctx: impl AsContextMut<Engine>, new_value: Val<Engine>) -> Result<()> {
@@ -299,7 +299,7 @@ impl WasmGlobal<Engine> for Global {
     }
 
     fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Val<Engine> {
-        value_from(self.as_ref().get(ctx.as_context_mut().as_store_mut())).unwrap()
+        value_from(self.as_ref().get(ctx.as_context_mut().as_store_mut())).expect("failed to convert type")
     }
 }
 
@@ -331,7 +331,7 @@ impl WasmInstance<Engine> for Instance {
                 .iter()
                 .map(|(n, e)| Export {
                     name: n.clone(),
-                    value: extern_from(e.clone()).unwrap(),
+                    value: extern_from(e.clone()).expect("failed to convert type"),
                 })
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -344,7 +344,7 @@ impl WasmInstance<Engine> for Instance {
             .get_extern(name)
             .map(|e| extern_from(e.clone()))
             .transpose()
-            .unwrap()
+            .expect("failed to convert type")
     }
 }
 
@@ -431,21 +431,21 @@ impl WasmModule<Engine> for Module {
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
         Box::new(self.exports.values().map(|x| ExportType {
             name: x.name(),
-            ty: extern_type_from(x.ty().clone()).unwrap(),
+            ty: extern_type_from(x.ty().clone()).expect("failed to convert type"),
         }))
     }
 
     fn get_export(&self, name: &str) -> Option<ExternType> {
         self.exports
             .get(name)
-            .map(|e| extern_type_from(e.ty().clone()).unwrap())
+            .map(|e| extern_type_from(e.ty().clone()).expect("failed to convert type"))
     }
 
     fn imports(&self) -> Box<dyn '_ + Iterator<Item = ImportType<'_>>> {
         Box::new(self.imports.iter().map(|x| ImportType {
             module: x.module(),
             name: x.name(),
-            ty: extern_type_from(x.ty().clone()).unwrap(),
+            ty: extern_type_from(x.ty().clone()).expect("failed to convert type"),
         }))
     }
 }
@@ -635,7 +635,7 @@ impl WasmTable<Engine> for Table {
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> TableType {
-        table_type_from(self.as_ref().ty(ctx.as_context().as_store_ref())).unwrap()
+        table_type_from(self.as_ref().ty(ctx.as_context().as_store_ref())).expect("failed to convert type")
     }
 
     fn size(&self, ctx: impl AsContext<Engine>) -> u32 {
@@ -662,7 +662,7 @@ impl WasmTable<Engine> for Table {
             .get(ctx.as_context_mut().as_store_mut(), index)
             .map(ref_from_value)
             .transpose()
-            .unwrap()
+            .expect("failed to convert type")
     }
 
     fn set(&self, mut ctx: impl AsContextMut<Engine>, index: u32, elem: Ref<Engine>) -> Result<()> {
