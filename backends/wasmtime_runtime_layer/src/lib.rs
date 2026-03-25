@@ -189,18 +189,21 @@ impl WasmFunc<Engine> for Func {
                     .iter()
                     .cloned()
                     .map(value_from)
-                    .collect::<Result<ArgumentVec<_>>>()?;
+                    .collect::<Result<ArgumentVec<_>>>()
+                    .map_err(wasmtime::Error::from_anyhow)?;
                 let mut output = results
                     .iter()
                     .cloned()
                     .map(value_from)
-                    .collect::<Result<ArgumentVec<_>>>()?;
+                    .collect::<Result<ArgumentVec<_>>>()
+                    .map_err(wasmtime::Error::from_anyhow)?;
 
                 func(
                     StoreContextMut::new(wasmtime::AsContextMut::as_context_mut(&mut caller)),
                     &input,
                     &mut output,
-                )?;
+                )
+                .map_err(wasmtime::Error::from_anyhow)?;
 
                 for (i, result) in output.into_iter().enumerate() {
                     results[i] = value_into(result);
@@ -267,8 +270,9 @@ impl WasmGlobal<Engine> for Global {
     }
 
     fn set(&self, mut ctx: impl AsContextMut<Engine>, new_value: Val<Engine>) -> Result<()> {
-        self.as_ref()
-            .set(ctx.as_context_mut().into_inner(), value_into(new_value))
+        Ok(self
+            .as_ref()
+            .set(ctx.as_context_mut().into_inner(), value_into(new_value))?)
     }
 
     fn get(&self, mut ctx: impl AsContextMut<Engine>) -> Val<Engine> {
@@ -368,8 +372,10 @@ impl WasmInstance<Engine> for Instance {
 
 impl WasmMemory<Engine> for Memory {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: MemoryType) -> Result<Self> {
-        wasmtime::Memory::new(ctx.as_context_mut().into_inner(), memory_type_into(ty))
-            .map(Self::new)
+        Ok(Self::new(wasmtime::Memory::new(
+            ctx.as_context_mut().into_inner(),
+            memory_type_into(ty),
+        )?))
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> MemoryType {
@@ -379,6 +385,7 @@ impl WasmMemory<Engine> for Memory {
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
         self.as_ref()
             .grow(ctx.as_context_mut().into_inner(), u64::from(additional))
+            .map_err(Error::from)
             .and_then(expect_memory32)
     }
 
@@ -529,12 +536,11 @@ impl<'a, T: 'static> WasmStoreContextMut<'a, T, Engine> for StoreContextMut<'a, 
 
 impl WasmTable<Engine> for Table {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: TableType, init: Ref<Engine>) -> Result<Self> {
-        wasmtime::Table::new(
+        Ok(Self::new(wasmtime::Table::new(
             ctx.as_context_mut().into_inner(),
             table_type_into(ty),
             ref_into(init),
-        )
-        .map(Self::new)
+        )?))
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> TableType {
@@ -557,6 +563,7 @@ impl WasmTable<Engine> for Table {
                 u64::from(delta),
                 ref_into(init),
             )
+            .map_err(Error::from)
             .and_then(expect_table32)
     }
 
@@ -569,11 +576,11 @@ impl WasmTable<Engine> for Table {
     }
 
     fn set(&self, mut ctx: impl AsContextMut<Engine>, index: u32, elem: Ref<Engine>) -> Result<()> {
-        self.as_ref().set(
+        Ok(self.as_ref().set(
             ctx.as_context_mut().into_inner(),
             u64::from(index),
             ref_into(elem),
-        )
+        )?)
     }
 }
 
