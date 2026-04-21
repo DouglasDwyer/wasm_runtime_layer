@@ -73,11 +73,11 @@ impl WasmTable<Engine> for Table {
         let mut ctx: StoreContextMut<_> = ctx.as_context_mut();
 
         let desc = Object::new();
-        Reflect::set(&desc, &"element".into(), &ty.element().to_js()).unwrap();
+        Reflect::set(&desc, &"element".into(), &ty.element().to_js()).expect("js operation failed");
 
-        Reflect::set(&desc, &"initial".into(), &ty.minimum().into()).unwrap();
+        Reflect::set(&desc, &"initial".into(), &ty.minimum().into()).expect("js operation failed");
         if let Some(max) = ty.maximum() {
-            Reflect::set(&desc, &"initial".into(), &max.into()).unwrap();
+            Reflect::set(&desc, &"initial".into(), &max.into()).expect("js operation failed");
         }
 
         let table = WebAssembly::Table::new_with_value(&desc, init.to_stored_js(&ctx)?)
@@ -119,7 +119,7 @@ impl WasmTable<Engine> for Table {
         let old_len = inner.table.grow(delta).map_err(JsErrorMsg::from)?;
 
         for i in old_len..(old_len + delta) {
-            inner.table.set(i, init).unwrap();
+            inner.table.set(i, init).expect("js operation failed");
         }
 
         Ok(old_len)
