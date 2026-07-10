@@ -28,7 +28,7 @@ impl MemoryInner {
     /// Returns a `Uint8Array` view of the memory
     pub(crate) fn as_uint8array(&self, offset: u32, len: u32) -> Uint8Array {
         let buffer = self.value.buffer();
-        let buffer = buffer.dyn_ref::<ArrayBuffer>().unwrap();
+        let buffer = buffer.dyn_ref::<ArrayBuffer>().expect("js operation failed");
 
         Uint8Array::new_with_byte_offset_and_length(buffer, offset, len)
     }
@@ -61,9 +61,9 @@ impl Memory {
 impl WasmMemory<Engine> for Memory {
     fn new(mut ctx: impl AsContextMut<Engine>, ty: MemoryType) -> Result<Self> {
         let desc = Object::new();
-        Reflect::set(&desc, &"initial".into(), &ty.initial_pages().into()).unwrap();
+        Reflect::set(&desc, &"initial".into(), &ty.initial_pages().into()).expect("js operation failed");
         if let Some(maximum) = ty.maximum_pages() {
-            Reflect::set(&desc, &"maximum".into(), &maximum.into()).unwrap();
+            Reflect::set(&desc, &"maximum".into(), &maximum.into()).expect("js operation failed");
         }
 
         let memory = WebAssembly::Memory::new(&desc).map_err(JsErrorMsg::from)?;

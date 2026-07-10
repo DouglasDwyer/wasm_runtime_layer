@@ -316,7 +316,7 @@ impl WasmMemory<Engine> for Memory {
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> MemoryType {
-        memory_type_from(self.as_ref().ty(ctx.as_context().into_inner())).unwrap()
+        memory_type_from(self.as_ref().ty(ctx.as_context().into_inner())).expect("failed to convert type")
     }
 
     fn grow(&self, mut ctx: impl AsContextMut<Engine>, additional: u32) -> Result<u32> {
@@ -327,7 +327,7 @@ impl WasmMemory<Engine> for Memory {
     }
 
     fn current_pages(&self, ctx: impl AsContext<Engine>) -> u32 {
-        expect_memory32(self.as_ref().size(ctx.as_context().into_inner())).unwrap()
+        expect_memory32(self.as_ref().size(ctx.as_context().into_inner())).expect("failed to convert type")
     }
 
     fn read(&self, ctx: impl AsContext<Engine>, offset: usize, buffer: &mut [u8]) -> Result<()> {
@@ -366,7 +366,7 @@ impl WasmModule<Engine> for Module {
     fn exports(&self) -> Box<dyn '_ + Iterator<Item = ExportType<'_>>> {
         Box::new(self.as_ref().exports().map(|x| ExportType {
             name: x.name(),
-            ty: extern_type_from(x.ty().clone()).unwrap(),
+            ty: extern_type_from(x.ty().clone()).expect("failed to convert type"),
         }))
     }
 
@@ -375,14 +375,14 @@ impl WasmModule<Engine> for Module {
             .get_export(name)
             .map(extern_type_from)
             .transpose()
-            .unwrap()
+            .expect("failed to convert type")
     }
 
     fn imports(&self) -> Box<dyn '_ + Iterator<Item = ImportType<'_>>> {
         Box::new(self.as_ref().imports().map(|x| ImportType {
             module: x.module(),
             name: x.name(),
-            ty: extern_type_from(x.ty().clone()).unwrap(),
+            ty: extern_type_from(x.ty().clone()).expect("failed to convert type"),
         }))
     }
 }
@@ -483,11 +483,11 @@ impl WasmTable<Engine> for Table {
     }
 
     fn ty(&self, ctx: impl AsContext<Engine>) -> TableType {
-        table_type_from(self.as_ref().ty(ctx.as_context().into_inner())).unwrap()
+        table_type_from(self.as_ref().ty(ctx.as_context().into_inner())).expect("failed to convert type")
     }
 
     fn size(&self, ctx: impl AsContext<Engine>) -> u32 {
-        expect_table32(self.as_ref().size(ctx.as_context().into_inner())).unwrap()
+        expect_table32(self.as_ref().size(ctx.as_context().into_inner())).expect("failed to convert type")
     }
 
     fn grow(
