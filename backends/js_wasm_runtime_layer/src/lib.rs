@@ -221,13 +221,13 @@ impl WasmGlobal<Engine> for Global {
 
         let desc = Object::new();
 
-        Reflect::set(&desc, &"value".into(), &value.ty().to_js()).unwrap();
-        Reflect::set(&desc, &"mutable".into(), &mutable.into()).unwrap();
+        Reflect::set(&desc, &"value".into(), &value.ty().to_js()).expect("js operation failed");
+        Reflect::set(&desc, &"mutable".into(), &mutable.into()).expect("js operation failed");
 
-        let value = value.to_stored_js(&ctx).unwrap();
+        let value = value.to_stored_js(&ctx).expect("js operation failed");
 
         let global = GlobalInner {
-            value: WebAssembly::Global::new(&desc, &value).unwrap(),
+            value: WebAssembly::Global::new(&desc, &value).expect("js operation failed"),
             ty,
         };
 
@@ -261,7 +261,7 @@ impl WasmGlobal<Engine> for Global {
         let ty = inner.ty;
         let value = inner.value.value();
 
-        value_from_js_typed(store, &ty.content(), value).unwrap()
+        value_from_js_typed(store, &ty.content(), value).expect("js operation failed")
     }
 }
 

@@ -131,13 +131,13 @@ fn create_imports_object<T>(store: &StoreInner<T>, imports: &Imports<Engine>) ->
             let obj = Object::new();
 
             for (name, value) in imports {
-                Reflect::set(&obj, name, value).unwrap();
+                Reflect::set(&obj, name, value).expect("js operation failed");
             }
 
             (module, obj)
         })
         .fold(Object::new(), |acc, (m, imports)| {
-            Reflect::set(&acc, &(m).into(), &imports).unwrap();
+            Reflect::set(&acc, &(m).into(), &imports).expect("js operation failed");
             acc
         });
 
@@ -165,11 +165,11 @@ fn process_exports<T>(
         .into_iter()
         .map(|entry| {
             let name = Reflect::get_u32(&entry, 0)
-                .unwrap()
+                .expect("js operation failed")
                 .as_string()
                 .expect("name is string");
 
-            let value: JsValue = Reflect::get_u32(&entry, 1).unwrap();
+            let value: JsValue = Reflect::get_u32(&entry, 1).expect("js operation failed");
 
             #[cfg(feature = "tracing")]
             let _span = tracing::trace_span!("process_export", ?name, ?value).entered();
@@ -185,9 +185,9 @@ fn process_exports<T>(
                     let func = Func::from_exported_function(
                         store,
                         value,
-                        signature.try_into_func().unwrap(),
+                        signature.try_into_func().expect("js operation failed"),
                     )
-                    .unwrap();
+                    .expect("js operation failed");
 
                     Extern::Func(func)
                 }
@@ -196,36 +196,36 @@ fn process_exports<T>(
                         let func = Func::from_exported_function(
                             store,
                             value,
-                            signature.try_into_func().unwrap(),
+                            signature.try_into_func().expect("js operation failed"),
                         )
-                        .unwrap();
+                        .expect("js operation failed");
 
                         Extern::Func(func)
                     } else if value.is_instance_of::<WebAssembly::Table>() {
                         let table = Table::from_stored_js(
                             store,
                             value,
-                            signature.try_into_table().unwrap(),
+                            signature.try_into_table().expect("js operation failed"),
                         )
-                        .unwrap();
+                        .expect("js operation failed");
 
                         Extern::Table(table)
                     } else if value.is_instance_of::<WebAssembly::Memory>() {
                         let memory = Memory::from_exported_memory(
                             store,
                             value,
-                            signature.try_into_memory().unwrap(),
+                            signature.try_into_memory().expect("js operation failed"),
                         )
-                        .unwrap();
+                        .expect("js operation failed");
 
                         Extern::Memory(memory)
                     } else if value.is_instance_of::<WebAssembly::Global>() {
                         let global = Global::from_exported_global(
                             store,
                             value,
-                            signature.try_into_global().unwrap(),
+                            signature.try_into_global().expect("js operation failed"),
                         )
-                        .unwrap();
+                        .expect("js operation failed");
 
                         Extern::Global(global)
                     } else {
